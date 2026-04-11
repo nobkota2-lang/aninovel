@@ -1,0 +1,24 @@
+{
+  "version": "2.2",
+  "novel": {"title": "夏の日の冒険", "author": "山田太郎"},
+  "chapters": [{"id": "ch1", "title": "第1章：海辺の発見", "sections": [{"id": "sec1", "title": "第1節：出会い"}, {"id": "sec2", "title": "第2節：地図の謎"}]}],
+  "characters": [
+    {"id": "char1", "name": "高橋 海斗", "shortName": "海", "gender": "male", "description": "好奇心旺盛な中学2年生。海が大好き。", "bubbleColor": "#DBEAFE", "iconColor": "#3B82F6", "iconImage": null},
+    {"id": "char2", "name": "田中 美咲", "shortName": "美", "gender": "female", "description": "海斗の幼馴染。冷静沈着だが、冒険心は負けない。", "bubbleColor": "#FCE7F3", "iconColor": "#EC4899", "iconImage": null},
+    {"id": "narrator", "name": "ナレーター", "shortName": "ナ", "gender": "neutral", "description": "物語の語り手", "bubbleColor": "#F3F4F6", "iconColor": "#6B7280", "iconImage": null}
+  ],
+  "content": [
+    {"id": "c1", "type": "narration", "text": "八月の太陽が容赦なく照りつける午後、海斗は浜辺の岩場で不思議なものを見つけた。波に洗われた洞窟の入り口に、古びた木箱が挟まっていたのだ。", "characterId": null, "order": 0},
+    {"id": "c2", "type": "dialogue", "characterId": "char1", "text": "美咲、こっち来て！すごいもの見つけた！洞窟の中に木箱があるんだ！", "order": 1},
+    {"id": "c3", "type": "dialogue", "characterId": "char2", "text": "えっ、本当？危なくない？...わ、本当だ。かなり古いものみたい。開けてみようよ。", "order": 2},
+    {"id": "c4", "type": "narration", "text": "二人で力を合わせて木箱を開けると、中には油紙に包まれた一枚の地図が入っていた。黄ばんだ和紙に、墨で丁寧に描かれた海岸線と、赤い×印。", "characterId": null, "order": 3},
+    {"id": "c5", "type": "dialogue", "characterId": "char1", "text": "宝の地図だ！この×印、この海岸のどこかじゃないか？", "order": 4},
+    {"id": "c6", "type": "pageBreak", "order": 5},
+    {"id": "c7", "type": "dialogue", "characterId": "char2", "text": "待って、裏に何か書いてある。「月が海を照らす時、岩が道を示す」...暗号かな。", "order": 6},
+    {"id": "c8", "type": "dialogue", "characterId": "char1", "text": "月が海を照らす時って、満月の夜のことじゃない？次の満月は...明後日だ！", "order": 7},
+    {"id": "c9", "type": "narration", "text": "二人の目が輝いた。退屈だと思っていた夏休みが、突然色づき始めた。古代の地図が示す場所には、一体何が待っているのだろうか。", "characterId": null, "order": 8},
+    {"id": "c10", "type": "dialogue", "characterId": "char2", "text": "明後日の夜、ここで待ち合わせね。懐中電灯と、念のためロープも持ってくるわ。", "order": 9},
+    {"id": "c11", "type": "narration", "text": "潮風が二人の髪を揺らした。夏の冒険が、今始まろうとしていた。", "characterId": null, "order": 10}
+  ],
+  "displaySettings": {"fontSize": 18, "lineHeight": 2.0, "iconSize": 56, "font": "'Shippori Mincho', serif", "orientation": "horizontal", "narratorStyle": "bubble"}
+}

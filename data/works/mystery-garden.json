@@ -1,0 +1,25 @@
+{
+  "version": "2.2",
+  "novel": {"title": "秘密の庭", "author": "鈴木花子"},
+  "chapters": [{"id": "ch1", "title": "第1章：不思議な扉", "sections": [{"id": "sec1", "title": "第1節：発見"}, {"id": "sec2", "title": "第2節：庭の秘密"}]}],
+  "characters": [
+    {"id": "char1", "name": "小林 さくら", "shortName": "さ", "gender": "female", "description": "植物が大好きな10歳の少女。引っ越してきたばかり。", "bubbleColor": "#D1FAE5", "iconColor": "#10B981", "iconImage": null},
+    {"id": "char2", "name": "中村 翔太", "shortName": "翔", "gender": "male", "description": "近所に住む11歳の少年。この街の歴史に詳しい。", "bubbleColor": "#FEF3C7", "iconColor": "#F59E0B", "iconImage": null},
+    {"id": "char3", "name": "老婆", "shortName": "婆", "gender": "female", "description": "洋館に住む謎めいた老婦人。庭の秘密を知る唯一の人物。", "bubbleColor": "#EDE9FE", "iconColor": "#8B5CF6", "iconImage": null},
+    {"id": "narrator", "name": "ナレーター", "shortName": "ナ", "gender": "neutral", "description": "物語の語り手", "bubbleColor": "#F3F4F6", "iconColor": "#6B7280", "iconImage": null}
+  ],
+  "content": [
+    {"id": "c1", "type": "narration", "text": "古びた洋館の裏手に、蔦に覆われた小さな扉があった。誰もが見過ごすその扉に、さくらだけが気づいた。", "characterId": null, "order": 0},
+    {"id": "c2", "type": "dialogue", "characterId": "char1", "text": "ねえ翔太くん、あの扉、気にならない？蔦の隙間から光が漏れてるよ。", "order": 1},
+    {"id": "c3", "type": "dialogue", "characterId": "char2", "text": "あの洋館は100年以上前に建てられたんだ。庭があるなんて聞いたことないけど...", "order": 2},
+    {"id": "c4", "type": "narration", "text": "恐る恐る蔦をかき分け、錆びた取っ手に手をかけた。扉はきしみながらも、驚くほど簡単に開いた。", "characterId": null, "order": 3},
+    {"id": "c5", "type": "dialogue", "characterId": "char1", "text": "うそ...！こんなところに、こんな素敵な庭があるなんて！", "order": 4},
+    {"id": "c6", "type": "pageBreak", "order": 5},
+    {"id": "c7", "type": "narration", "text": "扉の向こうには、季節を無視したかのように色とりどりの花が咲き乱れていた。春のチューリップと秋の紅葉が隣り合い、冬の椿と夏のひまわりが共存する不思議な庭。", "characterId": null, "order": 6},
+    {"id": "c8", "type": "dialogue", "characterId": "char3", "text": "おや、とうとう見つけてしまったのかい。この庭は、想いの力で咲く花園なのさ。", "order": 7},
+    {"id": "c9", "type": "dialogue", "characterId": "char1", "text": "想いの力...？おばあさん、それはどういう意味ですか？", "order": 8},
+    {"id": "c10", "type": "dialogue", "characterId": "char3", "text": "誰かを想う気持ちが強いほど、花は美しく咲く。この庭は、この街の人々の想いを映す鏡なのだよ。", "order": 9},
+    {"id": "c11", "type": "narration", "text": "さくらは庭を見渡した。一つ一つの花が、誰かの大切な想いの証。彼女の胸にも、温かい光が灯った。", "characterId": null, "order": 10}
+  ],
+  "displaySettings": {"fontSize": 18, "lineHeight": 2.0, "iconSize": 56, "font": "'Shippori Mincho', serif", "orientation": "horizontal", "narratorStyle": "bubble"}
+}

@@ -1,0 +1,25 @@
+{
+  "version": "2.2",
+  "novel": {"title": "星降るカフェ", "author": "佐々木悠"},
+  "chapters": [{"id": "ch1", "title": "第1章：星の夜に", "sections": [{"id": "sec1", "title": "第1節：招待"}, {"id": "sec2", "title": "第2節：真実"}]}],
+  "characters": [
+    {"id": "char1", "name": "月野 ひかり", "shortName": "ひ", "gender": "female", "description": "大学2年生。天文学を専攻し、星に心を奪われている。", "bubbleColor": "#E0E7FF", "iconColor": "#6366F1", "iconImage": null},
+    {"id": "char2", "name": "マスター", "shortName": "M", "gender": "male", "description": "カフェの店主。穏やかな物腰だが、どこか超然とした雰囲気を持つ。", "bubbleColor": "#FDE68A", "iconColor": "#92400E", "iconImage": null},
+    {"id": "char3", "name": "謎の客", "shortName": "？", "gender": "male", "description": "深夜のカフェに現れる常連。正体不明。", "bubbleColor": "#FEE2E2", "iconColor": "#DC2626", "iconImage": null},
+    {"id": "narrator", "name": "ナレーター", "shortName": "ナ", "gender": "neutral", "description": "物語の語り手", "bubbleColor": "#F3F4F6", "iconColor": "#6B7280", "iconImage": null}
+  ],
+  "content": [
+    {"id": "c1", "type": "narration", "text": "満天の星が瞬く夜にだけ、路地裏に小さなカフェが現れる。看板には「星屑珈琲」と書かれ、窓からは琥珀色の灯りが漏れていた。", "characterId": null, "order": 0},
+    {"id": "c2", "type": "dialogue", "characterId": "char1", "text": "こんなところにカフェなんてあったかな...でも、いい香り。入ってみようかな。", "order": 1},
+    {"id": "c3", "type": "dialogue", "characterId": "char2", "text": "いらっしゃいませ。星の綺麗な夜ですね。おすすめは「オリオンブレンド」です。", "order": 2},
+    {"id": "c4", "type": "narration", "text": "カップに注がれたコーヒーの表面に、小さな星座が浮かんでいた。ひかりは目を疑った。", "characterId": null, "order": 3},
+    {"id": "c5", "type": "pageBreak", "order": 4},
+    {"id": "c6", "type": "dialogue", "characterId": "char3", "text": "驚くのも無理はない。このカフェでは、星の記憶を味わえるのさ。", "order": 5},
+    {"id": "c7", "type": "dialogue", "characterId": "char1", "text": "星の記憶...？あなたは一体...？", "order": 6},
+    {"id": "c8", "type": "dialogue", "characterId": "char2", "text": "このカフェには、人生の岐路に立つ者だけが辿り着く。あなたも、何か迷っていることがあるのでは？", "order": 7},
+    {"id": "c9", "type": "narration", "text": "ひかりはコーヒーを一口飲んだ。瞬間、幼い頃に祖父と見た流れ星の記憶が鮮やかに蘇った。涙が頬を伝った。", "characterId": null, "order": 8},
+    {"id": "c10", "type": "dialogue", "characterId": "char1", "text": "思い出した...。おじいちゃんが言ってた。「迷ったら、星を見上げなさい。答えはいつも空にある」って。", "order": 9},
+    {"id": "c11", "type": "narration", "text": "窓の外で一筋の流れ星が落ちた。ひかりの心の中で、何かが静かに決まった。", "characterId": null, "order": 10}
+  ],
+  "displaySettings": {"fontSize": 18, "lineHeight": 2.0, "iconSize": 56, "font": "'Shippori Mincho', serif", "orientation": "horizontal", "narratorStyle": "bubble"}
+}

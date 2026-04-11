@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "works": [
+    {
+      "id": "summer-adventure",
+      "title": "夏の日の冒険",
+      "author": "山田太郎",
+      "authorId": "author-yamada",
+      "description": "真夏の海辺で繰り広げられる少年少女の冒険物語。洞窟の奥に隠された古代の地図が、二人を思いもよらない冒険へと導く。",
+      "coverColor": "#3B82F6",
+      "pageCount": 2,
+      "charCount": 380,
+      "characterCount": 2,
+      "tags": ["冒険", "青春", "夏"],
+      "contentUrl": "data/works/summer-adventure.json",
+      "createdAt": "2026-01-15T00:00:00Z",
+      "updatedAt": "2026-03-10T00:00:00Z"
+    },
+    {
+      "id": "mystery-garden",
+      "title": "秘密の庭",
+      "author": "鈴木花子",
+      "authorId": "author-suzuki",
+      "description": "古い洋館の裏に隠された不思議な庭。季節を超えて咲く花々の秘密を、少女は解き明かせるのか。心温まるファンタジー。",
+      "coverColor": "#10B981",
+      "pageCount": 2,
+      "charCount": 480,
+      "characterCount": 3,
+      "tags": ["ファンタジー", "花", "友情"],
+      "contentUrl": "data/works/mystery-garden.json",
+      "createdAt": "2026-02-20T00:00:00Z",
+      "updatedAt": "2026-03-25T00:00:00Z"
+    },
+    {
+      "id": "starlight-cafe",
+      "title": "星降るカフェ",
+      "author": "佐々木悠",
+      "authorId": "author-sasaki",
+      "description": "満天の星が瞬く夜にだけ現れる不思議なカフェ。星の記憶を味わえるコーヒーが、迷える者に答えを与える。",
+      "coverColor": "#6366F1",
+      "pageCount": 2,
+      "charCount": 450,
+      "characterCount": 3,
+      "tags": ["ミステリー", "星", "癒し"],
+      "contentUrl": "data/works/starlight-cafe.json",
+      "createdAt": "2026-03-05T00:00:00Z",
+      "updatedAt": "2026-04-01T00:00:00Z"
+    }
+  ]
+}
