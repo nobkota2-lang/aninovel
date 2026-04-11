@@ -182,7 +182,7 @@
   }
 
   // === 認証モーダル ===
-  function showAuthModal() {
+  function showAuthModal(initialTab) {
     var existing = $('#auth-modal');
     if (existing) existing.remove();
 
@@ -200,14 +200,14 @@
 
     // タブ
     var tabGroup = h('div', { className: 'tab-group' });
-    var loginTab = h('button', { className: 'tab-btn active', 'data-tab': 'login' }, 'ログイン');
-    var registerTab = h('button', { className: 'tab-btn', 'data-tab': 'register' }, '新規登録');
+    var loginTab = h('button', { className: 'tab-btn' + (initialTab !== 'register' ? ' active' : ''), 'data-tab': 'login' }, 'ログイン');
+    var registerTab = h('button', { className: 'tab-btn' + (initialTab === 'register' ? ' active' : ''), 'data-tab': 'register' }, '新規登録');
     tabGroup.appendChild(loginTab);
     tabGroup.appendChild(registerTab);
     content.appendChild(tabGroup);
 
-    // ログインフォーム
-    var loginForm = h('div', { className: 'auth-form', id: 'login-form' });
+    // === ログインフォーム ===
+    var loginForm = h('div', { className: 'auth-form', id: 'login-form', style: initialTab === 'register' ? 'display:none' : '' });
     loginForm.appendChild(createFormGroup('メールアドレス', 'email', 'login-email', 'email'));
     loginForm.appendChild(createFormGroup('パスワード', 'password', 'login-password', 'password'));
     var loginBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center' }, 'ログイン');
@@ -222,29 +222,63 @@
       }).catch(function(err) { toast(err.message); });
     };
     loginForm.appendChild(loginBtn);
+
+    // パスワードを忘れた方
+    var forgotLink = h('button', {
+      style: 'background:none;border:none;color:var(--accent-author);font-size:13px;cursor:pointer;margin-top:4px;text-align:center;width:100%;font-family:inherit'
+    }, 'パスワードを忘れた方はこちら');
+    forgotLink.onclick = function() { showPasswordResetModal(overlay); };
+    loginForm.appendChild(forgotLink);
     content.appendChild(loginForm);
 
-    // 登録フォーム
-    var regForm = h('div', { className: 'auth-form', id: 'register-form', style: 'display:none' });
+    // === 登録フォーム ===
+    var regForm = h('div', { className: 'auth-form', id: 'register-form', style: initialTab === 'register' ? '' : 'display:none' });
+
+    // 読者/作者 選択
+    var roleGroup = h('div', { className: 'form-group' });
+    roleGroup.appendChild(h('label', {}, 'アカウント種別'));
+    var roleSelect = h('select', { id: 'reg-role', style: 'padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--panel-bg);color:var(--text-primary)' });
+    roleSelect.appendChild(h('option', { value: 'reader' }, '読者（メールアドレスのみ）'));
+    roleSelect.appendChild(h('option', { value: 'author' }, '作者（個人情報の登録が必要）'));
+    roleGroup.appendChild(roleSelect);
+    regForm.appendChild(roleGroup);
+
     regForm.appendChild(createFormGroup('表示名', 'text', 'reg-name', 'text'));
     regForm.appendChild(createFormGroup('メールアドレス', 'email', 'reg-email', 'email'));
     regForm.appendChild(createFormGroup('パスワード（6文字以上）', 'password', 'reg-password', 'password'));
 
+    // 作者用追加フィールド（初期非表示）
+    var authorFields = h('div', { id: 'author-fields', style: 'display:none' });
+    var authorNotice = h('div', { className: 'warning-banner' }, '作者登録には個人情報が必要です。これらの情報は作品の権利管理のために使用されます。');
+    authorFields.appendChild(authorNotice);
+    authorFields.appendChild(createFormGroup('氏名（本名）', 'text', 'reg-realname', 'text'));
+    authorFields.appendChild(createFormGroup('住所', 'text', 'reg-address', 'text'));
+    authorFields.appendChild(createFormGroup('電話番号', 'tel', 'reg-phone', 'tel'));
+    regForm.appendChild(authorFields);
+
+    roleSelect.onchange = function() {
+      authorFields.style.display = roleSelect.value === 'author' ? '' : 'none';
+    };
+
     var warning = h('div', { className: 'warning-banner' }, '※Phase 1: データはブラウザのlocalStorageに保存されます。本番環境ではサーバー側で管理されます。');
     regForm.appendChild(warning);
 
-    var regBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center' }, '登録');
+    var regBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center' }, '仮登録する');
     regBtn.onclick = function() {
-      S.register({
+      var regData = {
         displayName: $('#reg-name').value,
         email: $('#reg-email').value,
         password: $('#reg-password').value,
-        role: 'reader'
-      }).then(function(user) {
-        state.user = user;
-        updateAuthUI();
-        overlay.remove();
-        toast('登録が完了しました');
+        role: roleSelect.value
+      };
+      if (roleSelect.value === 'author') {
+        regData.realName = $('#reg-realname').value;
+        regData.address = $('#reg-address').value;
+        regData.phone = $('#reg-phone').value;
+      }
+      S.register(regData).then(function(res) {
+        // Phase 1: 仮登録成功 → 確認画面を表示
+        showConfirmationScreen(overlay, content, res.token, regData.email);
       }).catch(function(err) { toast(err.message); });
     };
     regForm.appendChild(regBtn);
@@ -262,6 +296,104 @@
 
     overlay.appendChild(content);
     document.body.appendChild(overlay);
+  }
+
+  // === 仮登録確認画面 ===
+  function showConfirmationScreen(overlay, contentEl, token, email) {
+    contentEl.innerHTML = '';
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, '仮登録完了'));
+    contentEl.appendChild(title);
+
+    var info = h('div', { style: 'text-align:center;padding:20px 0' });
+    info.appendChild(h('div', { style: 'font-size:48px;margin-bottom:16px' }, '\u2709\uFE0F'));
+    info.appendChild(h('p', { style: 'font-size:15px;margin-bottom:8px;color:var(--text-primary)' }, '確認メールを送信しました'));
+    info.appendChild(h('p', { style: 'font-size:13px;color:var(--text-secondary);margin-bottom:20px' }, email + ' に届いたメールの確認URLをクリックして本登録を完了してください。'));
+
+    // Phase 1: 実際のメール送信はないので、「確認する」ボタンで即時本登録
+    var notice = h('div', { className: 'warning-banner', style: 'text-align:left' }, 'Phase 1 デモ: 実際のメール送信は行われません。下のボタンで本登録をシミュレートします。');
+    info.appendChild(notice);
+
+    var confirmBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center;margin-top:12px' }, 'メール確認をシミュレート（本登録）');
+    confirmBtn.onclick = function() {
+      S.confirmRegistration(token).then(function(user) {
+        state.user = user;
+        updateAuthUI();
+        overlay.remove();
+        toast('本登録が完了しました！');
+      }).catch(function(err) { toast(err.message); });
+    };
+    info.appendChild(confirmBtn);
+    contentEl.appendChild(info);
+  }
+
+  // === パスワード再設定モーダル ===
+  function showPasswordResetModal(parentOverlay) {
+    if (parentOverlay) parentOverlay.remove();
+
+    var overlay = h('div', { className: 'modal-overlay', id: 'auth-modal' });
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+    var content = h('div', { className: 'modal-content anim-slide' });
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, 'パスワード再設定'));
+    var closeBtn = h('button', { className: 'btn-icon', html: '&times;', style: 'font-size:24px;color:var(--text-primary)' });
+    closeBtn.onclick = function() { overlay.remove(); };
+    title.appendChild(closeBtn);
+    content.appendChild(title);
+
+    var form = h('div', { className: 'auth-form' });
+    form.appendChild(h('p', { style: 'font-size:13px;color:var(--text-secondary);margin-bottom:8px' }, '登録済みのメールアドレスを入力してください。パスワード再設定用のメールを送信します。'));
+    form.appendChild(createFormGroup('メールアドレス', 'email', 'reset-email', 'email'));
+
+    var sendBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center' }, '再設定メールを送信');
+    sendBtn.onclick = function() {
+      var email = $('#reset-email').value;
+      S.requestPasswordReset(email).then(function(res) {
+        // Phase 1: 即座に再設定画面を表示
+        showNewPasswordScreen(overlay, content, res.token);
+      }).catch(function(err) { toast(err.message); });
+    };
+    form.appendChild(sendBtn);
+
+    var backLink = h('button', {
+      style: 'background:none;border:none;color:var(--accent-author);font-size:13px;cursor:pointer;margin-top:8px;text-align:center;width:100%;font-family:inherit'
+    }, 'ログイン画面に戻る');
+    backLink.onclick = function() { overlay.remove(); showAuthModal(); };
+    form.appendChild(backLink);
+
+    content.appendChild(form);
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+  }
+
+  // === 新パスワード入力画面 ===
+  function showNewPasswordScreen(overlay, contentEl, token) {
+    contentEl.innerHTML = '';
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, '新しいパスワード'));
+    contentEl.appendChild(title);
+
+    var notice = h('div', { className: 'warning-banner' }, 'Phase 1 デモ: 実際のメール送信は行われません。ここで直接新しいパスワードを設定します。');
+    contentEl.appendChild(notice);
+
+    var form = h('div', { className: 'auth-form' });
+    form.appendChild(createFormGroup('新しいパスワード（6文字以上）', 'password', 'new-password', 'password'));
+    form.appendChild(createFormGroup('パスワード確認', 'password', 'new-password-confirm', 'password'));
+
+    var resetBtn = h('button', { className: 'btn btn-author', style: 'width:100%;justify-content:center' }, 'パスワードを再設定');
+    resetBtn.onclick = function() {
+      var pw = $('#new-password').value;
+      var pwc = $('#new-password-confirm').value;
+      if (pw !== pwc) { toast('パスワードが一致しません'); return; }
+      S.resetPassword(token, pw).then(function(res) {
+        overlay.remove();
+        toast(res.message);
+        showAuthModal();
+      }).catch(function(err) { toast(err.message); });
+    };
+    form.appendChild(resetBtn);
+    contentEl.appendChild(form);
   }
 
   function createFormGroup(labelText, type, id, inputType) {

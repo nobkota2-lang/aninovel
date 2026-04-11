@@ -276,19 +276,25 @@
 
 <nav class="toc">
   <h2>目次</h2>
-  <div class="toc-part">第1部：読者マニュアル</div>
+  <div class="toc-part">はじめに</div>
   <ol>
+    <li><a href="#sec-portal">ポータル画面</a></li>
+    <li><a href="#sec-account">アカウント登録・ログイン</a></li>
+  </ol>
+  <div class="toc-part">第1部：読者マニュアル</div>
+  <ol start="3">
     <li><a href="#sec-home">ホーム画面</a></li>
     <li><a href="#sec-reader">読者モード - 基本画面</a></li>
     <li><a href="#sec-search">検索機能</a></li>
     <li><a href="#sec-settings">表示設定</a></li>
+    <li><a href="#sec-customize">キャラカスタマイズ（読者）</a></li>
     <li><a href="#sec-toc">目次パネル</a></li>
     <li><a href="#sec-bookmark">しおり機能</a></li>
     <li><a href="#sec-dark">ダークモード</a></li>
     <li><a href="#sec-nav">ページナビゲーション</a></li>
   </ol>
   <div class="toc-part">第2部：作者マニュアル</div>
-  <ol start="9">
+  <ol start="12">
     <li><a href="#sec-author">作者モードへの切替</a></li>
     <li><a href="#sec-edit">コンテンツ編集</a></li>
     <li><a href="#sec-chara">登場人物管理</a></li>
@@ -303,6 +309,49 @@
     <li><a href="#sec-shortcuts">ショートカットキー一覧</a></li>
   </ol>
 </nav>
+
+<!-- はじめに -->
+<div class="part-divider" id="intro">
+  <h2>はじめに</h2>
+  <p>ポータルとアカウント管理</p>
+</div>
+
+<section id="sec-portal">
+  <h3>0.1 ポータル画面</h3>
+  <div class="content-card">
+    <p>アニノベルのトップページ（ポータル）では、投稿された作品の一覧とランキングを閲覧できます。</p>
+    <ul>
+      <li><strong>作品一覧</strong> — カード形式で全作品を表示。タグ・文字数・ページ数が一目でわかります。</li>
+      <li><strong>ランキング</strong> — 投票数・新着順・文字数・ページ数でソート可能です。</li>
+      <li><strong>投票</strong> — ハートボタンで気に入った作品に投票できます（ログイン必要）。</li>
+      <li><strong>立ち読み</strong> — ログインしなくても、作品カードをクリックすれば閲覧できます。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="sec-account">
+  <h3>0.2 アカウント登録・ログイン</h3>
+  <div class="content-card">
+    <p>アニノベルには<strong>読者</strong>と<strong>作者</strong>の2種類のアカウントがあります。</p>
+    <table style="width:100%;border-collapse:collapse;margin:12px 0">
+      <tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">項目</th><th style="text-align:left;padding:8px">読者</th><th style="text-align:left;padding:8px">作者</th></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">立ち読み</td><td style="padding:8px">ログイン不要</td><td style="padding:8px">ログイン不要</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">しおり・投票</td><td style="padding:8px">ログイン必要</td><td style="padding:8px">ログイン必要</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">キャラカスタマイズ</td><td style="padding:8px">ログイン必要</td><td style="padding:8px">作者モードで編集</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">作品投稿・編集</td><td style="padding:8px">×</td><td style="padding:8px">○</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">登録に必要な情報</td><td style="padding:8px">メールアドレスのみ</td><td style="padding:8px">メールアドレス + 氏名・住所・電話番号</td></tr>
+    </table>
+    <h4>登録の流れ</h4>
+    <ol>
+      <li>ポータル右上の「ログイン」→「新規登録」タブをクリック</li>
+      <li>アカウント種別（読者/作者）を選択し、必要事項を入力</li>
+      <li>「仮登録する」をクリック → メールアドレスに確認メールが届きます</li>
+      <li>メール内の確認URLをクリックすると本登録完了</li>
+    </ol>
+    <h4>パスワードを忘れた場合</h4>
+    <p>ログイン画面の「パスワードを忘れた方はこちら」をクリックし、登録済みメールアドレスを入力してください。パスワード再設定用のメールが届きます。</p>
+  </div>
+</section>
 
 <!-- Part 1 -->
 <div class="part-divider" id="part1">
@@ -358,6 +407,23 @@
     <li><strong>書式切替：</strong>横書き（デフォルト）と縦書きを切り替えられます。</li>
     <li><strong>ナレーションスタイル：</strong>ナレーションの表示形式を吹き出し表示とべた書き（段落形式）から選べます。</li>
   </ul>
+</section>
+
+<section id="sec-customize">
+  <h3>1.5 キャラカスタマイズ（読者）</h3>
+  <div class="content-card">
+    <p>ログイン済みの読者は、キャラクターのアイコンや吹き出しの色を自分好みに変更できます。<strong>ナレーターもカスタマイズ可能</strong>です。</p>
+    <h4>カスタマイズ方法</h4>
+    <ol>
+      <li>読者モードで作品を開く</li>
+      <li>キャラクターのアイコンをクリック → カスタマイズモーダルが開きます</li>
+      <li>アイコン画像のアップロード、吹き出し色・アイコン色の変更が可能</li>
+      <li>「完了」で確定。設定はブラウザに保存され、次回も反映されます</li>
+    </ol>
+    <div class="tip-box">
+      <strong>💡 ヒント:</strong> 「作者推奨に戻す」ボタンで、いつでも作者が設定したデフォルトに戻せます。カスタマイズしない場合は、作者推奨のアイコン・色がそのまま使われます。
+    </div>
+  </div>
 </section>
 
 <section id="sec-toc">

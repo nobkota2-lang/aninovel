@@ -11,7 +11,10 @@
     votes: 'aninovel_votes',
     user: 'aninovel_user',
     bookmarks: 'aninovel_bookmarks',
-    authorProfile: 'aninovel_author_profile'
+    authorProfile: 'aninovel_author_profile',
+    pendingUsers: 'aninovel_pending_users',
+    readerCustom: 'aninovel_reader_custom',
+    pwResetTokens: 'aninovel_pw_reset_tokens'
   };
 
   // === ユーティリティ ===
@@ -20,6 +23,9 @@
   }
   function setLS(key, val) {
     localStorage.setItem(key, JSON.stringify(val));
+  }
+  function genToken() {
+    return 'tok_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
   }
 
   // === カタログキャッシュ ===
@@ -155,7 +161,7 @@
       return Promise.resolve(user);
     },
 
-    /** ユーザー登録 */
+    /** ユーザー仮登録（メール確認トークン発行） */
     register: function(data) {
       if (!data.email || data.email.indexOf('@') === -1) {
         return Promise.reject(new Error('有効なメールアドレスを入力してください'));
@@ -166,7 +172,6 @@
       if (!data.displayName || data.displayName.trim() === '') {
         return Promise.reject(new Error('表示名を入力してください'));
       }
-      // 作者の場合は追加情報が必要
       if (data.role === 'author') {
         if (!data.realName || data.realName.trim() === '') {
           return Promise.reject(new Error('氏名を入力してください'));
@@ -177,7 +182,40 @@
         if (!data.phone || data.phone.trim() === '') {
           return Promise.reject(new Error('電話番号を入力してください'));
         }
-        // 作者個人情報を別キーに保存（Phase 2: 暗号化DB）
+      }
+
+      var token = genToken();
+      var pending = getLS(KEYS.pendingUsers) || {};
+      pending[token] = {
+        email: data.email,
+        password: data.password,
+        displayName: data.displayName,
+        role: data.role || 'reader',
+        realName: data.realName || '',
+        address: data.address || '',
+        phone: data.phone || '',
+        createdAt: new Date().toISOString()
+      };
+      setLS(KEYS.pendingUsers, pending);
+
+      // Phase 1: 実際のメール送信はできないので、トークンを返してUI側でシミュレート
+      return Promise.resolve({
+        success: true,
+        status: 'pending',
+        token: token,
+        message: '仮登録完了。メールに記載の確認URLにアクセスしてください。'
+      });
+    },
+
+    /** メール確認（トークンで本登録） */
+    confirmRegistration: function(token) {
+      var pending = getLS(KEYS.pendingUsers) || {};
+      var data = pending[token];
+      if (!data) {
+        return Promise.reject(new Error('無効または期限切れの確認トークンです'));
+      }
+
+      if (data.role === 'author') {
         setLS(KEYS.authorProfile, {
           realName: data.realName,
           address: data.address,
@@ -189,12 +227,49 @@
         id: 'user_' + Date.now(),
         email: data.email,
         displayName: data.displayName,
-        role: data.role || 'reader',
+        role: data.role,
         loggedIn: true,
-        createdAt: new Date().toISOString()
+        verified: true,
+        createdAt: data.createdAt
       };
       setLS(KEYS.user, user);
+      delete pending[token];
+      setLS(KEYS.pendingUsers, pending);
+
       return Promise.resolve(user);
+    },
+
+    /** パスワード再設定リクエスト */
+    requestPasswordReset: function(email) {
+      if (!email || email.indexOf('@') === -1) {
+        return Promise.reject(new Error('有効なメールアドレスを入力してください'));
+      }
+      var token = genToken();
+      var tokens = getLS(KEYS.pwResetTokens) || {};
+      tokens[token] = { email: email, createdAt: new Date().toISOString() };
+      setLS(KEYS.pwResetTokens, tokens);
+
+      return Promise.resolve({
+        success: true,
+        token: token,
+        message: 'パスワード再設定用のメールを送信しました。'
+      });
+    },
+
+    /** パスワード再設定実行 */
+    resetPassword: function(token, newPassword) {
+      if (!newPassword || newPassword.length < 6) {
+        return Promise.reject(new Error('パスワードは6文字以上必要です'));
+      }
+      var tokens = getLS(KEYS.pwResetTokens) || {};
+      var data = tokens[token];
+      if (!data) {
+        return Promise.reject(new Error('無効または期限切れのトークンです'));
+      }
+      // Phase 1: パスワードはlocalStorageには保存しない（モック）
+      delete tokens[token];
+      setLS(KEYS.pwResetTokens, tokens);
+      return Promise.resolve({ success: true, message: 'パスワードを再設定しました。新しいパスワードでログインしてください。' });
     },
 
     /** ログアウト */
@@ -205,6 +280,30 @@
         setLS(KEYS.user, user);
       }
       return Promise.resolve();
+    },
+
+    // ========== 読者カスタマイズ ==========
+
+    /** 読者カスタマイズデータを取得 */
+    getReaderCustom: function(workId) {
+      var all = getLS(KEYS.readerCustom) || {};
+      return Promise.resolve(all[workId] || null);
+    },
+
+    /** 読者カスタマイズデータを保存（キャラごとのアイコン色・吹き出し色・画像） */
+    saveReaderCustom: function(workId, customData) {
+      var all = getLS(KEYS.readerCustom) || {};
+      all[workId] = customData;
+      setLS(KEYS.readerCustom, all);
+      return Promise.resolve({ success: true });
+    },
+
+    /** 読者カスタマイズをリセット（作者推奨に戻す） */
+    resetReaderCustom: function(workId) {
+      var all = getLS(KEYS.readerCustom) || {};
+      delete all[workId];
+      setLS(KEYS.readerCustom, all);
+      return Promise.resolve({ success: true });
     },
 
     // ========== しおり ==========

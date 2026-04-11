@@ -125,6 +125,33 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 /* === Toast === */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-toolbar);color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:60;box-shadow:0 8px 24px var(--shadow-strong);animation:slideUp .3s ease;pointer-events:none}
 
+/* === About / Mode Cards === */
+.about-lead{font-size:17px;color:var(--text-secondary);text-align:center;margin-bottom:36px;line-height:1.9}
+.mode-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-bottom:40px}
+.mode-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .25s ease}
+.mode-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px var(--shadow-strong)}
+.reader-mode-card{border-top:4px solid #3B82F6}
+.author-mode-card{border-top:4px solid var(--accent-author)}
+.mode-icon{font-size:36px;margin-bottom:12px}
+.mode-title{font-size:20px;font-weight:700;margin-bottom:12px}
+.mode-desc{font-size:14px;color:var(--text-secondary);line-height:1.8}
+.mode-desc h4{font-size:14px;font-weight:600;color:var(--text-primary);margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border-light)}
+.mode-desc ul{list-style:none;padding:0;margin:0 0 12px}
+.mode-desc li{padding:4px 0 4px 4px;font-size:13px}
+.mode-highlight{font-size:16px;font-weight:700;color:#3B82F6;margin-bottom:8px}
+.mode-note{font-size:12px;color:var(--text-muted);margin-top:8px;font-style:italic}
+.mode-reg{font-size:13px;margin-top:10px;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-light)}
+
+/* === Auth Flow Info === */
+.auth-flow-info{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:40px}
+.auth-flow-info h3{font-size:18px;font-weight:700;margin-bottom:20px;text-align:center}
+.flow-steps{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.flow-step{display:flex;align-items:center;gap:10px;background:var(--bg-secondary);padding:12px 18px;border-radius:12px;border:1px solid var(--border-light)}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--accent-author);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.step-text{font-size:13px;color:var(--text-primary)}
+.flow-arrow{font-size:14px;color:var(--text-muted)}
+.flow-note{font-size:12px;color:var(--text-muted);text-align:center}
+
 /* === Footer === */
 .portal-footer{background:var(--bg-secondary);border-top:1px solid var(--border);padding:32px 24px;text-align:center;margin-top:48px}
 .portal-footer .footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:12px}
@@ -137,7 +164,7 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
   .featured-works,.works-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:768px){
-  .featured-works,.works-grid{grid-template-columns:1fr}
+  .featured-works,.works-grid,.mode-cards{grid-template-columns:1fr}
   .portal-hero{padding:40px 16px}
   .portal-hero h1{font-size:28px}
   .hero-stats{gap:16px}
