@@ -15,7 +15,8 @@
     pendingUsers: 'aninovel_pending_users',
     readerCustom: 'aninovel_reader_custom',
     pwResetTokens: 'aninovel_pw_reset_tokens',
-    myWorks: 'aninovel_my_works'
+    myWorks: 'aninovel_my_works',
+    readerProfiles: 'aninovel_reader_profiles'
   };
 
   // === ユーティリティ ===
@@ -283,27 +284,85 @@
       return Promise.resolve();
     },
 
-    // ========== 読者カスタマイズ ==========
+    // ========== 読者カスタマイズ（プロファイル対応） ==========
 
-    /** 読者カスタマイズデータを取得 */
-    getReaderCustom: function(workId) {
-      var all = getLS(KEYS.readerCustom) || {};
-      return Promise.resolve(all[workId] || null);
+    /** 現在のプロファイル構造を取得 */
+    _getProfileRoot: function() {
+      var user = getLS(KEYS.user);
+      var all = getLS(KEYS.readerProfiles) || {};
+      var key = (user && user.loggedIn) ? user.id : '_anon';
+      if (!all[key]) all[key] = { current: 'デフォルト', profiles: { 'デフォルト': {} } };
+      if (!all[key].profiles) all[key].profiles = { 'デフォルト': {} };
+      if (!all[key].profiles[all[key].current]) all[key].profiles[all[key].current] = {};
+      return { root: all, userKey: key, bundle: all[key] };
     },
 
-    /** 読者カスタマイズデータを保存（キャラごとのアイコン色・吹き出し色・画像） */
-    saveReaderCustom: function(workId, customData) {
-      var all = getLS(KEYS.readerCustom) || {};
-      all[workId] = customData;
-      setLS(KEYS.readerCustom, all);
+    /** プロファイル一覧を取得 */
+    getReaderProfiles: function() {
+      var r = this._getProfileRoot();
+      return Promise.resolve({
+        current: r.bundle.current,
+        profiles: Object.keys(r.bundle.profiles)
+      });
+    },
+
+    /** 使用プロファイルを切替 */
+    setCurrentReaderProfile: function(name) {
+      var r = this._getProfileRoot();
+      if (!r.bundle.profiles[name]) r.bundle.profiles[name] = {};
+      r.bundle.current = name;
+      r.root[r.userKey] = r.bundle;
+      setLS(KEYS.readerProfiles, r.root);
+      return Promise.resolve({ success: true, current: name });
+    },
+
+    /** プロファイルを新規作成 */
+    createReaderProfile: function(name) {
+      if (!name || !name.trim()) return Promise.reject(new Error('プロファイル名を入力してください'));
+      var r = this._getProfileRoot();
+      if (r.bundle.profiles[name]) return Promise.reject(new Error('同名のプロファイルが既に存在します'));
+      r.bundle.profiles[name] = {};
+      r.bundle.current = name;
+      r.root[r.userKey] = r.bundle;
+      setLS(KEYS.readerProfiles, r.root);
+      return Promise.resolve({ success: true, current: name });
+    },
+
+    /** プロファイルを削除（デフォルトは削除不可） */
+    deleteReaderProfile: function(name) {
+      if (name === 'デフォルト') return Promise.reject(new Error('デフォルトプロファイルは削除できません'));
+      var r = this._getProfileRoot();
+      delete r.bundle.profiles[name];
+      if (r.bundle.current === name) r.bundle.current = 'デフォルト';
+      r.root[r.userKey] = r.bundle;
+      setLS(KEYS.readerProfiles, r.root);
       return Promise.resolve({ success: true });
     },
 
-    /** 読者カスタマイズをリセット（作者推奨に戻す） */
+    /** 現在のプロファイルから作品のカスタマイズデータを取得 */
+    getReaderCustom: function(workId) {
+      var r = this._getProfileRoot();
+      var p = r.bundle.profiles[r.bundle.current] || {};
+      return Promise.resolve(p[workId] || null);
+    },
+
+    /** 現在のプロファイルに作品のカスタマイズデータを保存 */
+    saveReaderCustom: function(workId, customData) {
+      var r = this._getProfileRoot();
+      if (!r.bundle.profiles[r.bundle.current]) r.bundle.profiles[r.bundle.current] = {};
+      r.bundle.profiles[r.bundle.current][workId] = customData;
+      r.root[r.userKey] = r.bundle;
+      setLS(KEYS.readerProfiles, r.root);
+      return Promise.resolve({ success: true });
+    },
+
+    /** 現在のプロファイルから作品のカスタマイズを削除（作者推奨に戻す） */
     resetReaderCustom: function(workId) {
-      var all = getLS(KEYS.readerCustom) || {};
-      delete all[workId];
-      setLS(KEYS.readerCustom, all);
+      var r = this._getProfileRoot();
+      var p = r.bundle.profiles[r.bundle.current];
+      if (p) delete p[workId];
+      r.root[r.userKey] = r.bundle;
+      setLS(KEYS.readerProfiles, r.root);
       return Promise.resolve({ success: true });
     },
 

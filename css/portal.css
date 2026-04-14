@@ -132,6 +132,10 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .mode-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px var(--shadow-strong)}
 .mode-cta{margin-top:auto;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap}
 .mode-cta .btn{flex:1;justify-content:center;min-width:120px}
+.welcome-banner{background:linear-gradient(135deg,#6366F1,#8B5CF6);color:#fff;padding:28px 32px;border-radius:16px;margin:24px auto;max-width:1100px;box-shadow:0 8px 24px rgba(99,102,241,.25)}
+.welcome-title{font-size:22px;font-weight:700;margin-bottom:8px}
+.welcome-role{font-size:13px;opacity:.85;margin-bottom:8px}
+.welcome-tips{font-size:14px;line-height:1.7;opacity:.95}
 .reader-mode-card{border-top:4px solid #3B82F6}
 .author-mode-card{border-top:4px solid var(--accent-author)}
 .mode-icon{font-size:36px;margin-bottom:12px}

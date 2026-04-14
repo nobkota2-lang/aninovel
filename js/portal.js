@@ -408,6 +408,11 @@
     var container = $('#auth-area');
     if (!container) return;
     container.innerHTML = '';
+    // ログイン済み状態を body に反映（CSS でヒーロー/モードカードを切替）
+    document.body.classList.toggle('logged-in', !!(state.user && state.user.loggedIn));
+    document.body.classList.toggle('role-author', !!(state.user && state.user.role === 'author'));
+    updateWelcomeBanner();
+
     if (state.user && state.user.loggedIn) {
       var badge = h('div', { className: 'user-badge' });
       var roleIcon = state.user.role === 'author' ? '\u270F\uFE0F' : '\u{1F4D6}';
@@ -549,6 +554,37 @@
 
     overlay.appendChild(content);
     document.body.appendChild(overlay);
+  }
+
+  // === ウェルカムバナー（ログイン後の表示切替） ===
+  function updateWelcomeBanner() {
+    var hero = document.querySelector('.portal-hero');
+    if (!hero) return;
+    var existing = document.getElementById('welcome-banner');
+    if (state.user && state.user.loggedIn) {
+      var roleLabel = state.user.role === 'author' ? '作者' : '読者';
+      var tips = state.user.role === 'author'
+        ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
+        : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
+      if (existing) existing.remove();
+      var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
+      banner.appendChild(h('div', { className: 'welcome-title' }, '\u{1F44B} おかえりなさい、' + state.user.displayName + ' さん'));
+      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のロール: ' + roleLabel));
+      banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+      // ヒーローを隠してバナーで置き換える
+      hero.style.display = 'none';
+      hero.parentNode.insertBefore(banner, hero);
+      // 「アニノベルとは」セクションも折りたたむ
+      var aboutTitle = document.querySelector('.section-title');
+      var aboutSec = aboutTitle && aboutTitle.parentElement;
+      if (aboutSec) aboutSec.style.display = 'none';
+    } else {
+      if (existing) existing.remove();
+      hero.style.display = '';
+      var aboutTitle2 = document.querySelector('.section-title');
+      var aboutSec2 = aboutTitle2 && aboutTitle2.parentElement;
+      if (aboutSec2) aboutSec2.style.display = '';
+    }
   }
 
   // === メイン初期化 ===
