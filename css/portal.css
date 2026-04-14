@@ -128,8 +128,10 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 /* === About / Mode Cards === */
 .about-lead{font-size:17px;color:var(--text-secondary);text-align:center;margin-bottom:36px;line-height:1.9}
 .mode-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-bottom:40px}
-.mode-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .25s ease}
+.mode-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .25s ease;display:flex;flex-direction:column}
 .mode-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px var(--shadow-strong)}
+.mode-cta{margin-top:auto;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap}
+.mode-cta .btn{flex:1;justify-content:center;min-width:120px}
 .reader-mode-card{border-top:4px solid #3B82F6}
 .author-mode-card{border-top:4px solid var(--accent-author)}
 .mode-icon{font-size:36px;margin-bottom:12px}

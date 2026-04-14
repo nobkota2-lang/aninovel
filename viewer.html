@@ -264,7 +264,7 @@ function renderReaderCustomModal(){
   // Bubble color presets
   h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">吹き出しカラー</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
   presets.forEach(function(p){
-    h+='<button onclick="if(!state.readerCustom)state.readerCustom={};if(!state.readerCustom[state.readerCustomCharId])state.readerCustom[state.readerCustomCharId]={};state.readerCustom[state.readerCustomCharId].bubbleColor=''+p.bubble+'';state.readerCustom[state.readerCustomCharId].iconColor=''+p.icon+'';saveReaderCustom(_workParam);render()" style="width:36px;height:36px;border-radius:50%;border:3px solid '+((rc.iconColor===p.icon)?'var(--accent)':'var(--border)')+';background:'+p.icon+';cursor:pointer" title="'+p.name+'"></button>';
+    h+='<button onclick="if(!state.readerCustom)state.readerCustom={};if(!state.readerCustom[state.readerCustomCharId])state.readerCustom[state.readerCustomCharId]={};state.readerCustom[state.readerCustomCharId].bubbleColor=\''+p.bubble+'\';state.readerCustom[state.readerCustomCharId].iconColor=\''+p.icon+'\';saveReaderCustom(_workParam);render()" style="width:36px;height:36px;border-radius:50%;border:3px solid '+((rc.iconColor===p.icon)?'var(--accent)':'var(--border)')+';background:'+p.icon+';cursor:pointer" title="'+p.name+'"></button>';
   });
   h+='</div>';
   // Custom color pickers
@@ -564,7 +564,14 @@ function goHome(){
     else{state.currentScreen='home';render()}
 }
 function toggleAuthorMode(){
-    if(_portalMode)return;
+    if(_portalMode){
+        // ポータル経由の場合: ログイン済み author ロールのみ編集可（自分の作品のみ許可）
+        var u=null;try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
+        if(!u||!u.loggedIn){alert('作者モードを使うにはログインが必要です。ポータルから「新規登録（作者）」または「ログイン」してください。');return;}
+        if(u.role!=='author'){alert('作者モードは作者登録済みのアカウントのみ利用できます。');return;}
+        state.isAuthorMode=!state.isAuthorMode;render();
+        return;
+    }
     state.isAuthorMode=!state.isAuthorMode;render();
 }
 window.goHome=goHome;
@@ -574,6 +581,46 @@ window.onload=function(){
     loadData();
     document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
     if(_workParam){loadReaderCustom(_workParam);
+        // my_ プレフィックスならマイ作品(localStorage)から読み込む
+        if(_workParam.indexOf('my_')===0){
+            try{
+                var u=JSON.parse(localStorage.getItem('aninovel_user'));
+                var all=JSON.parse(localStorage.getItem('aninovel_my_works')||'{}');
+                var list=(u&&all[u.id])||[];
+                var mine=list.find(function(w){return w.id===_workParam});
+                if(mine){
+                    var data=mine.data;
+                    if(data.novel)state.novel=data.novel;
+                    if(data.chapters)state.chapters=data.chapters;
+                    if(data.characters)state.characters=data.characters;
+                    if(data.content)state.content=data.content;
+                    if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
+                    state.currentScreen='reader';
+                    state.isAuthorMode=(u&&u.role==='author');
+                    render();
+                    // 自動保存フック: my_ 作品は localStorage 側に保存
+                    window._saveMyWork=function(){
+                        try{
+                            var all2=JSON.parse(localStorage.getItem('aninovel_my_works')||'{}');
+                            var list2=(u&&all2[u.id])||[];
+                            var idx=list2.findIndex(function(w){return w.id===_workParam});
+                            if(idx>=0){
+                                list2[idx].data={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
+                                list2[idx].title=state.novel.title||list2[idx].title;
+                                list2[idx].updatedAt=new Date().toISOString();
+                                all2[u.id]=list2;
+                                localStorage.setItem('aninovel_my_works',JSON.stringify(all2));
+                            }
+                        }catch(e){console.error(e);}
+                    };
+                    setInterval(function(){if(state.isAuthorMode&&window._saveMyWork)window._saveMyWork();},15000);
+                    return;
+                }
+            }catch(e){console.error(e);}
+            alert('マイ作品が見つかりません');
+            window.location.href='index.html';
+            return;
+        }
         fetch('data/catalog.json').then(function(r){return r.json()}).then(function(cat){
             var entry=cat.works.find(function(w){return w.id===_workParam});
             if(!entry)throw new Error('Work not found');

@@ -410,7 +410,16 @@
     container.innerHTML = '';
     if (state.user && state.user.loggedIn) {
       var badge = h('div', { className: 'user-badge' });
-      badge.appendChild(h('span', { className: 'name' }, state.user.displayName));
+      var roleIcon = state.user.role === 'author' ? '\u270F\uFE0F' : '\u{1F4D6}';
+      badge.appendChild(h('span', { className: 'name' }, roleIcon + ' ' + state.user.displayName));
+      var dashBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'ダッシュボード' }, '\u{1F4CA}');
+      dashBtn.onclick = showDashboard;
+      badge.appendChild(dashBtn);
+      if (state.user.role === 'author') {
+        var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
+        myBtn.onclick = showMyWorksModal;
+        badge.appendChild(myBtn);
+      }
       var logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログアウト');
       logoutBtn.onclick = function() {
         S.logout().then(function() {
@@ -426,6 +435,120 @@
       loginBtn.onclick = showAuthModal;
       container.appendChild(loginBtn);
     }
+  }
+
+  // === マイ作品モーダル（作者用） ===
+  function showMyWorksModal() {
+    var existing = $('#myworks-modal');
+    if (existing) existing.remove();
+    var overlay = h('div', { className: 'modal-overlay', id: 'myworks-modal' });
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    var content = h('div', { className: 'modal-content anim-slide' });
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, '\u270F\uFE0F マイ作品'));
+    var closeBtn = h('button', { className: 'btn-icon', html: '&times;', style: 'font-size:24px;color:var(--text-primary)' });
+    closeBtn.onclick = function() { overlay.remove(); };
+    title.appendChild(closeBtn);
+    content.appendChild(title);
+
+    var listEl = h('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:50vh;overflow-y:auto' });
+    content.appendChild(listEl);
+
+    function refresh() {
+      listEl.innerHTML = '';
+      S.getMyWorks().then(function(works) {
+        if (!works.length) {
+          listEl.appendChild(h('p', { style: 'text-align:center;color:var(--text-muted);padding:20px' }, 'まだ作品がありません。下の「新規作成」からはじめましょう。'));
+          return;
+        }
+        works.forEach(function(w) {
+          var row = h('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px' });
+          var info = h('div', { style: 'flex:1;min-width:0' });
+          info.appendChild(h('div', { style: 'font-weight:600' }, w.title));
+          info.appendChild(h('div', { style: 'font-size:11px;color:var(--text-muted)' }, '更新: ' + formatDate(w.updatedAt)));
+          row.appendChild(info);
+          var openBtn = h('button', { className: 'btn btn-author btn-sm' }, '\u270F\uFE0F 編集');
+          openBtn.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
+          row.appendChild(openBtn);
+          var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626' }, '\u{1F5D1}\uFE0F');
+          delBtn.onclick = function() {
+            if (!confirm('「' + w.title + '」を削除しますか？')) return;
+            S.deleteMyWork(w.id).then(function() { toast('削除しました'); refresh(); });
+          };
+          row.appendChild(delBtn);
+          listEl.appendChild(row);
+        });
+      });
+    }
+    refresh();
+
+    var createBtn = h('button', { className: 'btn btn-primary', style: 'width:100%;justify-content:center' }, '\uFF0B 新規作品を作成');
+    createBtn.onclick = function() {
+      var title = prompt('作品タイトルを入力してください', '新しい作品');
+      if (!title) return;
+      S.createMyWork({ title: title }).then(function(w) {
+        toast('作成しました');
+        window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id);
+      });
+    };
+    content.appendChild(createBtn);
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+  }
+
+  // === ダッシュボード（しおり・投票履歴） ===
+  function showDashboard() {
+    var existing = $('#dashboard-modal');
+    if (existing) existing.remove();
+    var overlay = h('div', { className: 'modal-overlay', id: 'dashboard-modal' });
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    var content = h('div', { className: 'modal-content anim-slide', style: 'max-width:640px' });
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, '\u{1F4CA} マイダッシュボード'));
+    var closeBtn = h('button', { className: 'btn-icon', html: '&times;', style: 'font-size:24px;color:var(--text-primary)' });
+    closeBtn.onclick = function() { overlay.remove(); };
+    title.appendChild(closeBtn);
+    content.appendChild(title);
+
+    Promise.all([S.getCatalog(), S.getVotes()]).then(function(r) {
+      var catalog = r[0], votes = r[1];
+      // 投票履歴
+      var votedSection = h('div', { style: 'margin-bottom:20px' });
+      votedSection.appendChild(h('h4', { style: 'margin-bottom:8px' }, '\u2764\uFE0F 投票した作品'));
+      var voted = catalog.works.filter(function(w) { return votes[w.id] && votes[w.id].userVoted; });
+      if (!voted.length) votedSection.appendChild(h('p', { style: 'color:var(--text-muted);font-size:13px' }, '投票した作品はまだありません。'));
+      else voted.forEach(function(w) {
+        var row = h('div', { style: 'display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;cursor:pointer' });
+        row.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
+        row.appendChild(h('span', {}, w.title + ' / ' + w.author));
+        votedSection.appendChild(row);
+      });
+      content.appendChild(votedSection);
+
+      // しおり
+      var bmSection = h('div', {});
+      bmSection.appendChild(h('h4', { style: 'margin-bottom:8px' }, '\u{1F516} しおり'));
+      var all = JSON.parse(localStorage.getItem('aninovel_bookmarks') || '{}');
+      var hasAny = false;
+      catalog.works.forEach(function(w) {
+        var bms = all[w.id] || [];
+        if (!bms.length) return;
+        hasAny = true;
+        bmSection.appendChild(h('div', { style: 'font-weight:600;margin-top:8px' }, w.title));
+        bms.forEach(function(bm) {
+          var row = h('div', { style: 'padding:6px 12px;border-left:3px solid var(--accent,#6366F1);margin:4px 0;cursor:pointer;font-size:13px' });
+          row.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
+          row.appendChild(h('span', {}, bm.title + ' (p.' + (bm.page + 1) + ')'));
+          bmSection.appendChild(row);
+        });
+      });
+      if (!hasAny) bmSection.appendChild(h('p', { style: 'color:var(--text-muted);font-size:13px' }, 'しおりはまだありません。'));
+      content.appendChild(bmSection);
+    });
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
   }
 
   // === メイン初期化 ===
@@ -465,7 +588,50 @@
     $$('.ranking-sort-btn').forEach(function(btn) {
       btn.onclick = function() { renderRanking(btn.dataset.sort); };
     });
+
+    // モードカード内「新規登録」「ログイン」ボタン
+    $$('.mode-register-btn').forEach(function(btn) {
+      btn.onclick = function() {
+        showAuthModal('register');
+        // 指定ロールをプリセット
+        setTimeout(function() {
+          var sel = document.getElementById('reg-role');
+          var authorFields = document.getElementById('author-fields');
+          if (sel) {
+            sel.value = btn.dataset.role || 'reader';
+            if (authorFields) authorFields.style.display = sel.value === 'author' ? '' : 'none';
+          }
+        }, 0);
+      };
+    });
+    $$('.mode-login-btn').forEach(function(btn) {
+      btn.onclick = function() { showAuthModal('login'); };
+    });
+    $$('.mode-mywork-btn').forEach(function(btn) {
+      btn.onclick = function() {
+        if (!state.user || !state.user.loggedIn) { toast('作者ログインが必要です'); showAuthModal('login'); return; }
+        if (state.user.role !== 'author') { toast('作者アカウントのみ利用できます'); return; }
+        showMyWorksModal();
+      };
+    });
+
+    // URL ハッシュ経由で登録モーダル直リンク
+    if (location.hash === '#register-author') {
+      setTimeout(function() {
+        showAuthModal('register');
+        var sel = document.getElementById('reg-role');
+        var authorFields = document.getElementById('author-fields');
+        if (sel) { sel.value = 'author'; if (authorFields) authorFields.style.display = ''; }
+      }, 50);
+    } else if (location.hash === '#register-reader') {
+      setTimeout(function() { showAuthModal('register'); }, 50);
+    } else if (location.hash === '#login') {
+      setTimeout(function() { showAuthModal('login'); }, 50);
+    }
   }
+
+  // グローバルに公開（他ページからのリンクで利用）
+  window.AninovelPortal = { showAuthModal: showAuthModal };
 
   // DOM Ready
   if (document.readyState === 'loading') {

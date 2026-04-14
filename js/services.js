@@ -14,7 +14,8 @@
     authorProfile: 'aninovel_author_profile',
     pendingUsers: 'aninovel_pending_users',
     readerCustom: 'aninovel_reader_custom',
-    pwResetTokens: 'aninovel_pw_reset_tokens'
+    pwResetTokens: 'aninovel_pw_reset_tokens',
+    myWorks: 'aninovel_my_works'
   };
 
   // === ユーティリティ ===
@@ -335,6 +336,58 @@
         all[workId] = all[workId].filter(function(b) { return b.id !== bookmarkId; });
         setLS(KEYS.bookmarks, all);
       }
+      return Promise.resolve({ success: true });
+    },
+
+    // ========== マイ作品（作者用ローカル作品） ==========
+
+    /** 現在の作者のマイ作品一覧を取得 */
+    getMyWorks: function() {
+      var user = getLS(KEYS.user);
+      if (!user || !user.loggedIn || user.role !== 'author') return Promise.resolve([]);
+      var all = getLS(KEYS.myWorks) || {};
+      var mine = all[user.id] || [];
+      return Promise.resolve(mine);
+    },
+
+    /** マイ作品を新規作成 */
+    createMyWork: function(meta) {
+      var user = getLS(KEYS.user);
+      if (!user || !user.loggedIn || user.role !== 'author') return Promise.reject(new Error('作者ログインが必要です'));
+      var all = getLS(KEYS.myWorks) || {};
+      var list = all[user.id] || [];
+      var id = 'my_' + Date.now();
+      var work = {
+        id: id,
+        title: meta.title || '無題の作品',
+        description: meta.description || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        data: {
+          version: '2.2',
+          novel: { title: meta.title || '無題の作品', author: user.displayName },
+          chapters: [],
+          characters: [
+            { id: 'narrator', name: 'ナレーター', shortName: 'ナ', gender: 'neutral', description: '物語の進行役', bubbleColor: '#F3F4F6', iconColor: '#6B7280', iconImage: null }
+          ],
+          content: [],
+          displaySettings: { fontSize: 18, lineHeight: 2.0, iconSize: 56, font: "'Shippori Mincho', serif", orientation: 'horizontal', narratorStyle: 'bubble' }
+        }
+      };
+      list.push(work);
+      all[user.id] = list;
+      setLS(KEYS.myWorks, all);
+      return Promise.resolve(work);
+    },
+
+    /** マイ作品を削除 */
+    deleteMyWork: function(workId) {
+      var user = getLS(KEYS.user);
+      if (!user) return Promise.reject(new Error('ログインが必要です'));
+      var all = getLS(KEYS.myWorks) || {};
+      var list = all[user.id] || [];
+      all[user.id] = list.filter(function(w) { return w.id !== workId; });
+      setLS(KEYS.myWorks, all);
       return Promise.resolve({ success: true });
     }
   };
