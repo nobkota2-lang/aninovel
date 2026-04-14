@@ -589,6 +589,10 @@
       btn.onclick = function() { renderRanking(btn.dataset.sort); };
     });
 
+    // フッター「ログイン/新規登録」リンク
+    var footerLogin = $('#footer-login-link');
+    if (footerLogin) footerLogin.onclick = function(e) { e.preventDefault(); showAuthModal('login'); };
+
     // モードカード内「新規登録」「ログイン」ボタン
     $$('.mode-register-btn').forEach(function(btn) {
       btn.onclick = function() {
