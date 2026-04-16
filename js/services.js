@@ -18,7 +18,8 @@
     myWorks: 'aninovel_my_works',
     readerProfiles: 'aninovel_reader_profiles',
     usersDir: 'aninovel_users_dir',
-    suspendedWorks: 'aninovel_suspended_works'
+    suspendedWorks: 'aninovel_suspended_works',
+    publishedWorks: 'aninovel_published_works'
   };
 
   // === オーナー ===
@@ -72,20 +73,40 @@
 
     // ========== カタログ ==========
 
-    /** 作品カタログを取得 */
+    /** 作品カタログを取得（静的JSON＋投稿済み作品をマージ） */
     getCatalog: function() {
-      if (_catalogCache) return Promise.resolve(_catalogCache);
+      var self = this;
       return fetch('data/catalog.json').then(function(r) {
         if (!r.ok) throw new Error('カタログの読み込みに失敗しました');
         return r.json();
       }).then(function(data) {
-        _catalogCache = data;
+        // 投稿済み作品をマージ
+        var pub = getLS(KEYS.publishedWorks) || {};
+        var susp = getLS(KEYS.suspendedWorks) || {};
+        Object.keys(pub).forEach(function(pid) {
+          if (susp[pid]) return; // 公開停止中はカタログに含めない
+          var p = pub[pid];
+          // 既存と重複しないようチェック
+          if (!data.works.some(function(w) { return w.id === pid; })) {
+            data.works.push(p.catalogEntry);
+          }
+        });
         return data;
       });
     },
 
+    /** 投稿済み作品の本体データを取得 */
+    getPublishedWork: function(workId) {
+      var pub = getLS(KEYS.publishedWorks) || {};
+      if (pub[workId]) return Promise.resolve(pub[workId].data);
+      return Promise.reject(new Error('投稿済み作品が見つかりません'));
+    },
+
     /** 作品本体を取得 */
     getWork: function(workId) {
+      // 投稿済み作品をまずチェック（pub_ プレフィックス or localStorage にある場合）
+      var pub = getLS(KEYS.publishedWorks) || {};
+      if (pub[workId]) return Promise.resolve(pub[workId].data);
       return this.getCatalog().then(function(catalog) {
         var entry = catalog.works.find(function(w) { return w.id === workId; });
         if (!entry) throw new Error('作品が見つかりません: ' + workId);
@@ -608,6 +629,82 @@
       all[user.id] = list.filter(function(w) { return w.id !== workId; });
       setLS(KEYS.myWorks, all);
       return Promise.resolve({ success: true });
+    },
+
+    // ========== 作品投稿（公開） ==========
+
+    /** マイ作品を投稿（カタログに公開） */
+    publishWork: function(workId) {
+      var user = getLS(KEYS.user);
+      if (!user || !user.loggedIn) return Promise.reject(new Error('ログインが必要です'));
+      // マイ作品から取得
+      var all = getLS(KEYS.myWorks) || {};
+      var list = all[user.id] || [];
+      var work = list.find(function(w) { return w.id === workId; });
+      if (!work) return Promise.reject(new Error('作品が見つかりません'));
+      if (!work.data || !work.data.content || work.data.content.length === 0) {
+        return Promise.reject(new Error('コンテンツがない作品は投稿できません'));
+      }
+
+      var pubId = 'pub_' + workId.replace(/^my_/, '');
+      var charCount = 0;
+      work.data.content.forEach(function(c) { charCount += (c.text || '').length; });
+      var pageCount = Math.max(1, Math.ceil(work.data.content.length / 10));
+      var characterCount = (work.data.characters || []).filter(function(c) { return c.id !== 'narrator'; }).length;
+      var tags = [];
+      if (characterCount > 3) tags.push('群像劇');
+      if (charCount > 5000) tags.push('長編'); else tags.push('短編');
+
+      var catalogEntry = {
+        id: pubId,
+        title: work.data.novel.title || work.title,
+        author: work.data.novel.author || user.displayName,
+        description: work.description || (work.data.novel.title + ' by ' + (work.data.novel.author || user.displayName)),
+        coverColor: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+        pageCount: pageCount,
+        charCount: charCount,
+        characterCount: characterCount,
+        tags: tags,
+        createdAt: work.createdAt,
+        contentUrl: null // 投稿作品は contentUrl を使わない
+      };
+
+      var pub = getLS(KEYS.publishedWorks) || {};
+      pub[pubId] = {
+        catalogEntry: catalogEntry,
+        data: work.data,
+        authorId: user.id,
+        authorEmail: user.email,
+        publishedAt: new Date().toISOString(),
+        sourceWorkId: workId
+      };
+      setLS(KEYS.publishedWorks, pub);
+      return Promise.resolve({ success: true, publishedId: pubId, catalogEntry: catalogEntry });
+    },
+
+    /** 投稿を取り下げ */
+    unpublishWork: function(workId) {
+      var user = getLS(KEYS.user);
+      if (!user || !user.loggedIn) return Promise.reject(new Error('ログインが必要です'));
+      var pub = getLS(KEYS.publishedWorks) || {};
+      // pub_xxx or my_xxx に対応
+      var pubId = workId.indexOf('pub_') === 0 ? workId : 'pub_' + workId.replace(/^my_/, '');
+      if (!pub[pubId]) return Promise.reject(new Error('投稿済み作品が見つかりません'));
+      // 本人 or オーナーのみ取り下げ可
+      _migrateUser(user);
+      if (pub[pubId].authorId !== user.id && user.roles.indexOf('owner') < 0) {
+        return Promise.reject(new Error('この作品を取り下げる権限がありません'));
+      }
+      delete pub[pubId];
+      setLS(KEYS.publishedWorks, pub);
+      return Promise.resolve({ success: true });
+    },
+
+    /** 作品が投稿済みかチェック */
+    isPublished: function(workId) {
+      var pub = getLS(KEYS.publishedWorks) || {};
+      var pubId = workId.indexOf('pub_') === 0 ? workId : 'pub_' + workId.replace(/^my_/, '');
+      return Promise.resolve(!!pub[pubId]);
     }
   };
 })();

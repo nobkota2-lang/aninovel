@@ -550,6 +550,30 @@
           var openBtn = h('button', { className: 'btn btn-author btn-sm' }, '\u270F\uFE0F 編集');
           openBtn.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
           row.appendChild(openBtn);
+          // 投稿/取り下げボタン
+          (function(wid, wTitle) {
+            S.isPublished(wid).then(function(isPub) {
+              if (isPub) {
+                var unpubBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#F59E0B;font-size:11px', title: '投稿を取り下げる' }, '\u{1F4E5} 取下');
+                unpubBtn.onclick = function(e) {
+                  e.stopPropagation();
+                  if (!confirm('「' + wTitle + '」の投稿を取り下げますか？')) return;
+                  S.unpublishWork(wid).then(function() { toast('取り下げました'); refresh(); });
+                };
+                row.insertBefore(unpubBtn, row.lastChild);
+                info.appendChild(h('span', { style: 'font-size:10px;color:#059669;font-weight:700' }, ' \u2714 投稿済'));
+              } else {
+                var pubBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#6366F1;font-size:11px', title: '読者に公開する' }, '\u{1F4E4} 投稿');
+                pubBtn.onclick = function(e) {
+                  e.stopPropagation();
+                  if (!w.data || !w.data.content || w.data.content.length === 0) { toast('コンテンツがない作品は投稿できません'); return; }
+                  if (!confirm('「' + wTitle + '」を投稿しますか？\n読者が読んで評価できるようになります。')) return;
+                  S.publishWork(wid).then(function() { toast('投稿しました！'); refresh(); });
+                };
+                row.insertBefore(pubBtn, row.lastChild);
+              }
+            });
+          })(w.id, w.title);
           var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626' }, '\u{1F5D1}\uFE0F');
           delBtn.onclick = function() {
             if (!confirm('「' + w.title + '」を削除しますか？')) return;
