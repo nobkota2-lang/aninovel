@@ -736,11 +736,7 @@ window.onload=function(){
             window.location.href='index.html';
             return;
         }
-        fetch('data/catalog.json').then(function(r){return r.json()}).then(function(cat){
-            var entry=cat.works.find(function(w){return w.id===_workParam});
-            if(!entry)throw new Error('Work not found');
-            return fetch(entry.contentUrl);
-        }).then(function(r){return r.json()}).then(function(data){
+        window.AninovelServices.getWork(_workParam).then(function(data){
             if(data.novel)state.novel=data.novel;
             if(data.chapters)state.chapters=data.chapters;
             if(data.characters)state.characters=data.characters;

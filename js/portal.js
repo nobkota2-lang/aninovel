@@ -814,10 +814,13 @@
 
       renderHeroStats(catalog);
 
-      // 作品一覧
+      // 作品一覧（新着順にソート）
       var grid = $('#works-grid');
       if (grid) {
-        catalog.works.forEach(function(w) {
+        var sorted = catalog.works.slice().sort(function(a, b) {
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+        sorted.forEach(function(w) {
           grid.appendChild(createWorkCard(w, votes));
         });
       }
