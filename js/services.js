@@ -16,8 +16,13 @@
     readerCustom: 'aninovel_reader_custom',
     pwResetTokens: 'aninovel_pw_reset_tokens',
     myWorks: 'aninovel_my_works',
-    readerProfiles: 'aninovel_reader_profiles'
+    readerProfiles: 'aninovel_reader_profiles',
+    usersDir: 'aninovel_users_dir',
+    suspendedWorks: 'aninovel_suspended_works'
   };
+
+  // === オーナー ===
+  var OWNER_EMAIL = 'nob.kota2@gmail.com';
 
   // === ユーティリティ ===
   function getLS(key) {
@@ -28,6 +33,36 @@
   }
   function genToken() {
     return 'tok_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+  }
+
+  // === ユーザーディレクトリ・ロール管理 ===
+  function _dir() { return getLS(KEYS.usersDir) || {}; }
+  function _saveDir(d) { setLS(KEYS.usersDir, d); }
+  function _isOwnerEmail(email) { return (email || '').toLowerCase() === OWNER_EMAIL.toLowerCase(); }
+  function _migrateUser(u) {
+    if (!u) return u;
+    if (!Array.isArray(u.roles)) u.roles = u.role ? [u.role] : ['reader'];
+    if (_isOwnerEmail(u.email) && u.roles.indexOf('owner') === -1) u.roles.unshift('owner');
+    if (!u.activeRole || u.roles.indexOf(u.activeRole) === -1) {
+      u.activeRole = u.roles.indexOf('owner') >= 0 ? 'owner' : u.roles[0];
+    }
+    u.role = u.activeRole; // 後方互換
+    return u;
+  }
+  function _upsertDir(user) {
+    var d = _dir();
+    var key = user.email.toLowerCase();
+    var prev = d[key] || {};
+    d[key] = Object.assign({}, prev, {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      roles: user.roles,
+      authorProfile: user.authorProfile || prev.authorProfile || null,
+      suspended: prev.suspended || false,
+      createdAt: prev.createdAt || user.createdAt || new Date().toISOString()
+    });
+    _saveDir(d);
   }
 
   // === カタログキャッシュ ===
@@ -132,10 +167,12 @@
 
     /** 現在のユーザーを取得 */
     getCurrentUser: function() {
-      return Promise.resolve(getLS(KEYS.user) || null);
+      var u = getLS(KEYS.user);
+      if (u) { _migrateUser(u); setLS(KEYS.user, u); }
+      return Promise.resolve(u || null);
     },
 
-    /** ログイン（Phase 1: メールに@があれば成功） */
+    /** ログイン（Phase 1: メール検証のみ） */
     login: function(email, password) {
       if (!email || email.indexOf('@') === -1) {
         return Promise.reject(new Error('有効なメールアドレスを入力してください'));
@@ -143,24 +180,55 @@
       if (!password || password.length < 4) {
         return Promise.reject(new Error('パスワードは4文字以上必要です'));
       }
-      // Phase 1: 既存ユーザーをlocalStorageで探す
-      var existing = getLS(KEYS.user);
-      if (existing && existing.email === email) {
-        existing.loggedIn = true;
-        setLS(KEYS.user, existing);
-        return Promise.resolve(existing);
+      var d = _dir();
+      var key = email.toLowerCase();
+      var rec = d[key];
+      // オーナー初回ログイン: 自動的にディレクトリに作成
+      if (!rec && _isOwnerEmail(email)) {
+        rec = {
+          id: 'user_' + Date.now(),
+          email: email,
+          displayName: 'オーナー',
+          roles: ['owner', 'author', 'reader'],
+          authorProfile: null,
+          suspended: false,
+          createdAt: new Date().toISOString()
+        };
+        d[key] = rec; _saveDir(d);
       }
-      // 新規ユーザーとして扱う
+      if (!rec) {
+        // 未登録メールは読者として自動作成（既存挙動を踏襲）
+        rec = {
+          id: 'user_' + Date.now(),
+          email: email,
+          displayName: email.split('@')[0],
+          roles: ['reader'],
+          authorProfile: null,
+          suspended: false,
+          createdAt: new Date().toISOString()
+        };
+        d[key] = rec; _saveDir(d);
+      }
+      if (rec.suspended) return Promise.reject(new Error('このアカウントは停止中です'));
       var user = {
-        id: 'user_' + Date.now(),
-        email: email,
-        displayName: email.split('@')[0],
-        role: 'reader',
-        loggedIn: true,
-        createdAt: new Date().toISOString()
+        id: rec.id, email: rec.email, displayName: rec.displayName,
+        roles: rec.roles.slice(), loggedIn: true, verified: true,
+        authorProfile: rec.authorProfile, createdAt: rec.createdAt
       };
+      _migrateUser(user);
       setLS(KEYS.user, user);
       return Promise.resolve(user);
+    },
+
+    /** アクティブロールを切替 */
+    switchActiveRole: function(role) {
+      var u = getLS(KEYS.user);
+      if (!u || !u.loggedIn) return Promise.reject(new Error('ログインが必要です'));
+      _migrateUser(u);
+      if (u.roles.indexOf(role) === -1) return Promise.reject(new Error('このロールは未登録です: ' + role));
+      u.activeRole = role; u.role = role;
+      setLS(KEYS.user, u);
+      return Promise.resolve(u);
     },
 
     /** ユーザー仮登録（メール確認トークン発行） */
@@ -186,6 +254,9 @@
         }
       }
 
+      // 同一メールで既に別ロール登録がある場合は、マージ用の情報を pending に付与
+      var d = _dir();
+      var existing = d[data.email.toLowerCase()];
       var token = genToken();
       var pending = getLS(KEYS.pendingUsers) || {};
       pending[token] = {
@@ -196,6 +267,7 @@
         realName: data.realName || '',
         address: data.address || '',
         phone: data.phone || '',
+        mergeToExisting: !!existing,
         createdAt: new Date().toISOString()
       };
       setLS(KEYS.pendingUsers, pending);
@@ -217,28 +289,116 @@
         return Promise.reject(new Error('無効または期限切れの確認トークンです'));
       }
 
+      var d = _dir();
+      var key = data.email.toLowerCase();
+      var rec = d[key];
+      var authorProfile = null;
       if (data.role === 'author') {
-        setLS(KEYS.authorProfile, {
-          realName: data.realName,
-          address: data.address,
-          phone: data.phone
-        });
+        authorProfile = { realName: data.realName, address: data.address, phone: data.phone };
+        setLS(KEYS.authorProfile, authorProfile);
       }
+      if (rec) {
+        // 既存ユーザーにロールを追加
+        if (rec.roles.indexOf(data.role) === -1) rec.roles.push(data.role);
+        if (authorProfile) rec.authorProfile = authorProfile;
+        rec.displayName = data.displayName || rec.displayName;
+      } else {
+        rec = {
+          id: 'user_' + Date.now(),
+          email: data.email,
+          displayName: data.displayName,
+          roles: [data.role],
+          authorProfile: authorProfile,
+          suspended: false,
+          createdAt: data.createdAt
+        };
+      }
+      if (_isOwnerEmail(data.email) && rec.roles.indexOf('owner') === -1) rec.roles.unshift('owner');
+      d[key] = rec; _saveDir(d);
 
       var user = {
-        id: 'user_' + Date.now(),
-        email: data.email,
-        displayName: data.displayName,
-        role: data.role,
-        loggedIn: true,
-        verified: true,
-        createdAt: data.createdAt
+        id: rec.id, email: rec.email, displayName: rec.displayName,
+        roles: rec.roles.slice(), loggedIn: true, verified: true,
+        authorProfile: rec.authorProfile, createdAt: rec.createdAt,
+        activeRole: data.role
       };
+      _migrateUser(user);
+      user.activeRole = data.role; user.role = data.role;
       setLS(KEYS.user, user);
       delete pending[token];
       setLS(KEYS.pendingUsers, pending);
 
       return Promise.resolve(user);
+    },
+
+    // ========== オーナー管理機能 ==========
+
+    _requireOwner: function() {
+      var u = getLS(KEYS.user);
+      if (!u || !u.loggedIn) throw new Error('ログインが必要です');
+      _migrateUser(u);
+      if (u.roles.indexOf('owner') === -1) throw new Error('オーナー権限が必要です');
+      return u;
+    },
+
+    /** 全ユーザー一覧（オーナー限定） */
+    adminListUsers: function(filter) {
+      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
+      var d = _dir();
+      var list = Object.keys(d).map(function(k) { return d[k]; });
+      if (filter === 'author') list = list.filter(function(u) { return u.roles.indexOf('author') >= 0; });
+      else if (filter === 'reader') list = list.filter(function(u) { return u.roles.indexOf('reader') >= 0; });
+      return Promise.resolve(list);
+    },
+
+    /** ユーザーをサスペンド／復活 */
+    adminSetSuspended: function(email, suspended) {
+      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
+      if (_isOwnerEmail(email)) return Promise.reject(new Error('オーナーアカウントは停止できません'));
+      var d = _dir();
+      var key = (email || '').toLowerCase();
+      if (!d[key]) return Promise.reject(new Error('ユーザーが見つかりません'));
+      d[key].suspended = !!suspended;
+      _saveDir(d);
+      return Promise.resolve({ success: true });
+    },
+
+    /** 全作品一覧（オーナー限定：全作者のマイ作品） */
+    adminListAllWorks: function() {
+      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
+      var all = getLS(KEYS.myWorks) || {};
+      var dir = _dir();
+      var susp = getLS(KEYS.suspendedWorks) || {};
+      var result = [];
+      Object.keys(all).forEach(function(uid) {
+        (all[uid] || []).forEach(function(w) {
+          var owner = null;
+          Object.keys(dir).forEach(function(k) { if (dir[k].id === uid) owner = dir[k]; });
+          result.push({
+            id: w.id, title: w.title, description: w.description,
+            authorId: uid, authorEmail: owner ? owner.email : '(不明)',
+            authorName: owner ? owner.displayName : '(不明)',
+            createdAt: w.createdAt, updatedAt: w.updatedAt,
+            suspended: !!susp[w.id]
+          });
+        });
+      });
+      return Promise.resolve(result);
+    },
+
+    /** 作品を公開停止／再開 */
+    adminSetWorkSuspended: function(workId, suspended) {
+      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
+      var susp = getLS(KEYS.suspendedWorks) || {};
+      if (suspended) susp[workId] = true; else delete susp[workId];
+      setLS(KEYS.suspendedWorks, susp);
+      return Promise.resolve({ success: true });
+    },
+
+    /** 作品が停止中か（表示側から利用） */
+    isWorkSuspended: function(workId) {
+      var susp = getLS(KEYS.suspendedWorks) || {};
+      return Promise.resolve(!!susp[workId]);
     },
 
     /** パスワード再設定リクエスト */
@@ -403,7 +563,7 @@
     /** 現在の作者のマイ作品一覧を取得 */
     getMyWorks: function() {
       var user = getLS(KEYS.user);
-      if (!user || !user.loggedIn || user.role !== 'author') return Promise.resolve([]);
+      if (!user || !user.loggedIn || !(user.roles && user.roles.indexOf('author') >= 0)) return Promise.resolve([]);
       var all = getLS(KEYS.myWorks) || {};
       var mine = all[user.id] || [];
       return Promise.resolve(mine);
@@ -412,7 +572,7 @@
     /** マイ作品を新規作成 */
     createMyWork: function(meta) {
       var user = getLS(KEYS.user);
-      if (!user || !user.loggedIn || user.role !== 'author') return Promise.reject(new Error('作者ログインが必要です'));
+      if (!user || !user.loggedIn || !(user.roles && user.roles.indexOf('author') >= 0)) return Promise.reject(new Error('作者ログインが必要です'));
       var all = getLS(KEYS.myWorks) || {};
       var list = all[user.id] || [];
       var id = 'my_' + Date.now();

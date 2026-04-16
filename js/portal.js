@@ -403,27 +403,71 @@
     return group;
   }
 
+  // === ロール表示ヘルパー ===
+  var ROLE_META = {
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', color: '#F59E0B' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     color: '#8B5CF6' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     color: '#3B82F6' }
+  };
+  function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
+
   // === 認証UI更新 ===
   function updateAuthUI() {
     var container = $('#auth-area');
     if (!container) return;
     container.innerHTML = '';
-    // ログイン済み状態を body に反映（CSS でヒーロー/モードカードを切替）
     document.body.classList.toggle('logged-in', !!(state.user && state.user.loggedIn));
-    document.body.classList.toggle('role-author', !!(state.user && state.user.role === 'author'));
+    document.body.classList.toggle('role-author', !!(state.user && (roleOf(state.user) === 'author' || roleOf(state.user) === 'owner')));
+    document.body.classList.toggle('role-owner', !!(state.user && roleOf(state.user) === 'owner'));
     updateWelcomeBanner();
 
     if (state.user && state.user.loggedIn) {
       var badge = h('div', { className: 'user-badge' });
-      var roleIcon = state.user.role === 'author' ? '\u270F\uFE0F' : '\u{1F4D6}';
-      badge.appendChild(h('span', { className: 'name' }, roleIcon + ' ' + state.user.displayName));
+      var ar = roleOf(state.user);
+      var rm = ROLE_META[ar] || ROLE_META.reader;
+      // モードバッジ（色付き）
+      var modeBadge = h('span', {
+        className: 'role-mode-badge',
+        style: 'background:' + rm.color + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap'
+      }, rm.icon + ' ' + rm.label + 'モード');
+      badge.appendChild(modeBadge);
+      badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
+
+      // モード切替ドロップダウン（複数ロール保有時）
+      var roles = state.user.roles || [ar];
+      if (roles.length > 1) {
+        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'モード切替', style: 'font-size:13px' }, '\u{1F504}');
+        switchBtn.onclick = function() { showRoleSwitchMenu(switchBtn); };
+        badge.appendChild(switchBtn);
+      } else {
+        // 未登録ロールへの追加登録ボタン
+        var addLabel = ar === 'reader' ? '作者登録' : '読者登録';
+        var addBtn = h('button', { className: 'btn btn-ghost btn-sm', title: addLabel, style: 'font-size:12px' }, '\uFF0B ' + addLabel);
+        addBtn.onclick = function() {
+          showAuthModal('register');
+          setTimeout(function() {
+            var sel = document.getElementById('reg-role');
+            var af = document.getElementById('author-fields');
+            if (sel) { sel.value = ar === 'reader' ? 'author' : 'reader'; if (af) af.style.display = sel.value === 'author' ? '' : 'none'; }
+            var em = document.getElementById('reg-email');
+            if (em) em.value = state.user.email || '';
+          }, 0);
+        };
+        badge.appendChild(addBtn);
+      }
+
       var dashBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'ダッシュボード' }, '\u{1F4CA}');
       dashBtn.onclick = showDashboard;
       badge.appendChild(dashBtn);
-      if (state.user.role === 'author') {
+      if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
         myBtn.onclick = showMyWorksModal;
         badge.appendChild(myBtn);
+      }
+      if (roles.indexOf('owner') >= 0) {
+        var adminBtn = h('button', { className: 'btn btn-ghost btn-sm', title: '管理パネル', style: 'color:#F59E0B' }, '\uD83D\uDC51');
+        adminBtn.onclick = showAdminPanel;
+        badge.appendChild(adminBtn);
       }
       var logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログアウト');
       logoutBtn.onclick = function() {
@@ -440,6 +484,37 @@
       loginBtn.onclick = showAuthModal;
       container.appendChild(loginBtn);
     }
+  }
+
+  // === モード切替ポップアップ ===
+  function showRoleSwitchMenu(anchor) {
+    var old = $('#role-switch-popup');
+    if (old) { old.remove(); return; }
+    var popup = h('div', { id: 'role-switch-popup', style: 'position:absolute;right:0;top:100%;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:999;min-width:180px;padding:6px 0' });
+    (state.user.roles || []).forEach(function(r) {
+      var m = ROLE_META[r] || ROLE_META.reader;
+      var active = roleOf(state.user) === r;
+      var item = h('button', {
+        style: 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:' + (active ? 'var(--bg-secondary)' : 'none') + ';cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left'
+      });
+      item.appendChild(h('span', {}, m.icon));
+      item.appendChild(h('span', { style: 'flex:1' }, m.label + 'モード'));
+      if (active) item.appendChild(h('span', { style: 'color:var(--accent);font-size:12px' }, '\u2714'));
+      item.onclick = function() {
+        popup.remove();
+        if (!active) {
+          S.switchActiveRole(r).then(function(u) {
+            state.user = u;
+            updateAuthUI();
+            toast(m.icon + ' ' + m.label + 'モードに切り替えました');
+          });
+        }
+      };
+      popup.appendChild(item);
+    });
+    anchor.parentNode.style.position = 'relative';
+    anchor.parentNode.appendChild(popup);
+    setTimeout(function() { document.addEventListener('click', function handler(e) { if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', handler); } }); }, 0);
   }
 
   // === マイ作品モーダル（作者用） ===
@@ -562,19 +637,22 @@
     if (!hero) return;
     var existing = document.getElementById('welcome-banner');
     if (state.user && state.user.loggedIn) {
-      var roleLabel = state.user.role === 'author' ? '作者' : '読者';
-      var tips = state.user.role === 'author'
+      var ar = roleOf(state.user);
+      var rm = ROLE_META[ar] || ROLE_META.reader;
+      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return (ROLE_META[r] || {}).label || r; }).join(' / ');
+      var tips = ar === 'owner'
+        ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
+        : ar === 'author'
         ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
         : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
-      banner.appendChild(h('div', { className: 'welcome-title' }, '\u{1F44B} おかえりなさい、' + state.user.displayName + ' さん'));
-      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のロール: ' + roleLabel));
+      banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
+      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + ' おかえりなさい、' + state.user.displayName + ' さん'));
+      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
-      // ヒーローを隠してバナーで置き換える
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
-      // 「アニノベルとは」セクションも折りたたむ
       var aboutTitle = document.querySelector('.section-title');
       var aboutSec = aboutTitle && aboutTitle.parentElement;
       if (aboutSec) aboutSec.style.display = 'none';
@@ -585,6 +663,110 @@
       var aboutSec2 = aboutTitle2 && aboutTitle2.parentElement;
       if (aboutSec2) aboutSec2.style.display = '';
     }
+  }
+
+  // === オーナー管理パネル ===
+  function showAdminPanel() {
+    var existing = $('#admin-modal');
+    if (existing) existing.remove();
+    var overlay = h('div', { className: 'modal-overlay', id: 'admin-modal' });
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    var content = h('div', { className: 'modal-content anim-slide', style: 'max-width:720px' });
+    var title = h('div', { className: 'modal-title' });
+    title.appendChild(h('span', {}, '\uD83D\uDC51 管理パネル'));
+    var closeBtn = h('button', { className: 'btn-icon', html: '&times;', style: 'font-size:24px;color:var(--text-primary)' });
+    closeBtn.onclick = function() { overlay.remove(); };
+    title.appendChild(closeBtn);
+    content.appendChild(title);
+
+    // タブ
+    var tabs = h('div', { style: 'display:flex;gap:4px;margin-bottom:16px' });
+    var tabUsers = h('button', { className: 'btn btn-ghost btn-sm active', style: 'flex:1' }, '\uD83D\uDC65 ユーザー管理');
+    var tabWorks = h('button', { className: 'btn btn-ghost btn-sm', style: 'flex:1' }, '\uD83D\uDCDA 作品管理');
+    tabs.appendChild(tabUsers);
+    tabs.appendChild(tabWorks);
+    content.appendChild(tabs);
+
+    var panel = h('div', { id: 'admin-panel-body', style: 'max-height:60vh;overflow-y:auto' });
+    content.appendChild(panel);
+
+    function renderUsersTab(filter) {
+      panel.innerHTML = '';
+      var filterRow = h('div', { style: 'display:flex;gap:6px;margin-bottom:12px' });
+      ['all', 'reader', 'author'].forEach(function(f) {
+        var btn = h('button', { className: 'btn btn-ghost btn-sm' + (filter === f ? ' active' : ''), style: 'font-size:12px' });
+        btn.textContent = f === 'all' ? '全て' : f === 'reader' ? '読者' : '作者';
+        btn.onclick = function() { renderUsersTab(f); };
+        filterRow.appendChild(btn);
+      });
+      panel.appendChild(filterRow);
+
+      S.adminListUsers(filter === 'all' ? null : filter).then(function(users) {
+        if (!users.length) { panel.appendChild(h('p', { style: 'text-align:center;color:var(--text-muted);padding:20px' }, 'ユーザーがいません')); return; }
+        users.forEach(function(u) {
+          var row = h('div', { style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px' + (u.suspended ? ';opacity:0.5' : '') });
+          var rolesText = (u.roles || []).map(function(r) { return (ROLE_META[r] || {}).icon || r; }).join(' ');
+          row.appendChild(h('span', { style: 'font-size:16px' }, rolesText));
+          var info = h('div', { style: 'flex:1;min-width:0' });
+          info.appendChild(h('div', { style: 'font-weight:600;font-size:14px' }, u.displayName + (u.suspended ? ' (停止中)' : '')));
+          info.appendChild(h('div', { style: 'font-size:12px;color:var(--text-muted)' }, u.email + ' / 登録: ' + formatDate(u.createdAt)));
+          row.appendChild(info);
+          // オーナー自身は停止不可
+          if ((u.roles || []).indexOf('owner') < 0) {
+            if (u.suspended) {
+              var reactBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#059669;font-size:12px' }, '\u25B6 復活');
+              reactBtn.onclick = function() { S.adminSetSuspended(u.email, false).then(function() { toast('復活しました'); renderUsersTab(filter); }); };
+              row.appendChild(reactBtn);
+            } else {
+              var suspBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\u23F8 停止');
+              suspBtn.onclick = function() {
+                if (!confirm(u.displayName + ' を停止しますか？')) return;
+                S.adminSetSuspended(u.email, true).then(function() { toast('停止しました'); renderUsersTab(filter); });
+              };
+              row.appendChild(suspBtn);
+            }
+          }
+          panel.appendChild(row);
+        });
+      });
+    }
+
+    function renderWorksTab() {
+      panel.innerHTML = '';
+      S.adminListAllWorks().then(function(works) {
+        if (!works.length) { panel.appendChild(h('p', { style: 'text-align:center;color:var(--text-muted);padding:20px' }, '作品がありません')); return; }
+        works.forEach(function(w) {
+          var row = h('div', { style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px' + (w.suspended ? ';opacity:0.5' : '') });
+          var info = h('div', { style: 'flex:1;min-width:0' });
+          info.appendChild(h('div', { style: 'font-weight:600;font-size:14px' }, w.title + (w.suspended ? ' (公開停止)' : '')));
+          info.appendChild(h('div', { style: 'font-size:12px;color:var(--text-muted)' }, '作者: ' + w.authorName + ' (' + w.authorEmail + ')'));
+          row.appendChild(info);
+          if (w.suspended) {
+            var resumeBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#059669;font-size:12px' }, '\u25B6 再開');
+            resumeBtn.onclick = function() { S.adminSetWorkSuspended(w.id, false).then(function() { toast('再開しました'); renderWorksTab(); }); };
+            row.appendChild(resumeBtn);
+          } else {
+            var stopBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\u23F8 公開停止');
+            stopBtn.onclick = function() {
+              if (!confirm('「' + w.title + '」を公開停止しますか？')) return;
+              S.adminSetWorkSuspended(w.id, true).then(function() { toast('公開停止しました'); renderWorksTab(); });
+            };
+            row.appendChild(stopBtn);
+          }
+          var openBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'font-size:12px' }, '\uD83D\uDD0D');
+          openBtn.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
+          row.appendChild(openBtn);
+          panel.appendChild(row);
+        });
+      });
+    }
+
+    tabUsers.onclick = function() { tabUsers.classList.add('active'); tabWorks.classList.remove('active'); renderUsersTab('all'); };
+    tabWorks.onclick = function() { tabWorks.classList.add('active'); tabUsers.classList.remove('active'); renderWorksTab(); };
+    renderUsersTab('all');
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
   }
 
   // === メイン初期化 ===
@@ -650,7 +832,8 @@
     $$('.mode-mywork-btn').forEach(function(btn) {
       btn.onclick = function() {
         if (!state.user || !state.user.loggedIn) { toast('作者ログインが必要です'); showAuthModal('login'); return; }
-        if (state.user.role !== 'author') { toast('作者アカウントのみ利用できます'); return; }
+        var r = state.user.roles || [state.user.role];
+        if (r.indexOf('author') < 0 && r.indexOf('owner') < 0) { toast('作者アカウントのみ利用できます'); return; }
         showMyWorksModal();
       };
     });

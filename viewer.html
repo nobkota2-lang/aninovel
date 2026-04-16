@@ -640,10 +640,10 @@ function goHome(){
 }
 function toggleAuthorMode(){
     if(_portalMode){
-        // ポータル経由の場合: ログイン済み author ロールのみ編集可（自分の作品のみ許可）
         var u=null;try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
         if(!u||!u.loggedIn){alert('作者モードを使うにはログインが必要です。ポータルから「新規登録（作者）」または「ログイン」してください。');return;}
-        if(u.role!=='author'){alert('作者モードは作者登録済みのアカウントのみ利用できます。');return;}
+        var roles=u.roles||[u.role||'reader'];
+        if(roles.indexOf('author')<0&&roles.indexOf('owner')<0){alert('作者モードは作者またはオーナー登録済みのアカウントのみ利用できます。');return;}
         state.isAuthorMode=!state.isAuthorMode;render();
         return;
     }
@@ -671,7 +671,7 @@ window.onload=function(){
                     if(data.content)state.content=data.content;
                     if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
                     state.currentScreen='reader';
-                    state.isAuthorMode=(u&&u.role==='author');
+                    var _ur=u&&(u.roles||[u.role||'reader']);state.isAuthorMode=(u&&(_ur.indexOf('author')>=0||_ur.indexOf('owner')>=0));
                     render();
                     // 自動保存フック: my_ 作品は localStorage 側に保存
                     window._saveMyWork=function(){
