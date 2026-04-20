@@ -275,10 +275,39 @@ function _voiceLabel(v){
   return icon+' '+v.name+(v.localService?' 🖥':'☁');
 }
 
-// --- キャラクターの音声を返す（性別対応） ---
+// --- キャラクター別音声自動割り当て ---
+var _charVoiceMap={};
+function _assignCharVoices(){
+  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
+  var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+  var fem=ja.filter(function(v){return _voiceGender(v)==='female';});
+  var mas=ja.filter(function(v){return _voiceGender(v)==='male';});
+  var unk=ja.filter(function(v){return _voiceGender(v)==='unknown';});
+  // フォールバック
+  if(!fem.length)fem=ja;
+  if(!mas.length)mas=ja.length?ja:unk;
+  if(!unk.length)unk=ja;
+  _charVoiceMap={};
+  var fi=0,mi=0,ui=0;
+  state.characters.forEach(function(ch){
+    // カスタム音声設定済みの場合はスキップ
+    var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[ch.id];
+    if(rc&&rc.ttsVoice)return;
+    if(ch.ttsVoice)return;
+    var g=ch.gender||'male';
+    if(g==='female'&&fem.length){_charVoiceMap[ch.id]=fem[fi%fem.length].name;fi++;}
+    else if(g==='male'&&mas.length){_charVoiceMap[ch.id]=mas[mi%mas.length].name;mi++;}
+    else if(unk.length){_charVoiceMap[ch.id]=unk[ui%unk.length].name;ui++;}
+  });
+}
+
+// --- キャラクターの音声を返す（性別対応・キャラ別割り当て） ---
 function _ttsVoice(ch){
   var voiceName=null;
-  if(ch){var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[ch.id];voiceName=(rc&&rc.ttsVoice)||ch.ttsVoice||null;}
+  if(ch){
+    var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[ch.id];
+    voiceName=(rc&&rc.ttsVoice)||ch.ttsVoice||_charVoiceMap[ch.id]||null;
+  }
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   if(voiceName){var v=voices.find(function(x){return x.name===voiceName});if(v)return v;}
   var jaVoices=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});
@@ -291,129 +320,391 @@ function _ttsVoice(ch){
   return jaVoices[0];
 }
 
-// --- リップシンク（Canvasオーバーレイ） ---
+// --- リップシンク（スプリット技法 GIFアニメ） ---
 var _lipSyncAnims={};
+var _lipGifCache={};
+
+// ====== コンパクトGIFエンコーダ（外部ライブラリ不要） ======
+function _gif_lzw(data,minBits){
+  var cc=1<<minBits,eoi=cc+1,bits=minBits+1,nc=eoi+1;
+  var out=[],buf=0,blen=0;
+  function emit(code){buf|=(code<<blen);blen+=bits;while(blen>=8){out.push(buf&0xFF);buf>>>=8;blen-=8;}}
+  var dict=[];
+  for(var i=0;i<cc;i++)dict[i]={};
+  if(data.length===0){emit(cc);emit(eoi);if(blen>0)out.push(buf&0xFF);return out;}
+  emit(cc);
+  var prefix=data[0];
+  for(var pos=1;pos<data.length;pos++){
+    var sym=data[pos];
+    if(dict[prefix]&&dict[prefix][sym]!==undefined){
+      prefix=dict[prefix][sym];
+    }else{
+      emit(prefix);
+      if(nc<=4095){
+        if(!dict[prefix])dict[prefix]={};
+        dict[prefix][sym]=nc++;
+        if(nc>(1<<bits)&&bits<12)bits++;
+      }else{
+        emit(cc);bits=minBits+1;nc=eoi+1;
+        dict=[];for(var j=0;j<cc;j++)dict[j]={};
+      }
+      prefix=sym;
+    }
+  }
+  emit(prefix);emit(eoi);
+  if(blen>0)out.push(buf&0xFF);
+  return out;
+}
+
+function _gif_palette(frames,w,h){
+  var hist={};
+  for(var f=0;f<frames.length;f++){
+    var rgba=frames[f];
+    for(var i=0;i<rgba.length;i+=4){
+      if(rgba[i+3]<80)continue;
+      var r=rgba[i]>>4,g=rgba[i+1]>>4,b=rgba[i+2]>>4;
+      var key=(r<<8)|(g<<4)|b;
+      hist[key]=(hist[key]||0)+1;
+    }
+  }
+  var sorted=Object.keys(hist).sort(function(a,b){return hist[b]-hist[a];});
+  var pal=[[0,0,0]];
+  for(var k=0;k<Math.min(255,sorted.length);k++){
+    var ki=parseInt(sorted[k]);
+    pal.push([(ki>>8)<<4,((ki>>4)&15)<<4,(ki&15)<<4]);
+  }
+  while(pal.length<256)pal.push([0,0,0]);
+  return pal;
+}
+
+function _gif_quantize(rgba,pal){
+  var n=rgba.length>>2,idx=new Uint8Array(n),cache={};
+  for(var i=0;i<n;i++){
+    var r=rgba[i*4],g=rgba[i*4+1],b=rgba[i*4+2];
+    var key=(r>>4)|((g>>4)<<4)|((b>>4)<<8);
+    if(cache[key]!==undefined){idx[i]=cache[key];continue;}
+    var best=1,bestD=1e9;
+    for(var j=1;j<pal.length;j++){
+      var dr=r-pal[j][0],dg=g-pal[j][1],db=b-pal[j][2];
+      var d=dr*dr+dg*dg+db*db;
+      if(d<bestD){bestD=d;best=j;}
+      if(d===0)break;
+    }
+    cache[key]=best;idx[i]=best;
+  }
+  return idx;
+}
+
+function _gifEncode(frames,w,h,delayCs){
+  var pal=_gif_palette(frames,w,h);
+  var cb=2;while((1<<cb)<pal.length)cb++;
+  cb=Math.max(2,Math.min(8,cb));
+  var ps=1<<cb,out=[];
+  // GIF89a
+  [0x47,0x49,0x46,0x38,0x39,0x61].forEach(function(b){out.push(b);});
+  // Logical Screen Descriptor
+  out.push(w&0xFF,(w>>8)&0xFF,h&0xFF,(h>>8)&0xFF,0x80|(cb-1),0,0);
+  // Global Color Table
+  for(var i=0;i<ps;i++){var c=pal[i]||[0,0,0];out.push(c[0],c[1],c[2]);}
+  // Netscape loop extension (infinite)
+  [0x21,0xFF,0x0B,0x4E,0x45,0x54,0x53,0x43,0x41,0x50,0x45,0x32,0x2E,0x30,0x03,0x01,0x00,0x00,0x00].forEach(function(b){out.push(b);});
+  // Frames
+  for(var f=0;f<frames.length;f++){
+    // Graphic Control Extension
+    [0x21,0xF9,0x04,0x00].forEach(function(b){out.push(b);});
+    out.push(delayCs&0xFF,(delayCs>>8)&0xFF,0,0);
+    // Image Descriptor
+    [0x2C,0,0,0,0].forEach(function(b){out.push(b);});
+    out.push(w&0xFF,(w>>8)&0xFF,h&0xFF,(h>>8)&0xFF,0x00);
+    // Image Data
+    out.push(cb);
+    var idx=_gif_quantize(frames[f],pal);
+    var lzw=_gif_lzw(idx,cb);
+    for(var pos=0;pos<lzw.length;){
+      var len=Math.min(255,lzw.length-pos);
+      out.push(len);
+      for(var k=0;k<len;k++)out.push(lzw[pos++]);
+    }
+    out.push(0);
+  }
+  out.push(0x3B);
+  return new Uint8Array(out);
+}
+
+// ====== 口部分カラー分析 ======
+function _analyzeMouth(ctx,sz){
+  var rs=Math.floor(sz*0.48),re=Math.floor(sz*0.82);
+  var cc=Math.floor(sz/2),cw=Math.floor(sz*0.52),cl=cc-Math.floor(cw/2);
+  var bestScore=-1,bestRow=Math.floor(sz*0.68),bestX=cl,bestW=cw;
+  for(var row=rs;row<re;row++){
+    var px;try{px=ctx.getImageData(cl,row,cw,1).data;}catch(e){continue;}
+    var score=0,lx1=cw,lx2=0,lipCnt=0;
+    for(var x=0;x<cw;x++){
+      var r=px[x*4],g=px[x*4+1],b=px[x*4+2];
+      // 赤み・ピンク系（唇）判定
+      var isLip=(r>130&&r>g*1.18&&r>b*1.05&&g>50&&b>30);
+      // 暗い輪郭線（アニメ）判定
+      var isDark=(r<75&&g<75&&b<75);
+      if(isLip){score+=2;lipCnt++;lx1=Math.min(lx1,x);lx2=Math.max(lx2,x);}
+      if(isDark)score+=1;
+    }
+    if(score>bestScore){
+      bestScore=score;bestRow=row;
+      if(lipCnt>3){bestX=cl+lx1;bestW=Math.max(8,lx2-lx1+1);}
+    }
+  }
+  var mw=bestW>5?Math.min(bestW,Math.floor(sz*0.44)):Math.floor(sz*0.30);
+  var mx=(bestX+mw/2)>(sz*0.25)&&(bestX+mw/2)<(sz*0.75)?bestX:(cc-Math.floor(mw/2));
+  return{y:bestRow,x:mx,w:mw};
+}
+
+// ====== スプリット技法フレーム生成 ======
+function _genSpeechFrames(img,sz){
+  // 8段階の開口量でフレーム生成
+  var OPENS=[0,0.15,0.52,0.90,1.0,0.90,0.52,0.15];
+  var frames=[];
+  // まず解析用キャンバスに描画して口位置を検出
+  var ac=document.createElement('canvas');
+  ac.width=sz;ac.height=sz;
+  var actx=ac.getContext('2d');
+  actx.drawImage(img,0,0,sz,sz);
+  var mouth=_analyzeMouth(actx,sz);
+  var sy=mouth.y,mw=mouth.w,mx=mouth.x+mw/2;
+  var maxGap=Math.round(sz*0.14);
+
+  for(var fi=0;fi<OPENS.length;fi++){
+    var op=OPENS[fi];
+    var gap=Math.round(maxGap*op);
+    var up=Math.round(gap*0.40),dn=Math.round(gap*0.60);
+    var fc=document.createElement('canvas');
+    fc.width=sz;fc.height=sz;
+    var fctx=fc.getContext('2d');
+    fctx.save();
+    fctx.beginPath();fctx.arc(sz/2,sz/2,sz/2,0,Math.PI*2);fctx.clip();
+
+    if(op<0.05){
+      // 閉じた口：元画像そのまま
+      fctx.drawImage(img,0,0,sz,sz);
+    }else{
+      var gY1=sy-up,gY2=sy+dn,gH=gY2-gY1;
+      // 1) 元画像をベースとして描画
+      fctx.drawImage(img,0,0,sz,sz);
+      // 2) 口の開く隙間を暗く塗りつぶす
+      fctx.fillStyle='rgb(12,4,3)';
+      fctx.fillRect(0,gY1,sz,Math.max(1,gH));
+      // 3) 上半身（0〜sy）をup分上にシフト
+      fctx.drawImage(img,0,0,sz,sy,0,-up,sz,sy);
+      // 4) 下半身（sy〜sz）をdn分下にシフト
+      fctx.drawImage(img,0,sy,sz,sz-sy,0,sy+dn,sz,sz-sy);
+      // 5) 口の内側を描画
+      if(gH>1){
+        var midY=(gY1+gY2)/2;
+        // 口腔（暗い楕円）
+        fctx.beginPath();
+        fctx.ellipse(mx,midY,mw/2*0.94,gH/2+1.5,0,0,Math.PI*2);
+        fctx.fillStyle='rgb(18,5,3)';
+        fctx.fill();
+        // 奥行き感（ラジアルグラデーション）
+        var grd=fctx.createRadialGradient(mx,midY,0,mx,midY,mw/2*0.94);
+        grd.addColorStop(0,'rgba(55,12,8,0.65)');
+        grd.addColorStop(1,'rgba(0,0,0,0)');
+        fctx.beginPath();
+        fctx.ellipse(mx,midY,mw/2*0.94,gH/2+1.5,0,0,Math.PI*2);
+        fctx.fillStyle=grd;fctx.fill();
+        // 上歯（40%以上開いた時）
+        if(op>0.40){
+          var thH=Math.min(gH*0.42,sz*0.048);
+          fctx.beginPath();
+          fctx.ellipse(mx,gY1+thH*0.52,mw/2*0.66,thH,0,0,Math.PI*2);
+          fctx.fillStyle='rgba(252,248,244,0.93)';fctx.fill();
+          // 歯の境界線
+          fctx.beginPath();
+          for(var t=0;t<3;t++){
+            var tx=mx-mw/2*0.55+(mw/2*1.1/3)*t+mw/2*1.1/6;
+            fctx.moveTo(tx,gY1+thH*0.1);
+            fctx.lineTo(tx,gY1+thH*0.95);
+          }
+          fctx.strokeStyle='rgba(180,165,150,0.35)';fctx.lineWidth=0.8;fctx.stroke();
+        }
+        // 下歯（70%以上開いた時）
+        if(op>0.70){
+          var ltH=Math.min(gH*0.30,sz*0.036);
+          fctx.beginPath();
+          fctx.ellipse(mx,gY2-ltH*0.52,mw/2*0.56,ltH,0,0,Math.PI*2);
+          fctx.fillStyle='rgba(248,244,238,0.85)';fctx.fill();
+        }
+        // 舌（88%以上開いた時）
+        if(op>0.88){
+          fctx.beginPath();
+          fctx.ellipse(mx,gY2-gH*0.20,mw/2*0.40,gH*0.22,0,0,Math.PI*2);
+          fctx.fillStyle='rgba(200,75,70,0.76)';fctx.fill();
+        }
+      }
+    }
+    fctx.restore();
+    frames.push(new Uint8Array(fctx.getImageData(0,0,sz,sz).data));
+  }
+  return frames;
+}
+
+// ====== GIFキャッシュと生成 ======
+function _generateLipGif(cid,callback){
+  var ch=state.characters.find(function(c){return c.id===cid;});
+  if(!ch)return callback(null);
+  var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
+  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  if(!iconImg)return callback(null);
+  var sz=state.displaySettings.iconSize||56;
+  var img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=function(){
+    try{
+      var frames=_genSpeechFrames(img,sz);
+      if(!frames||!frames.length)return callback(null);
+      var gifBytes=_gifEncode(frames,sz,sz,7); // 7cs=70ms/frame
+      var blob=new Blob([gifBytes],{type:'image/gif'});
+      var url=URL.createObjectURL(blob);
+      _lipGifCache[cid]={gif:url,orig:iconImg,sz:sz};
+      callback(url);
+    }catch(e){
+      console.warn('[LipSync] GIF生成エラー:',e);
+      callback(null);
+    }
+  };
+  img.onerror=function(){callback(null);};
+  img.src=iconImg;
+}
+
+function _applyLipGif(cid,gifUrl){
+  document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]').forEach(function(wrap){
+    wrap.classList.add('tts-speaking');
+    var imgEl=wrap.querySelector('.char-icon img');
+    if(imgEl){
+      if(!imgEl.dataset.lipOrig)imgEl.dataset.lipOrig=imgEl.src;
+      imgEl.src=gifUrl;
+    }
+  });
+}
+
+function _restoreLipImg(cid){
+  document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]').forEach(function(wrap){
+    wrap.classList.remove('tts-speaking');
+    var imgEl=wrap.querySelector('.char-icon img');
+    if(imgEl&&imgEl.dataset.lipOrig){
+      imgEl.src=imgEl.dataset.lipOrig;
+      delete imgEl.dataset.lipOrig;
+    }
+  });
+}
 
 function _clearAllLipSync(){
   Object.keys(_lipSyncAnims).forEach(function(cid){
-    if(_lipSyncAnims[cid]!=null)cancelAnimationFrame(_lipSyncAnims[cid]);
+    var aid=_lipSyncAnims[cid];
+    if(aid>1)cancelAnimationFrame(aid);
+    _restoreLipImg(cid);
   });
   _lipSyncAnims={};
   document.querySelectorAll('.lipsync-ov').forEach(function(c){c.remove();});
 }
 
-// 口位置ヒューリスティック（下方50〜78%の中央付近で最も暗い行を探す）
-function _detectMouthFrac(ctx,sz){
-  var col=Math.floor(sz/2),sr=Math.floor(sz*0.52),er=Math.floor(sz*0.78);
-  var minB=255,frac=0.70;
-  try{
-    var sw=Math.max(4,Math.floor(sz*0.18));
-    for(var row=sr;row<er;row++){
-      var px=ctx.getImageData(col-Math.floor(sw/2),row,sw,1).data;
-      var b=0;for(var i=0;i<px.length;i+=4)b+=(px[i]*0.299+px[i+1]*0.587+px[i+2]*0.114);
-      b/=(px.length/4);
-      if(b<minB){minB=b;frac=row/sz;}
-    }
-  }catch(e){}
-  return Math.max(0.60,Math.min(0.78,frac));
-}
-
-function _startLipSyncChar(cid){
-  if(_lipSyncAnims[cid]!=null){cancelAnimationFrame(_lipSyncAnims[cid]);delete _lipSyncAnims[cid];}
-  document.querySelectorAll('.lipsync-ov[data-lcid="'+cid+'"]').forEach(function(c){c.remove();});
-
-  var ch=state.characters.find(function(c){return c.id===cid;});
-  if(!ch)return;
-  var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
-  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
-  var iconClr=rc&&rc.iconColor?rc.iconColor:(ch.iconColor||'#6366F1');
-  var sn=(ch.shortName||ch.name||'?').substring(0,2);
-
-  var wraps=document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
-  if(!wraps.length)return;
-  // tts-speakingクラスを付与
-  wraps.forEach(function(w){w.classList.add('tts-speaking');});
-
+// 画像なしキャラ用フォールバック（テキストアイコン口パク）
+function _startLipSyncFallback(cid,wraps,iconClr,sn){
   wraps.forEach(function(wrap){
     var iconEl=wrap.querySelector('.char-icon');
     var sz=iconEl?Math.round(iconEl.getBoundingClientRect().width||iconEl.offsetWidth):0;
     if(sz<8)sz=state.displaySettings.iconSize||56;
-
     var canvas=document.createElement('canvas');
     canvas.className='lipsync-ov';
     canvas.setAttribute('data-lcid',cid);
     canvas.width=sz;canvas.height=sz;
     canvas.style.cssText='position:absolute;top:0;left:0;width:'+sz+'px;height:'+sz+'px;border-radius:50%;pointer-events:none;z-index:4;';
     wrap.appendChild(canvas);
-
     var ctx=canvas.getContext('2d');
-    var frame=0,mOpen=0,tOpen=0,mFrac=0.70,calibrated=false;
-    var img=new Image();
-    img.crossOrigin='anonymous';
-
+    var frame=0,mOpen=0,tOpen=0,mFrac=0.70;
     function drawFrame(){
       frame++;
-      // スピーチリズム：8〜12フレームごとに口の開閉を変える
       if(frame%9===0)tOpen=Math.random()>0.28?Math.random()*0.72+0.28:0.04;
       mOpen+=(tOpen-mOpen)*0.38;
-
-      ctx.save();
-      ctx.clearRect(0,0,sz,sz);
-      // 円形クリップ
+      ctx.save();ctx.clearRect(0,0,sz,sz);
       ctx.beginPath();ctx.arc(sz/2,sz/2,sz/2,0,Math.PI*2);ctx.clip();
-
-      if(img.complete&&img.naturalWidth>0){
-        ctx.drawImage(img,0,0,sz,sz);
-        if(!calibrated){
-          try{mFrac=_detectMouthFrac(ctx,sz);}catch(e){}
-          calibrated=true;
-        }
-      }else{
-        // テキストアイコン（画像なし）
-        ctx.fillStyle=iconClr;ctx.fillRect(0,0,sz,sz);
-        ctx.fillStyle='rgba(255,255,255,0.92)';
-        ctx.font='bold '+Math.round(sz/3)+'px sans-serif';
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText(sn,sz/2,sz*0.43);
-      }
+      ctx.fillStyle=iconClr;ctx.fillRect(0,0,sz,sz);
+      ctx.fillStyle='rgba(255,255,255,0.92)';
+      ctx.font='bold '+Math.round(sz/3)+'px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(sn,sz/2,sz*0.43);
       ctx.restore();
-
-      // 口アニメーション（円クリップ内）
       ctx.save();
       ctx.beginPath();ctx.arc(sz/2,sz/2,sz/2,0,Math.PI*2);ctx.clip();
-      var mx=sz*0.50,my=sz*mFrac;
-      var mw=sz*0.32,mh=Math.max(0.8,sz*0.10*mOpen);
+      var cmy=sz*mFrac,cmx=sz*0.50,cmw=sz*0.32,cmh=Math.max(0.8,sz*0.10*mOpen);
       if(mOpen>0.04){
-        // 口の暗い内部
-        ctx.beginPath();ctx.ellipse(mx,my,mw/2,mh/2+sz*0.003,0,0,Math.PI*2);
-        ctx.fillStyle='rgba(10,3,2,0.84)';ctx.fill();
-        // 上の歯（大きく開いた時）
+        ctx.beginPath();ctx.ellipse(cmx,cmy,cmw/2,cmh/2+sz*0.003,0,0,Math.PI*2);
+        ctx.fillStyle='rgb(18,5,3)';ctx.fill();
         if(mOpen>0.35){
-          ctx.beginPath();ctx.ellipse(mx,my-mh*0.12,mw*0.37,mh*0.33,0,0,Math.PI);
+          ctx.beginPath();ctx.ellipse(cmx,cmy-cmh*0.12,cmw*0.37,cmh*0.33,0,Math.PI,0);
           ctx.fillStyle='rgba(248,240,234,0.90)';ctx.fill();
         }
-        // 唇の輪郭
-        ctx.beginPath();ctx.ellipse(mx,my,mw/2+sz*0.003,mh/2+sz*0.012,0,0,Math.PI*2);
-        ctx.strokeStyle='rgba(50,15,10,0.52)';ctx.lineWidth=Math.max(1,sz*0.019);ctx.stroke();
       }else{
-        // 閉じた口ライン
-        ctx.beginPath();ctx.moveTo(mx-mw/2,my);ctx.quadraticCurveTo(mx,my+sz*0.013,mx+mw/2,my);
+        ctx.beginPath();ctx.moveTo(cmx-cmw/2,cmy);ctx.quadraticCurveTo(cmx,cmy+sz*0.013,cmx+cmw/2,cmy);
         ctx.strokeStyle='rgba(50,15,10,0.40)';ctx.lineWidth=Math.max(1,sz*0.016);ctx.stroke();
       }
       ctx.restore();
-
-      var aid=requestAnimationFrame(drawFrame);
-      _lipSyncAnims[cid]=aid;
+      _lipSyncAnims[cid]=requestAnimationFrame(drawFrame);
     }
-    if(iconImg)img.src=iconImg;
     drawFrame();
   });
 }
 
-function _stopLipSyncChar(cid){
-  if(_lipSyncAnims[cid]!=null){cancelAnimationFrame(_lipSyncAnims[cid]);delete _lipSyncAnims[cid];}
+function _startLipSyncChar(cid){
+  if(_lipSyncAnims[cid]!=null){
+    var old=_lipSyncAnims[cid];
+    if(old>1)cancelAnimationFrame(old);
+    delete _lipSyncAnims[cid];
+  }
   document.querySelectorAll('.lipsync-ov[data-lcid="'+cid+'"]').forEach(function(c){c.remove();});
-  document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]').forEach(function(w){w.classList.remove('tts-speaking');});
+  var ch=state.characters.find(function(c){return c.id===cid;});
+  if(!ch)return;
+  var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
+  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  var iconClr=rc&&rc.iconColor?rc.iconColor:(ch.iconColor||'#6366F1');
+  var sn=(ch.shortName||ch.name||'?').substring(0,2);
+  var wraps=document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
+  if(!wraps.length)return;
+  wraps.forEach(function(w){w.classList.add('tts-speaking');});
+
+  if(iconImg){
+    var cached=_lipGifCache[cid];
+    var sz=state.displaySettings.iconSize||56;
+    if(cached&&cached.orig===iconImg&&cached.sz===sz){
+      // キャッシュヒット：即座にGIFを適用
+      _applyLipGif(cid,cached.gif);
+      _lipSyncAnims[cid]=-1;
+    }else{
+      // GIF生成（非同期）
+      _lipSyncAnims[cid]=-2; // 生成中マーカー
+      _generateLipGif(cid,function(gifUrl){
+        // TTSが既に別のキャラに移っていたら適用しない
+        if(!state.tts||!state.tts.active||state.tts.currentCharId!==cid)return;
+        if(gifUrl){
+          _applyLipGif(cid,gifUrl);
+          _lipSyncAnims[cid]=-1;
+        }else{
+          // GIF生成失敗→フォールバック
+          _startLipSyncFallback(cid,wraps,iconClr,sn);
+        }
+      });
+    }
+    return;
+  }
+  // 画像なし→テキストアイコンアニメ
+  _startLipSyncFallback(cid,wraps,iconClr,sn);
+}
+
+function _stopLipSyncChar(cid){
+  var aid=_lipSyncAnims[cid];
+  if(aid>1)cancelAnimationFrame(aid);
+  delete _lipSyncAnims[cid];
+  document.querySelectorAll('.lipsync-ov[data-lcid="'+cid+'"]').forEach(function(c){c.remove();});
+  _restoreLipImg(cid);
 }
 
 function _updateLipSync(){
@@ -471,6 +762,7 @@ function startTTS(){
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   state.tts.active=true;state.tts.paused=false;
   state.tts.voices=speechSynthesis.getVoices();
+  _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
   _drainQueue();
 }
