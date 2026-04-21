@@ -74,6 +74,8 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .char-icon-wrap.tts-speaking .char-icon{animation:tts-glow 0.44s steps(2,end) infinite}
 .lipsync-ov{position:absolute;top:0;left:0;border-radius:50%;pointer-events:none;z-index:4}
 .tts-highlight{background:linear-gradient(90deg,rgba(99,102,241,.12),rgba(139,92,246,.08));border-radius:6px;outline:1px solid rgba(99,102,241,.3)}
+@keyframes tts-narr-pulse{0%,100%{background:linear-gradient(90deg,rgba(99,102,241,.10),rgba(139,92,246,.06));box-shadow:inset 0 0 0 1px rgba(99,102,241,.25)}50%{background:linear-gradient(90deg,rgba(99,102,241,.22),rgba(139,92,246,.18));box-shadow:inset 0 0 0 2px rgba(99,102,241,.55)}}
+.citem.tts-highlight.tts-narr-active{animation:tts-narr-pulse 0.9s ease-in-out infinite;border-radius:8px}
 .tts-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg-toolbar);color:#e8e0d8;padding:10px 20px;display:flex;align-items:center;gap:14px;z-index:200;border-top:2px solid #6366F1;box-shadow:0 -4px 24px rgba(0,0,0,.35);flex-wrap:wrap}
 .tts-bar button{background:none;border:1px solid rgba(255,255,255,.2);color:#e8e0d8;border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer;transition:background .15s}.tts-bar button:hover{background:rgba(255,255,255,.1)}
 .tts-bar button.tts-active,.tts-bar-btn.tts-active,.btn-icon.tts-active{background:#6366F1!important;border-color:#6366F1!important;color:#fff!important}
@@ -110,7 +112,7 @@ imageGalleryOpen:false,galleryTab:'photo',
 searchOpen:false,searchQuery:'',searchResults:[],searchCurrentIdx:-1,
 metaEditOpen:false,fullscreen:false,darkMode:false,
 editingItem:null,currentPage:0,bookmarks:[],lastSaved:'未保存',draggedItem:null,readerCustom:null,readerCustomOpen:false,readerCustomCharId:null,
-tts:{active:false,paused:false,rate:1.0,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
+tts:{active:false,paused:false,rate:1.4,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
 _scrollToId:null,
 novel:{title:'夏の日の冒険',author:'山田太郎'},
 displaySettings:{fontSize:18,lineHeight:2.0,iconSize:56,font:"'Shippori Mincho', serif",orientation:'horizontal',narratorStyle:'bubble'},
@@ -257,16 +259,17 @@ var _ttsQueue=[];var _ttsUtterance=null;
 
 // --- 音声性別判定 ---
 function _voiceGender(v){
-  var n=(v.name||'').toLowerCase();
+  var raw=v.name||'';
+  var n=raw.toLowerCase();
+  // 漢字名 (Edge Natural 日本語表記)
+  if(/七海|碧衣|真夕|志織|彩|遥香|歩美|沙耶香|美月|花|結菜|楓|桜|凛/.test(raw))return'female';
+  if(/圭太|大智|直紀|一郎|健|拓海|翔|蓮|樹|涼太/.test(raw))return'male';
   // macOS/iOS
-  if(/kyoko|haruka|ayumi|mizuki|nanami|female|woman|sayuri|akari|hana|sora-f|yuna/i.test(n))return'female';
-  if(/otoya|ichiro|keita|male|man|takumi|shin.ichi|naoki|sora-m/i.test(n))return'male';
+  if(/kyoko|haruka|ayumi|mizuki|nanami|female|woman|sayuri|akari|hana|sora-f|yuna|aoi|mayu|shiori|sayaka/i.test(n))return'female';
+  if(/otoya|ichiro|keita|male|man|takumi|shin.ichi|naoki|sora-m|daichi/i.test(n))return'male';
   // Google Wavenet/Standard/Neural2/News (A,B=女性 C,D=男性)
   if(/[-_][ab]\b/i.test(n))return'female';
   if(/[-_][cd]\b/i.test(n))return'male';
-  // Microsoft
-  if(/nanami|haruka|sayaka|keiko/i.test(n))return'female';
-  if(/keita|naoki/i.test(n))return'male';
   return'unknown';
 }
 function _voiceLabel(v){
@@ -275,30 +278,85 @@ function _voiceLabel(v){
   return icon+' '+v.name+(v.localService?' 🖥':'☁');
 }
 
-// --- キャラクター別音声自動割り当て ---
+// Edge Online Natural 日本語音声カタログ (ブラウザ標準で使える最高品質)
+// ブラウザにより漢字 (七海/圭太/碧衣/大智/真夕/直紀/志織) かローマ字 (Nanami/Keita/...) で登録されるので両方掲載
+var _NATURAL_JA_FEMALE=['七海 Online','碧衣 Online','真夕 Online','志織 Online','Nanami Online','Aoi Online','Mayu Online','Shiori Online','Nanami','Aoi','Mayu','Shiori','Sayaka','Haruka','Ayumi'];
+var _NATURAL_JA_MALE=['圭太 Online','大智 Online','直紀 Online','Keita Online','Daichi Online','Naoki Online','Keita','Daichi','Naoki','Ichiro'];
+function _matchVoiceByPrefs(voices,prefs){
+  for(var i=0;i<prefs.length;i++){
+    var p=prefs[i].toLowerCase();
+    var m=voices.find(function(v){var n=(v.name||'').toLowerCase();return n===p||n.indexOf(p)>=0;});
+    if(m)return m;
+  }
+  return null;
+}
+// 高品質音声（Neural/Natural/Wavenet等）優先スコア
+function _voiceQuality(v){
+  var n=(v.name||'').toLowerCase();
+  if(/natural|online.*natural/.test(n))return 100; // Edge/Windows Neural
+  if(/neural|neural2/.test(n))return 90;
+  if(/wavenet/.test(n))return 85;
+  if(/studio|news/.test(n))return 80;
+  if(/premium|enhanced/.test(n))return 70;
+  if(v.localService===false)return 60; // クラウド一般
+  return 10;
+}
+function _sortByQuality(arr){return arr.slice().sort(function(a,b){return _voiceQuality(b)-_voiceQuality(a);});}
+
+// --- キャラクター別音声自動割り当て (Edge Natural音声を優先カタログから割当) ---
 var _charVoiceMap={};
+function _buildVoicePool(voices,prefList,fallbackPool){
+  var pool=[];var seen={};
+  prefList.forEach(function(p){
+    var pl=p.toLowerCase();
+    voices.forEach(function(v){
+      var n=(v.name||'').toLowerCase();
+      if(seen[v.name])return;
+      if(n===pl||n.indexOf(pl)>=0){pool.push(v);seen[v.name]=true;}
+    });
+  });
+  // 不足分は性別フォールバック品質順
+  fallbackPool.forEach(function(v){if(!seen[v.name]){pool.push(v);seen[v.name]=true;}});
+  return pool;
+}
 function _assignCharVoices(){
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
-  var fem=ja.filter(function(v){return _voiceGender(v)==='female';});
-  var mas=ja.filter(function(v){return _voiceGender(v)==='male';});
-  var unk=ja.filter(function(v){return _voiceGender(v)==='unknown';});
-  // フォールバック
+  var jaFemRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='female';}));
+  var jaMasRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='male';}));
+  var jaUnkRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='unknown';}));
+  // Edge Natural を最優先で並べ、その後品質順フォールバックを足す
+  var fem=_buildVoicePool(voices,_NATURAL_JA_FEMALE,jaFemRaw.length?jaFemRaw:ja);
+  var mas=_buildVoicePool(voices,_NATURAL_JA_MALE,jaMasRaw.length?jaMasRaw:ja);
+  var unk=jaUnkRaw.length?jaUnkRaw:ja;
   if(!fem.length)fem=ja;
-  if(!mas.length)mas=ja.length?ja:unk;
+  if(!mas.length)mas=ja;
   if(!unk.length)unk=ja;
   _charVoiceMap={};
   var fi=0,mi=0,ui=0;
+  // narrator は中性なので、まず男性カタログ末尾の渋い声を割当
   state.characters.forEach(function(ch){
-    // カスタム音声設定済みの場合はスキップ
     var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[ch.id];
     if(rc&&rc.ttsVoice)return;
     if(ch.ttsVoice)return;
     var g=ch.gender||'male';
+    if(ch.id==='narrator'){
+      // ナレータは女性ナチュラル(Aoi等)を使うと聞き取りやすい
+      var nv=_matchVoiceByPrefs(voices,['碧衣 Online','Aoi Online','真夕 Online','Mayu Online','七海 Online','Nanami Online','碧衣','Aoi']);
+      if(nv){_charVoiceMap[ch.id]=nv.name;return;}
+    }
     if(g==='female'&&fem.length){_charVoiceMap[ch.id]=fem[fi%fem.length].name;fi++;}
     else if(g==='male'&&mas.length){_charVoiceMap[ch.id]=mas[mi%mas.length].name;mi++;}
     else if(unk.length){_charVoiceMap[ch.id]=unk[ui%unk.length].name;ui++;}
   });
+  // デバッグ: 何が割り当たったか
+  try{
+    var assigned=Object.keys(_charVoiceMap).map(function(k){var ch=state.characters.find(function(c){return c.id===k});return (ch&&ch.name||k)+'→'+_charVoiceMap[k];});
+    console.info('[TTS] 音声割当:',assigned.join(' / '));
+    var nat=voices.filter(function(v){var n=(v.name||'').toLowerCase();return v.lang&&v.lang.indexOf('ja')===0&&/natural/.test(n);});
+    if(!nat.length)console.warn('[TTS] Edge Natural日本語音声が見つかりません。Microsoft Edge ブラウザを使うと劇的に品質が向上します。Chrome の場合はクラウドTTSフォールバック。');
+    else console.info('[TTS] Natural音声検出:',nat.length+'種');
+  }catch(e){}
 }
 
 // --- キャラクターの音声を返す（性別対応・キャラ別割り当て） ---
@@ -310,7 +368,7 @@ function _ttsVoice(ch){
   }
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   if(voiceName){var v=voices.find(function(x){return x.name===voiceName});if(v)return v;}
-  var jaVoices=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});
+  var jaVoices=_sortByQuality(voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0}));
   if(!jaVoices.length)return voices[0]||null;
   var gender=ch?(ch.gender||'male'):'male';
   if(gender!=='neutral'){
@@ -320,9 +378,162 @@ function _ttsVoice(ch){
   return jaVoices[0];
 }
 
-// --- リップシンク（スプリット技法 GIFアニメ） ---
+// --- リップシンク（MediaPipe FaceMesh + スプリット技法フォールバック GIFアニメ） ---
 var _lipSyncAnims={};
 var _lipGifCache={};
+
+// ====== MediaPipe FaceMesh ランドマーク定義 ======
+var _MP_MOUTH_L=61, _MP_MOUTH_R=291, _MP_UPPER_TOP=13, _MP_LOWER_BOTTOM=14;
+var _MP_UPPER=[0,11,12,13,37,38,39,40,41,42,61,62,72,73,74,76,77,78,80,81,82,84,87,88,90,91,95,96,178,180,181,183,184,185,191,267,268,269,270,271,272,291,292,302,303,304,306,307,308,310,311,312,317,318,320,321,324,325,402,404,405,407,408,409,415];
+var _MP_LOWER=[14,17,18,84,85,86,87,89,90,91,95,96,140,148,149,150,152,170,171,175,176,178,180,181,182,183,194,200,201,204,208,210,211,212,313,314,316,317,319,320,321,324,325,335,375,377,378,379,394,395,396,400,402,404,405,418,422,430,431,432,435];
+var _MP_TRI=[[61,185,40],[185,40,39],[40,39,37],[39,37,0],[37,0,267],[0,267,269],[267,269,270],[269,270,409],[270,409,291],[61,78,191],[78,191,80],[191,80,81],[80,81,82],[81,82,13],[82,13,312],[13,312,311],[312,311,310],[311,310,415],[310,415,308],[291,415,308],[61,185,78],[185,78,191],[185,40,191],[40,191,80],[40,39,80],[39,80,81],[39,37,81],[37,81,82],[37,0,82],[0,82,13],[0,267,13],[267,13,312],[267,269,312],[269,312,311],[269,270,311],[270,311,310],[270,409,310],[409,310,415],[409,291,415],[78,95,88],[95,88,178],[88,178,87],[178,87,14],[87,14,317],[14,317,402],[317,402,318],[402,318,324],[318,324,308],[61,146,91],[146,91,181],[91,181,84],[181,84,17],[84,17,314],[17,314,405],[314,405,321],[405,321,375],[321,375,291],[61,146,78],[146,78,95],[146,91,95],[91,95,88],[91,181,88],[181,88,178],[181,84,178],[84,178,87],[84,17,87],[17,87,14],[17,314,14],[314,14,317],[314,405,317],[405,317,402],[405,321,402],[321,402,318],[321,375,318],[375,318,324],[375,291,324],[291,324,308]];
+
+// ====== MediaPipe FaceMesh 遅延初期化 ======
+var _fmInstance=null, _fmInitPromise=null, _fmBusy=false, _fmQueue=[];
+function _fmAvailable(){return typeof FaceMesh!=='undefined';}
+function _fmGet(){
+  if(_fmInitPromise)return _fmInitPromise;
+  if(!_fmAvailable())return Promise.reject(new Error('FaceMesh未ロード'));
+  _fmInitPromise=new Promise(function(resolve,reject){
+    try{
+      var fm=new FaceMesh({locateFile:function(f){return 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/'+f;}});
+      fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.3});
+      _fmInstance=fm;resolve(fm);
+    }catch(e){reject(e);}
+  });
+  return _fmInitPromise;
+}
+// 直列化：MediaPipeは並列呼び出しで結果が混ざるため、キューで1件ずつ処理
+function _fmDetect(srcCanvas,sz){
+  return new Promise(function(resolve,reject){
+    _fmQueue.push({cv:srcCanvas,sz:sz,resolve:resolve,reject:reject});
+    _fmDrain();
+  });
+}
+function _fmDrain(){
+  if(_fmBusy||!_fmQueue.length)return;
+  var job=_fmQueue.shift();_fmBusy=true;
+  _fmGet().then(function(fm){
+    var timer=setTimeout(function(){_fmBusy=false;job.reject(new Error('検出タイムアウト'));_fmDrain();},12000);
+    fm.onResults(function(res){
+      clearTimeout(timer);_fmBusy=false;
+      if(!res.multiFaceLandmarks||!res.multiFaceLandmarks.length){job.reject(new Error('顔未検出'));}
+      else{job.resolve(res.multiFaceLandmarks[0].map(function(p){return {x:p.x*job.sz,y:p.y*job.sz,z:p.z*job.sz};}));}
+      _fmDrain();
+    });
+    fm.send({image:job.cv}).catch(function(e){_fmBusy=false;job.reject(e);_fmDrain();});
+  }).catch(function(e){_fmBusy=false;job.reject(e);_fmDrain();});
+}
+
+// ====== メッシュ変形 ======
+function _mpDeform(srcLM,openness){
+  var dst=srcLM.map(function(p){return {x:p.x,y:p.y,z:p.z};});
+  var ml=srcLM[_MP_MOUTH_L],mr=srcLM[_MP_MOUTH_R];
+  var mw=mr.x-ml.x;
+  var baseGap=mw*0.18*openness;
+  var cx=(ml.x+mr.x)/2;
+  _MP_UPPER.forEach(function(i){if(!dst[i])return;var r=1-Math.min(1,Math.abs(dst[i].x-cx)/(mw/2));dst[i].y-=baseGap*0.40*r;});
+  _MP_LOWER.forEach(function(i){if(!dst[i])return;var r=1-Math.min(1,Math.abs(dst[i].x-cx)/(mw/2));dst[i].y+=baseGap*0.60*r;});
+  return dst;
+}
+function _mpDrawTri(ctx,src,sx0,sy0,sx1,sy1,sx2,sy2,dx0,dy0,dx1,dy1,dx2,dy2){
+  ctx.save();ctx.beginPath();ctx.moveTo(dx0,dy0);ctx.lineTo(dx1,dy1);ctx.lineTo(dx2,dy2);ctx.closePath();ctx.clip();
+  var den=sx0*(sy2-sy1)+sx1*(sy0-sy2)+sx2*(sy1-sy0);
+  if(Math.abs(den)<1e-6){ctx.restore();return;}
+  var a=(dx0*(sy2-sy1)+dx1*(sy0-sy2)+dx2*(sy1-sy0))/den;
+  var c=(dx0*(sx1-sx2)+dx1*(sx2-sx0)+dx2*(sx0-sx1))/den;
+  var e=(dx0*(sx2*sy1-sx1*sy2)+dx1*(sx0*sy2-sx2*sy0)+dx2*(sx1*sy0-sx0*sy1))/den;
+  var b=(dy0*(sy2-sy1)+dy1*(sy0-sy2)+dy2*(sy1-sy0))/den;
+  var d=(dy0*(sx1-sx2)+dy1*(sx2-sx0)+dy2*(sx0-sx1))/den;
+  var f=(dy0*(sx2*sy1-sx1*sy2)+dy1*(sx0*sy2-sx2*sy0)+dy2*(sx1*sy0-sx0*sy1))/den;
+  ctx.setTransform(a,b,c,d,e,f);ctx.drawImage(src,0,0);ctx.restore();ctx.setTransform(1,0,0,1,0,0);
+}
+function _mpWarpFrame_LEGACY_UNUSED(srcCanvas,srcLM,dstLM,sz){
+  var out=document.createElement('canvas');out.width=sz;out.height=sz;
+  var octx=out.getContext('2d');
+  octx.save();octx.beginPath();octx.arc(sz/2,sz/2,sz/2,0,Math.PI*2);octx.clip();
+  octx.drawImage(srcCanvas,0,0);
+  var cx=(dstLM[_MP_MOUTH_L].x+dstLM[_MP_MOUTH_R].x)/2;
+  var cy=(dstLM[_MP_UPPER_TOP].y+dstLM[_MP_LOWER_BOTTOM].y)/2;
+  var mw=dstLM[_MP_MOUTH_R].x-dstLM[_MP_MOUTH_L].x;
+  var mh=Math.max(0,dstLM[_MP_LOWER_BOTTOM].y-dstLM[_MP_UPPER_TOP].y);
+  if(mh>2){
+    octx.save();
+    octx.beginPath();octx.ellipse(cx,cy,mw*0.42,mh*0.55,0,0,Math.PI*2);octx.clip();
+    octx.fillStyle='rgb(20,8,6)';octx.fillRect(0,0,sz,sz);
+    var grd=octx.createRadialGradient(cx,cy,0,cx,cy,mw*0.42);
+    grd.addColorStop(0,'rgb(45,12,8)');grd.addColorStop(1,'rgb(8,2,2)');
+    octx.fillStyle=grd;octx.fillRect(0,0,sz,sz);
+    octx.restore();
+  }
+  _MP_TRI.forEach(function(tri){
+    var a=tri[0],b=tri[1],c=tri[2];
+    if(!srcLM[a]||!srcLM[b]||!srcLM[c]||!dstLM[a]||!dstLM[b]||!dstLM[c])return;
+    _mpDrawTri(octx,srcCanvas,srcLM[a].x,srcLM[a].y,srcLM[b].x,srcLM[b].y,srcLM[c].x,srcLM[c].y,dstLM[a].x,dstLM[a].y,dstLM[b].x,dstLM[b].y,dstLM[c].x,dstLM[c].y);
+  });
+  if(mh>sz*0.045){
+    octx.save();
+    octx.beginPath();octx.ellipse(cx,cy,mw*0.40,mh*0.52,0,0,Math.PI*2);octx.clip();
+    var teethH=Math.min(mh*0.22,sz*0.022),teethW=mw*0.22;
+    octx.beginPath();octx.ellipse(cx,dstLM[_MP_UPPER_TOP].y+teethH*0.55,teethW,teethH,0,0,Math.PI*2);
+    octx.fillStyle='rgba(232,220,206,0.72)';octx.fill();
+    var sgrd=octx.createLinearGradient(cx,dstLM[_MP_UPPER_TOP].y,cx,dstLM[_MP_UPPER_TOP].y+teethH*1.2);
+    sgrd.addColorStop(0,'rgba(0,0,0,0)');sgrd.addColorStop(1,'rgba(0,0,0,0.35)');
+    octx.fillStyle=sgrd;octx.fill();
+    octx.restore();
+  }
+  octx.restore();
+  return out;
+}
+function _genSpeechFramesMesh_LEGACY_UNUSED(srcCanvas,lm,sz){
+  var OPENS=[0,0.15,0.42,0.65,0.72,0.60,0.38,0.15];
+  var frames=[];
+  for(var i=0;i<OPENS.length;i++){
+    var dst=_mpDeform(lm,OPENS[i]);
+    var fc=_mpWarpFrame_LEGACY_UNUSED(srcCanvas,lm,dst,sz);
+    frames.push(new Uint8Array(fc.getContext('2d').getImageData(0,0,sz,sz).data));
+  }
+  return frames;
+}
+
+// ====== IndexedDB GIFキャッシュ ======
+var _lipDB=null;
+var _lipDBFailed=false;
+function _lipDBOpen(){
+  if(_lipDB)return Promise.resolve(_lipDB);
+  if(_lipDBFailed)return Promise.resolve(null);
+  return new Promise(function(resolve){
+    var done=false;
+    var tid=setTimeout(function(){if(done)return;done=true;_lipDBFailed=true;console.info('[LipSync] IndexedDB タイムアウト→無効化');resolve(null);},1500);
+    try{
+      if(typeof indexedDB==='undefined'){done=true;clearTimeout(tid);_lipDBFailed=true;resolve(null);return;}
+      var rq=indexedDB.open('aninovel_lipsync',1);
+      rq.onupgradeneeded=function(e){try{e.target.result.createObjectStore('gif',{keyPath:'key'});}catch(_){}};
+      rq.onsuccess=function(){if(done)return;done=true;clearTimeout(tid);_lipDB=rq.result;resolve(_lipDB);};
+      rq.onerror=function(){if(done)return;done=true;clearTimeout(tid);_lipDBFailed=true;console.info('[LipSync] IndexedDB open error→無効化');resolve(null);};
+      rq.onblocked=function(){if(done)return;done=true;clearTimeout(tid);_lipDBFailed=true;resolve(null);};
+    }catch(e){if(!done){done=true;clearTimeout(tid);_lipDBFailed=true;resolve(null);}}
+  });
+}
+function _lipDBGet(key){
+  return _lipDBOpen().then(function(db){
+    if(!db)return null;
+    return new Promise(function(resolve){
+      try{
+        var tx=db.transaction('gif','readonly').objectStore('gif').get(key);
+        tx.onsuccess=function(){resolve(tx.result?tx.result.blob:null);};
+        tx.onerror=function(){resolve(null);};
+      }catch(e){resolve(null);}
+    });
+  });
+}
+function _lipDBPut(key,blob){
+  return _lipDBOpen().then(function(db){
+    if(!db)return;
+    try{db.transaction('gif','readwrite').objectStore('gif').put({key:key,blob:blob});}catch(e){}
+  });
+}
+
 
 // ====== コンパクトGIFエンコーダ（外部ライブラリ不要） ======
 function _gif_lzw(data,minBits){
@@ -458,8 +669,12 @@ function _analyzeMouth(ctx,sz){
   return{y:bestRow,x:mx,w:mw};
 }
 
-// ====== スプリット技法フレーム生成 ======
-function _genSpeechFrames(img,sz){
+// ====== [DEAD CODE] スプリット技法（現在未使用。呼ばれたら検知できるようログ） ======
+function _genSpeechFrames_DISABLED(img,sz){
+  console.error('[LipSync] ⚠ _genSpeechFrames が呼ばれました - split技法は廃止済み');
+  return[];
+}
+function _genSpeechFrames_OLD(img,sz){
   // 8段階の開口量でフレーム生成
   var OPENS=[0,0.15,0.52,0.90,1.0,0.90,0.52,0.15];
   var frames=[];
@@ -547,36 +762,278 @@ function _genSpeechFrames(img,sz){
   return frames;
 }
 
-// ====== GIFキャッシュと生成 ======
+// ====== MediaPipe tasks-vision (478点FaceLandmarker) ======
+var _MP_MOUTH_CORNER_L=61,_MP_MOUTH_CORNER_R=291,_MP_UPPER_LIP_TOP=13,_MP_LOWER_LIP_BOTTOM=14,_MP_UPPER_OUTER_TOP=0,_MP_LOWER_OUTER_BOTTOM=17;
+var _MP_UPPER_LIP_POINTS=[0,11,12,13,37,38,39,40,41,42,61,62,72,73,74,76,77,78,80,81,82,84,87,88,90,91,95,96,178,180,181,183,184,185,191,267,268,269,270,271,272,291,292,302,303,304,306,307,308,310,311,312,317,318,320,321,324,325,402,404,405,407,408,409,415];
+var _MP_LOWER_LIP_POINTS=[14,17,18,84,85,86,87,89,90,91,95,96,140,148,149,150,152,170,171,175,176,178,180,181,182,183,194,200,201,204,208,210,211,212,313,314,316,317,319,320,321,324,325,335,375,377,378,379,394,395,396,400,402,404,405,418,422,430,431,432,435];
+var _MP_MOUTH_TRIANGLES=[[61,185,40],[185,40,39],[40,39,37],[39,37,0],[37,0,267],[0,267,269],[267,269,270],[269,270,409],[270,409,291],[61,78,191],[78,191,80],[191,80,81],[80,81,82],[81,82,13],[82,13,312],[13,312,311],[312,311,310],[311,310,415],[310,415,308],[291,415,308],[61,185,78],[185,78,191],[185,40,191],[40,191,80],[40,39,80],[39,80,81],[39,37,81],[37,81,82],[37,0,82],[0,82,13],[0,267,13],[267,13,312],[267,269,312],[269,312,311],[269,270,311],[270,311,310],[270,409,310],[409,310,415],[409,291,415],[78,95,88],[95,88,178],[88,178,87],[178,87,14],[87,14,317],[14,317,402],[317,402,318],[402,318,324],[318,324,308],[61,146,91],[146,91,181],[91,181,84],[181,84,17],[84,17,314],[17,314,405],[314,405,321],[405,321,375],[321,375,291],[61,146,78],[146,78,95],[146,91,95],[91,95,88],[91,181,88],[181,88,178],[181,84,178],[84,178,87],[84,17,87],[17,87,14],[17,314,14],[314,14,317],[314,405,317],[405,317,402],[405,321,402],[321,402,318],[321,375,318],[375,318,324],[375,291,324],[291,324,308]];
+var _MP_OPENS=[0,0.13,0.46,0.79,0.88,0.79,0.46,0.13];
+var _mpFL=null,_mpFLPromise=null;
+function _mpInit(){
+  if(_mpFL)return Promise.resolve(_mpFL);
+  if(_mpFLPromise)return _mpFLPromise;
+  _mpFLPromise=import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs').then(function(mod){
+    return mod.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm').then(function(fr){
+      return mod.FaceLandmarker.createFromOptions(fr,{
+        baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',delegate:'GPU'},
+        numFaces:1,runningMode:'IMAGE',outputFaceBlendshapes:false,outputFacialTransformationMatrixes:false,
+        minFaceDetectionConfidence:0.25,minFacePresenceConfidence:0.25,minTrackingConfidence:0.25
+      });
+    });
+  }).then(function(fl){_mpFL=fl;console.info('[LipSync] MediaPipe FaceLandmarker ready');return fl;})
+    .catch(function(e){console.warn('[LipSync] MediaPipe初期化失敗:',e);_mpFLPromise=null;throw e;});
+  return _mpFLPromise;
+}
+function _mpDeform(lm,op){
+  var out=lm.map(function(p){return{x:p.x,y:p.y};});
+  var cL=lm[_MP_MOUTH_CORNER_L],cR=lm[_MP_MOUTH_CORNER_R];
+  var mouthW=Math.hypot(cR.x-cL.x,cR.y-cL.y);
+  var upT=lm[_MP_UPPER_LIP_TOP],loB=lm[_MP_LOWER_LIP_BOTTOM];
+  var cy=(upT.y+loB.y)/2;
+  var baseGap=mouthW*0.24,gap=baseGap*op;
+  var upperOuter=lm[_MP_UPPER_OUTER_TOP],lowerOuter=lm[_MP_LOWER_OUTER_BOTTOM];
+  var upperSpan=Math.max(4,cy-upperOuter.y),lowerSpan=Math.max(4,lowerOuter.y-cy);
+  for(var i=0;i<_MP_UPPER_LIP_POINTS.length;i++){
+    var idx=_MP_UPPER_LIP_POINTS[i],p=lm[idx];
+    var d=Math.max(0,(cy-p.y)/upperSpan),w=Math.max(0.1,1.0-d*0.75);
+    out[idx].y=p.y-gap*0.42*w;
+  }
+  for(var j=0;j<_MP_LOWER_LIP_POINTS.length;j++){
+    var idx2=_MP_LOWER_LIP_POINTS[j],p2=lm[idx2];
+    var d2=Math.max(0,(p2.y-cy)/lowerSpan),w2=Math.max(0.1,1.0-d2*0.75);
+    out[idx2].y=p2.y+gap*0.58*w2;
+  }
+  return out;
+}
+function _mpDrawTri(ctx,srcCanvas,s0,s1,s2,d0,d1,d2){
+  ctx.save();
+  ctx.beginPath();ctx.moveTo(d0.x,d0.y);ctx.lineTo(d1.x,d1.y);ctx.lineTo(d2.x,d2.y);ctx.closePath();ctx.clip();
+  var sx0=s0.x,sy0=s0.y,sx1=s1.x,sy1=s1.y,sx2=s2.x,sy2=s2.y;
+  var dx0=d0.x,dy0=d0.y,dx1=d1.x,dy1=d1.y,dx2=d2.x,dy2=d2.y;
+  var det=(sx1-sx0)*(sy2-sy0)-(sy1-sy0)*(sx2-sx0);
+  if(Math.abs(det)<1e-6){ctx.restore();return;}
+  var a=((dx1-dx0)*(sy2-sy0)-(dx2-dx0)*(sy1-sy0))/det;
+  var b=((dx2-dx0)*(sx1-sx0)-(dx1-dx0)*(sx2-sx0))/det;
+  var c=((dy1-dy0)*(sy2-sy0)-(dy2-dy0)*(sy1-sy0))/det;
+  var d=((dy2-dy0)*(sx1-sx0)-(dy1-dy0)*(sx2-sx0))/det;
+  var e=dx0-a*sx0-b*sy0,f=dy0-c*sx0-d*sy0;
+  ctx.setTransform(a,c,b,d,e,f);
+  ctx.drawImage(srcCanvas,0,0);
+  ctx.restore();
+}
+// 唇色を元画像からサンプリング → 口腔色 (暗いピンク〜赤寄り)
+function _sampleLipColor(srcCanvas,srcLM){
+  try{
+    var sctx=srcCanvas.getContext('2d');
+    var pts=[0,13,14,17,37,267,61,291];
+    var rs=0,gs=0,bs=0,n=0;
+    for(var i=0;i<pts.length;i++){
+      var p=srcLM[pts[i]];if(!p)continue;
+      var px=Math.max(0,Math.min(srcCanvas.width-1,p.x|0));
+      var py=Math.max(0,Math.min(srcCanvas.height-1,p.y|0));
+      var d=sctx.getImageData(px,py,1,1).data;
+      rs+=d[0];gs+=d[1];bs+=d[2];n++;
+    }
+    if(n===0)return{r:175,g:85,b:90};
+    // 口腔色(濡れた赤ピンク): 唇より少し彩度を上げR高め、G/Bも潰しすぎない
+    var ar=rs/n, ag=gs/n, ab=bs/n;
+    var r=Math.min(215,Math.round(ar*0.92));
+    var g=Math.round(ag*0.62);
+    var b=Math.round(ab*0.64);
+    // 下限を底上げして真っ黒にならないように
+    return{r:Math.max(155,r), g:Math.max(70,g), b:Math.max(72,b)};
+  }catch(e){return{r:175,g:85,b:90};}
+}
+function _mpWarpFrame(srcCanvas,srcLM,dstLM,sz,lipCol,op){
+  var fc=document.createElement('canvas');fc.width=sz;fc.height=sz;
+  var fctx=fc.getContext('2d');
+  fctx.save();fctx.beginPath();fctx.arc(sz/2,sz/2,sz/2,0,Math.PI*2);fctx.clip();
+  fctx.drawImage(srcCanvas,0,0);
+  for(var k=0;k<_MP_MOUTH_TRIANGLES.length;k++){
+    var tri=_MP_MOUTH_TRIANGLES[k];
+    var s0=srcLM[tri[0]],s1=srcLM[tri[1]],s2=srcLM[tri[2]];
+    var d0=dstLM[tri[0]],d1=dstLM[tri[1]],d2=dstLM[tri[2]];
+    if(s0&&s1&&s2&&d0&&d1&&d2)_mpDrawTri(fctx,srcCanvas,s0,s1,s2,d0,d1,d2);
+  }
+  var upT=dstLM[_MP_UPPER_LIP_TOP],loB=dstLM[_MP_LOWER_LIP_BOTTOM];
+  var cL=dstLM[_MP_MOUTH_CORNER_L],cR=dstLM[_MP_MOUTH_CORNER_R];
+  var mh=Math.max(0,loB.y-upT.y);
+  var mw=Math.hypot(cR.x-cL.x,cR.y-cL.y);
+  var mcx=(cL.x+cR.x)/2,mcy=(upT.y+loB.y)/2;
+  var lc=lipCol||{r:175,g:85,b:90};
+  if(mh>1){
+    fctx.save();
+    fctx.beginPath();fctx.ellipse(mcx,mcy,mw/2*0.92,mh/2+0.5,0,0,Math.PI*2);
+    fctx.fillStyle='rgb('+lc.r+','+lc.g+','+lc.b+')';fctx.fill();
+    // 中央に明るい赤ピンクのハイライト → 口腔らしい湿り気と奥行き
+    var grd=fctx.createRadialGradient(mcx,mcy,0,mcx,mcy,mw/2*0.92);
+    grd.addColorStop(0,'rgba('+Math.min(255,lc.r+55)+','+Math.min(255,lc.g+28)+','+Math.min(255,lc.b+30)+',0.75)');
+    grd.addColorStop(0.6,'rgba('+Math.min(255,lc.r+15)+','+Math.min(255,lc.g+6)+','+Math.min(255,lc.b+8)+',0.25)');
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    fctx.fillStyle=grd;fctx.fill();
+    fctx.restore();
+    // 歯: ほんのちょこっと。ピーク付近(op>=0.75)かつ mh>sz*0.045 の時だけ。サイズ/不透明度も控えめ
+    if(op!=null&&op>=0.75&&mh>sz*0.045){
+      var teethW=mw*0.18,teethH=sz*0.016;
+      var tx=mcx,ty=upT.y+teethH*0.55;
+      fctx.save();
+      fctx.beginPath();fctx.ellipse(mcx,mcy,mw/2*0.92,mh/2+0.5,0,0,Math.PI*2);fctx.clip();
+      fctx.beginPath();fctx.ellipse(tx,ty,teethW/2,teethH/2,0,0,Math.PI*2);
+      fctx.fillStyle='rgba(238,224,200,0.55)';fctx.fill();
+      var sg=fctx.createLinearGradient(tx,ty-teethH*0.2,tx,ty+teethH*1.1);
+      sg.addColorStop(0,'rgba(0,0,0,0)');sg.addColorStop(0.6,'rgba(0,0,0,0.35)');sg.addColorStop(1,'rgba(0,0,0,0.85)');
+      fctx.beginPath();fctx.ellipse(tx,ty,teethW/2,teethH/2*1.6,0,0,Math.PI*2);
+      fctx.fillStyle=sg;fctx.fill();
+      fctx.restore();
+    }
+  }
+  fctx.restore();
+  return fc;
+}
+function _genFramesMP(srcCanvas,sz){
+  return _mpInit().then(function(fl){
+    var r=fl.detect(srcCanvas);
+    if(!r||!r.faceLandmarks||!r.faceLandmarks.length)throw new Error('顔未検出');
+    var lm=r.faceLandmarks[0].map(function(p){return{x:p.x*sz,y:p.y*sz};});
+    // ランドマーク妥当性チェック: 口の位置/サイズが妥当範囲にあるか
+    var cL=lm[_MP_MOUTH_CORNER_L],cR=lm[_MP_MOUTH_CORNER_R];
+    var upT=lm[_MP_UPPER_LIP_TOP],loB=lm[_MP_LOWER_LIP_BOTTOM];
+    if(!cL||!cR||!upT||!loB)throw new Error('口ランドマーク欠損');
+    var mw=Math.hypot(cR.x-cL.x,cR.y-cL.y);
+    var mcy=(upT.y+loB.y)/2;
+    var mcx=(cL.x+cR.x)/2;
+    if(mw<sz*0.06||mw>sz*0.65)throw new Error('口幅が異常 mw='+mw.toFixed(1));
+    if(mcy<sz*0.20||mcy>sz*0.95)throw new Error('口位置が異常 y='+mcy.toFixed(1));
+    if(mcx<sz*0.15||mcx>sz*0.85)throw new Error('口位置が横に偏り x='+mcx.toFixed(1));
+    var lipCol=_sampleLipColor(srcCanvas,lm);
+    var frames=[];
+    for(var i=0;i<_MP_OPENS.length;i++){
+      var op=_MP_OPENS[i];
+      var dst=_mpDeform(lm,op);
+      var fc=_mpWarpFrame(srcCanvas,lm,dst,sz,lipCol,op);
+      frames.push(new Uint8Array(fc.getContext('2d').getImageData(0,0,sz,sz).data));
+    }
+    return frames;
+  });
+}
+
+// ====== GIFキャッシュと生成（MediaPipeのみ。失敗時は口パクしない） ======
+function _buildSrcCanvas(img,sz,cropMode){
+  var sw=img.naturalWidth,sh=img.naturalHeight,sd=Math.min(sw,sh);
+  var sx,sy;
+  if(cropMode==='wide'){
+    sd=Math.max(sw,sh);
+    sx=(sw-sd)/2;sy=(sh-sd)/2;
+  }else if(cropMode==='center'){
+    sx=(sw-sd)/2;sy=(sh-sd)/2;
+  }else if(cropMode==='top-left'){
+    // 横長画像で顔が左上にある場合 (例: ナレータ画像)
+    sx=0;sy=0;
+  }else if(cropMode==='top-center'){
+    sx=(sw-sd)/2;sy=0;
+  }else if(cropMode==='top-right'){
+    sx=Math.max(0,sw-sd);sy=0;
+  }else{ // default: 顔が上寄りの写真向け
+    sx=(sw-sd)/2;sy=Math.max(0,(sh-sd)/2-sd*0.05);
+  }
+  var c=document.createElement('canvas');c.width=sz;c.height=sz;
+  var cx=c.getContext('2d');
+  cx.fillStyle='#000';cx.fillRect(0,0,sz,sz);
+  // ソースが canvas をはみ出しても drawImage は自動クリップ
+  cx.drawImage(img,sx,sy,sd,sd,0,0,sz,sz);
+  return c;
+}
+function _genFromImage(img,sz){
+  // 3パターンのクロップで MediaPipe を試行。全部ダメなら口パク無し（glowのみ）
+  // 横長画像の場合は top-* クロップも試行（顔が画面上半分にある写真対応）
+  var isLandscape=img.naturalWidth>img.naturalHeight*1.2;
+  var modes=isLandscape?['top-center','top-left','top-right','default','center','wide']:['default','center','top-center','wide'];
+  function tryMode(i){
+    if(i>=modes.length)return Promise.reject(new Error('全クロップで顔未検出'));
+    var srcCanvas=_buildSrcCanvas(img,sz,modes[i]);
+    return _genFramesMP(srcCanvas,sz).then(function(frames){
+      return{frames:frames,method:'mediapipe:'+modes[i],srcCanvas:srcCanvas};
+    }).catch(function(e){
+      console.info('[LipSync] crop='+modes[i]+' 失敗: '+(e.message||e));
+      return tryMode(i+1);
+    });
+  }
+  return tryMode(0).catch(function(e){
+    console.warn('[LipSync] MediaPipe検出不可→口パクなし:',e.message||e);
+    return null; // 呼び出し側で callback(null) → glow のみ
+  });
+}
 function _generateLipGif(cid,callback){
   var ch=state.characters.find(function(c){return c.id===cid;});
   if(!ch)return callback(null);
   var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
   var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
   if(!iconImg)return callback(null);
-  var sz=state.displaySettings.iconSize||56;
-  var img=new Image();
-  img.crossOrigin='anonymous';
-  img.onload=function(){
-    try{
-      var frames=_genSpeechFrames(img,sz);
-      if(!frames||!frames.length)return callback(null);
-      var gifBytes=_gifEncode(frames,sz,sz,7); // 7cs=70ms/frame
-      var blob=new Blob([gifBytes],{type:'image/gif'});
-      var url=URL.createObjectURL(blob);
-      _lipGifCache[cid]={gif:url,orig:iconImg,sz:sz};
-      callback(url);
-    }catch(e){
-      console.warn('[LipSync] GIF生成エラー:',e);
-      callback(null);
+  var displaySz=state.displaySettings.iconSize||56;
+  // GIFは表示サイズの3倍 (上限256) で生成して、CSSでダウンスケール → 高解像度ディスプレイでも鮮明
+  var sz=Math.min(256,Math.max(displaySz*3,168));
+  var cacheKey='v7mp|'+sz+'|'+iconImg;
+  var _iconDebug=iconImg.length>80?iconImg.substring(0,60)+'...(len='+iconImg.length+')':iconImg;
+  console.info('[LipSync] '+cid+' icon=',_iconDebug);
+  // 事前生成GIF (data/lipsync/Gallery/...) は古い暗口色で焼き込み済みのため使わない。常にMediaPipeで再生成。
+  function tryPreGen(next){return next();}
+  tryPreGen(function(){
+  // 1) IndexedDB キャッシュ確認
+  _lipDBGet(cacheKey).then(function(cachedBlob){
+    if(cachedBlob){
+      var url=URL.createObjectURL(cachedBlob);
+      _lipGifCache[cid]={gif:url,orig:iconImg,sz:displaySz};
+      return callback(url);
     }
-  };
-  img.onerror=function(){callback(null);};
-  img.src=iconImg;
+    // 2) 画像ロード→フレーム生成（CORSエラー時はcrossOrigin無しで再試行）
+    function loadImg(useCORS){
+      return new Promise(function(res,rej){
+        var img=new Image();
+        if(useCORS)img.crossOrigin='anonymous';
+        img.onload=function(){res(img);};
+        img.onerror=function(){rej(new Error('img load err'+(useCORS?' (CORS)':'')));};
+        img.src=iconImg;
+      });
+    }
+    var isDataUrl=/^data:/i.test(iconImg);
+    (isDataUrl?loadImg(false):loadImg(true).catch(function(){console.info('[LipSync] CORS再試行→crossOrigin無し');return loadImg(false);}))
+      .then(function(img){
+        console.info('[LipSync] 画像ロード完了 '+img.naturalWidth+'x'+img.naturalHeight);
+        return _genFromImage(img,sz);
+      })
+      .then(function(r){
+        if(!r||!r.frames||!r.frames.length){console.warn('[LipSync] フレーム生成失敗（口パクなし）');return callback(null);}
+        console.info('[LipSync] 生成成功 method='+r.method+' frames='+r.frames.length);
+        var gifBytes=_gifEncode(r.frames,sz,sz,3); // 30ms/frame (~33fps) → 標準の約1.5倍速
+        var blob=new Blob([gifBytes],{type:'image/gif'});
+        var url=URL.createObjectURL(blob);
+        _lipGifCache[cid]={gif:url,orig:iconImg,sz:displaySz};
+        _lipDBPut(cacheKey,blob);
+        callback(url);
+      })
+      .catch(function(e){console.warn('[LipSync] 生成エラー:',e.message||e);callback(null);});
+  });
+  });
 }
 
+function _lipWrapsForCurrent(cid){
+  // 発話中のアイテム(data-cid=itemId)内の .char-icon-wrap[data-charid=cid] のみを対象にする。
+  // item要素が見つからない場合のみ従来動作(全マッチ)にフォールバック。
+  var itemId=state.tts&&state.tts.currentItemId;
+  if(itemId){
+    var scope=document.querySelector('[data-cid="'+itemId+'"]');
+    if(scope){
+      var wr=scope.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
+      if(wr.length)return wr;
+      // item内にキャラアイコンが無い場合（レイアウト違い）→ 同itemの最初のcharアイコン
+      var any=scope.querySelector('.char-icon-wrap');
+      if(any)return[any];
+    }
+  }
+  return document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
+}
 function _applyLipGif(cid,gifUrl){
-  document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]').forEach(function(wrap){
+  _lipWrapsForCurrent(cid).forEach(function(wrap){
     wrap.classList.add('tts-speaking');
     var imgEl=wrap.querySelector('.char-icon img');
     if(imgEl){
@@ -584,6 +1041,10 @@ function _applyLipGif(cid,gifUrl){
       imgEl.src=gifUrl;
     }
   });
+}
+// GIF未生成時、元画像のまま発光だけ適用（見苦しい口パクフォールバック抑制）
+function _applyLipGlow(cid){
+  _lipWrapsForCurrent(cid).forEach(function(wrap){wrap.classList.add('tts-speaking');});
 }
 
 function _restoreLipImg(cid){
@@ -667,35 +1128,44 @@ function _startLipSyncChar(cid){
   var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
   var iconClr=rc&&rc.iconColor?rc.iconColor:(ch.iconColor||'#6366F1');
   var sn=(ch.shortName||ch.name||'?').substring(0,2);
-  var wraps=document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
-  if(!wraps.length)return;
-  wraps.forEach(function(w){w.classList.add('tts-speaking');});
+  // 発話中のアイテム配下のアイコンのみ対象
+  var wraps=_lipWrapsForCurrent(cid);
+  console.info('[LipSync] start cid='+cid+' wraps='+wraps.length+' iconImg='+(iconImg?'yes':'no')+' style='+state.displaySettings.narratorStyle);
+  if(!wraps.length){
+    // ナレータでアイコン無しの場合、本文itemにパルスを付与
+    if(cid==='narrator'){
+      var itemId=state.tts&&state.tts.currentItemId;
+      var sc=itemId?document.querySelector('[data-cid="'+itemId+'"]'):null;
+      if(sc){sc.classList.add('tts-narr-active');_lipSyncAnims[cid]=-3;console.info('[LipSync] narrator: bubbleパルス');}
+    }
+    return;
+  }
 
   if(iconImg){
     var cached=_lipGifCache[cid];
     var sz=state.displaySettings.iconSize||56;
     if(cached&&cached.orig===iconImg&&cached.sz===sz){
-      // キャッシュヒット：即座にGIFを適用
       _applyLipGif(cid,cached.gif);
       _lipSyncAnims[cid]=-1;
     }else{
-      // GIF生成（非同期）
-      _lipSyncAnims[cid]=-2; // 生成中マーカー
+      // 生成中は元画像＋発光のみ（見苦しい口パクを出さない）
+      _applyLipGlow(cid);
+      _lipSyncAnims[cid]=-2;
       _generateLipGif(cid,function(gifUrl){
-        // TTSが既に別のキャラに移っていたら適用しない
         if(!state.tts||!state.tts.active||state.tts.currentCharId!==cid)return;
         if(gifUrl){
           _applyLipGif(cid,gifUrl);
           _lipSyncAnims[cid]=-1;
         }else{
-          // GIF生成失敗→フォールバック
-          _startLipSyncFallback(cid,wraps,iconClr,sn);
+          // 生成失敗時も発光のみ（元画像を維持）
+          _applyLipGlow(cid);
+          _lipSyncAnims[cid]=-1;
         }
       });
     }
     return;
   }
-  // 画像なし→テキストアイコンアニメ
+  // 画像なし→テキストアイコンアニメ（scope: 現在発話中itemのみ）
   _startLipSyncFallback(cid,wraps,iconClr,sn);
 }
 
@@ -704,6 +1174,7 @@ function _stopLipSyncChar(cid){
   if(aid>1)cancelAnimationFrame(aid);
   delete _lipSyncAnims[cid];
   document.querySelectorAll('.lipsync-ov[data-lcid="'+cid+'"]').forEach(function(c){c.remove();});
+  document.querySelectorAll('.citem.tts-narr-active').forEach(function(el){el.classList.remove('tts-narr-active');});
   _restoreLipImg(cid);
 }
 
@@ -711,6 +1182,16 @@ function _updateLipSync(){
   var newCid=state.tts&&state.tts.active?state.tts.currentCharId:null;
   Object.keys(_lipSyncAnims).forEach(function(cid){if(cid!==newCid)_stopLipSyncChar(cid);});
   if(newCid&&_lipSyncAnims[newCid]==null)_startLipSyncChar(newCid);
+  // ナレーター/アイコン無し時の本文パルス
+  document.querySelectorAll('.citem.tts-narr-active').forEach(function(el){el.classList.remove('tts-narr-active');});
+  var itemId=state.tts&&state.tts.currentItemId;
+  if(itemId&&newCid){
+    var scope=document.querySelector('[data-cid="'+itemId+'"]');
+    if(scope){
+      var hasIconWrap=scope.querySelector('.char-icon-wrap[data-charid="'+newCid+'"]');
+      if(!hasIconWrap)scope.classList.add('tts-narr-active');
+    }
+  }
 }
 
 // --- TTS軽量UIアップデート（render不要） ---
@@ -731,19 +1212,145 @@ function _updateTTSDisplay(){
   _updateLipSync();
 }
 
-// --- 発話処理 ---
+// --- クラウドTTS (StreamElements Polly Neural / Google Translate) ---
+// 文字を 180 文字ごとに区切る（日本語句読点優先）
+function _ttsChunk(text,maxLen){
+  maxLen=maxLen||180;
+  if(!text)return[];
+  if(text.length<=maxLen)return[text];
+  var out=[],buf='';
+  var parts=text.split(/(?<=[。！？!?\n])/);
+  for(var i=0;i<parts.length;i++){
+    var p=parts[i];
+    if((buf+p).length>maxLen){
+      if(buf)out.push(buf);
+      if(p.length>maxLen){for(var j=0;j<p.length;j+=maxLen)out.push(p.substr(j,maxLen));buf='';}
+      else buf=p;
+    }else buf+=p;
+  }
+  if(buf)out.push(buf);
+  return out;
+}
+// キャラ性別からStreamElements Amazon Polly日本語ボイスを選択（Neural音声）
+function _cloudVoice(ch){
+  var g=ch?(ch.gender||'male'):'neutral';
+  if(g==='female')return 'Mizuki'; // 女性 (Neural非対応なので standard。Neural=Kazuha など)
+  // StreamElements は Polly Neural もサポート: Takumi-Neural, Kazuha-Neural, Tomoko-Neural
+  if(g==='male')return 'Takumi';
+  return 'Mizuki';
+}
+function _cloudTTSUrls(text,voice){
+  var enc=encodeURIComponent(text);
+  return[
+    'https://api.streamelements.com/kappa/v2/speech?voice='+voice+'&text='+enc,
+    'https://translate.google.com/translate_tts?ie=UTF-8&tl=ja&q='+enc+'&client=tw-ob'
+  ];
+}
+var _cloudAudioCtrl=null; // {stop,pause,resume,setRate}
+function _speakCloud(text,ch,rate,onEnd,onError){
+  var chunks=_ttsChunk(text,180);
+  if(!chunks.length){onEnd();return null;}
+  var voice=_cloudVoice(ch);
+  var idx=0,audio=null,stopped=false,started=false;
+  function playIdx(i,urlIdx){
+    if(stopped)return;
+    if(i>=chunks.length){onEnd();return;}
+    var urls=_cloudTTSUrls(chunks[i],voice);
+    if(urlIdx>=urls.length){
+      // 最初のチャンクで完全失敗 → Web Speech API へフォールバック
+      if(i===0&&!started){onError&&onError(new Error('全TTSエンドポイント失敗'));return;}
+      // 2チャンク目以降はスキップして続行
+      console.warn('[TTS] chunk',i,'スキップ');playIdx(i+1,0);return;
+    }
+    try{if(audio){audio.onended=null;audio.onerror=null;audio.pause();audio.src='';}}catch(e){}
+    audio=new Audio();
+    var done=false;
+    var timer=setTimeout(function(){
+      if(done||stopped)return;done=true;
+      console.info('[TTS] タイムアウト(3s)→次のエンドポイント');
+      playIdx(i,urlIdx+1);
+    },3000);
+    audio.oncanplay=function(){if(done||stopped)return;};
+    audio.onplaying=function(){if(done||stopped)return;done=true;clearTimeout(timer);started=true;};
+    audio.onended=function(){if(stopped)return;done=true;clearTimeout(timer);playIdx(i+1,0);};
+    audio.onerror=function(e){
+      if(done||stopped)return;done=true;clearTimeout(timer);
+      console.info('[TTS] エラー→次のエンドポイント',urlIdx+1);
+      playIdx(i,urlIdx+1);
+    };
+    audio.playbackRate=Math.max(0.5,Math.min(4,rate||1.4));
+    audio.src=urls[urlIdx];
+    var p;try{p=audio.play();}catch(e){done=true;clearTimeout(timer);playIdx(i,urlIdx+1);return;}
+    if(p&&p.catch)p.catch(function(err){
+      if(done||stopped)return;done=true;clearTimeout(timer);
+      console.info('[TTS] play失敗→次のエンドポイント:',err.message||err);
+      playIdx(i,urlIdx+1);
+    });
+  }
+  playIdx(0,0);
+  return{
+    stop:function(){stopped=true;if(audio){try{audio.onended=null;audio.onerror=null;audio.pause();audio.src='';}catch(e){}}},
+    pause:function(){if(audio)try{audio.pause();}catch(e){}},
+    resume:function(){if(audio)try{audio.play();}catch(e){}},
+    setRate:function(r){rate=r;if(audio)audio.playbackRate=Math.max(0.5,Math.min(4,r));}
+  };
+}
+
+// Natural品質の日本語音声が使えるか
+function _hasNaturalJaVoice(){
+  try{
+    var vs=state.tts.voices;if(!vs||!vs.length)vs=speechSynthesis.getVoices();
+    for(var i=0;i<vs.length;i++){
+      var v=vs[i];if(!v.lang||v.lang.indexOf('ja')!==0)continue;
+      var n=(v.name||'').toLowerCase();
+      if(/natural|neural|wavenet|studio/.test(n))return true;
+    }
+  }catch(e){}
+  return false;
+}
+// --- 発話処理（Natural音声があればWeb Speech API優先、無ければクラウドTTS） ---
 function _speakItem(item,onEnd){
   var ch=state.characters.find(function(c){return c.id===(item.characterId||'narrator')});
   state.tts.currentItemId=item.id;
   state.tts.currentCharId=item.type==='dialogue'?(item.characterId||null):'narrator';
-  var utt=new SpeechSynthesisUtterance(item.text||'');
-  utt.lang='ja-JP';utt.rate=state.tts.rate;
-  var voice=_ttsVoice(ch);if(voice)utt.voice=voice;
-  utt.onend=function(){_ttsUtterance=null;if(onEnd)onEnd();};
-  utt.onerror=function(){_ttsUtterance=null;if(onEnd)onEnd();};
-  _ttsUtterance=utt;
-  _updateTTSDisplay(); // render()の代わりに軽量更新
-  speechSynthesis.speak(utt);
+  _updateTTSDisplay();
+  // Natural/Neural音声がブラウザにあれば最高品質なのでそれを使う (Edge: Nanami/Keita Online Natural 等)
+  if(_hasNaturalJaVoice()){
+    _speakItemWebAPI(item,ch,onEnd);
+    return;
+  }
+  // それが無ければクラウドTTS (StreamElements Polly → Google Translate TTS)
+  _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,
+    function(){_cloudAudioCtrl=null;if(onEnd)onEnd();},
+    function(err){
+      console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
+      _cloudAudioCtrl=null;
+      _speakItemWebAPI(item,ch,onEnd);
+    }
+  );
+}
+function _speakItemWebAPI(item,ch,onEnd){
+  // Chrome は ~15秒で speak をカットするバグがあるので 100文字程度でチャンク
+  var chunks=_ttsChunk(item.text||'',100);
+  if(!chunks.length){if(onEnd)onEnd();return;}
+  var voice=_ttsVoice(ch);
+  var idx=0,stopped=false;
+  function speakNext(){
+    if(stopped){if(onEnd)onEnd();return;}
+    if(idx>=chunks.length){_ttsUtterance=null;if(onEnd)onEnd();return;}
+    var utt=new SpeechSynthesisUtterance(chunks[idx++]);
+    utt.lang='ja-JP';
+    utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
+    utt.pitch=ch&&ch.gender==='male'?0.92:(ch&&ch.gender==='female'?1.06:1.0);
+    if(voice)utt.voice=voice;
+    utt.onend=function(){speakNext();};
+    utt.onerror=function(e){console.info('[TTS] Web Speech エラー:',e.error||e);speakNext();};
+    _ttsUtterance=utt;
+    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);speakNext();}
+  }
+  // 既存停止
+  try{speechSynthesis.cancel();}catch(e){}
+  speakNext();
 }
 function _drainQueue(){
   if(!state.tts.active||state.tts.paused||!_ttsQueue.length){
@@ -769,10 +1376,12 @@ function startTTS(){
 function pauseTTS(){
   if(!state.tts.active)return;
   if(state.tts.paused){
-    state.tts.paused=false;speechSynthesis.resume();
+    state.tts.paused=false;
+    if(_cloudAudioCtrl)_cloudAudioCtrl.resume();else speechSynthesis.resume();
     _updateLipSync();
   }else{
-    state.tts.paused=true;speechSynthesis.pause();
+    state.tts.paused=true;
+    if(_cloudAudioCtrl)_cloudAudioCtrl.pause();else speechSynthesis.pause();
     _stopLipSyncChar(state.tts.currentCharId);
   }
   // 一時停止ボタンのみ更新（render不要）
@@ -784,13 +1393,19 @@ function pauseTTS(){
 }
 function stopTTS(){
   state.tts.active=false;state.tts.paused=false;state.tts.currentItemId=null;state.tts.currentCharId=null;
-  _ttsQueue=[];speechSynthesis.cancel();_ttsUtterance=null;_clearAllLipSync();render();
+  _ttsQueue=[];speechSynthesis.cancel();_ttsUtterance=null;
+  if(_cloudAudioCtrl){_cloudAudioCtrl.stop();_cloudAudioCtrl=null;}
+  _clearAllLipSync();render();
 }
 function setTTSRate(v){
   state.tts.rate=parseFloat(v);
-  // 速度表示のみ直接更新（renderなし→スライダー操作が壊れない）
   var disp=document.getElementById('tts-rate-disp');
   if(disp)disp.textContent=state.tts.rate.toFixed(1)+'x';
+  // クラウドTTS再生中: playbackRate だけ更新して継続再生
+  if(_cloudAudioCtrl&&state.tts.active&&!state.tts.paused){
+    _cloudAudioCtrl.setRate(state.tts.rate);
+    return;
+  }
   if(_ttsUtterance&&state.tts.active&&!state.tts.paused){
     var cur=state.tts.currentItemId;
     var allItems=getPC().slice().sort(function(a,b){return a.order-b.order}).filter(function(i){return i.type==='dialogue'||i.type==='narration'});
