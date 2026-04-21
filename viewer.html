@@ -1316,7 +1316,12 @@ function _speakItem(item,onEnd){
   _updateTTSDisplay();
   // Natural/Neural音声がブラウザにあれば最高品質なのでそれを使う (Edge: Nanami/Keita Online Natural 等)
   if(_hasNaturalJaVoice()){
-    _speakItemWebAPI(item,ch,onEnd);
+    _speakItemWebAPI(item,ch,onEnd,function(err){
+      console.warn('[TTS] Web Speech 連続失敗→クラウドTTSへ:',err&&err.message||err);
+      _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,
+        function(){_cloudAudioCtrl=null;if(onEnd)onEnd();},
+        function(err2){console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;if(onEnd)onEnd();});
+    });
     return;
   }
   // それが無ければクラウドTTS (StreamElements Polly → Google Translate TTS)
@@ -1329,28 +1334,55 @@ function _speakItem(item,onEnd){
     }
   );
 }
-function _speakItemWebAPI(item,ch,onEnd){
+function _speakItemWebAPI(item,ch,onEnd,onError){
   // Chrome は ~15秒で speak をカットするバグがあるので 100文字程度でチャンク
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
-  var voice=_ttsVoice(ch);
-  var idx=0,stopped=false;
+  var primaryVoice=_ttsVoice(ch);
+  // オフライン声フォールバック候補 (Natural音声が失敗した時用)
+  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
+  var offlineFallback=null;
+  var gender=ch&&ch.gender;
+  var offlineCandidates=gender==='male'?['Ichiro','Microsoft Ichiro']:['Haruka','Ayumi','Sayaka','Microsoft Haruka','Microsoft Ayumi','Microsoft Sayaka'];
+  for(var oi=0;oi<offlineCandidates.length&&!offlineFallback;oi++){
+    var oc=offlineCandidates[oi].toLowerCase();
+    offlineFallback=voices.find(function(v){var n=(v.name||'').toLowerCase();return v.lang&&v.lang.indexOf('ja')===0&&(n===oc||n.indexOf(oc)>=0);})||null;
+  }
+  var idx=0,stopped=false,failCount=0,useOffline=false;
   function speakNext(){
     if(stopped){if(onEnd)onEnd();return;}
     if(idx>=chunks.length){_ttsUtterance=null;if(onEnd)onEnd();return;}
-    var utt=new SpeechSynthesisUtterance(chunks[idx++]);
+    var utt=new SpeechSynthesisUtterance(chunks[idx]);
     utt.lang='ja-JP';
     utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
     utt.pitch=ch&&ch.gender==='male'?0.92:(ch&&ch.gender==='female'?1.06:1.0);
+    var voice=useOffline&&offlineFallback?offlineFallback:primaryVoice;
     if(voice)utt.voice=voice;
-    utt.onend=function(){speakNext();};
-    utt.onerror=function(e){console.info('[TTS] Web Speech エラー:',e.error||e);speakNext();};
+    var done=false;
+    utt.onend=function(){if(done)return;done=true;idx++;failCount=0;speakNext();};
+    utt.onerror=function(e){
+      if(done)return;done=true;
+      var err=e&&(e.error||e.message)||e;
+      console.info('[TTS] Web Speech エラー:',err,'voice=',voice&&voice.name);
+      failCount++;
+      // synthesis-failed / network → オフライン声で即リトライ (1回のみ)
+      if(!useOffline&&offlineFallback&&(err==='synthesis-failed'||err==='network'||err==='audio-busy')){
+        console.info('[TTS] Natural失敗→オフライン声へフォールバック:',offlineFallback.name);
+        useOffline=true;
+        setTimeout(speakNext,150); // 同じチャンクをリトライ
+        return;
+      }
+      // 連続3回失敗 → クラウドTTSへ
+      if(failCount>=3&&onError){console.warn('[TTS] Web Speech連続失敗→クラウド切替');onError(new Error('web speech '+err));return;}
+      idx++;
+      setTimeout(speakNext,150);
+    };
     _ttsUtterance=utt;
-    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);speakNext();}
+    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);done=true;idx++;setTimeout(speakNext,150);}
   }
-  // 既存停止
   try{speechSynthesis.cancel();}catch(e){}
-  speakNext();
+  // cancel後少し待ってからspeak (キャンセル直後のsynthesis-failed回避)
+  setTimeout(speakNext,80);
 }
 function _drainQueue(){
   if(!state.tts.active||state.tts.paused||!_ttsQueue.length){
