@@ -1439,7 +1439,42 @@ function addFirst(){insertAt('narration',0)}
 function insertAt(type,pos,charId){var nc={id:'c'+Date.now(),type:type,text:'',characterId:charId||(type==='dialogue'?(state.characters.filter(function(c){return c.id!=='narrator'})[0]||{}).id||null:null),order:pos};state.content.forEach(function(c){if(c.order>=pos)c.order++});state.content.push(nc);state._scrollToId=nc.id;openEditModal('content',nc)}
 function addContent(type,pos,cid){insertAt(type,pos!=null?pos:state.content.length)}
 function addPageBreak(){state.content.push({id:'pb'+Date.now(),type:'pageBreak',order:state.content.length});render()}
-function updateItem(id,up,type){var a=type==='character'?state.characters:state.content;var i=a.findIndex(function(c){return c.id===id});if(i!==-1)a[i]=Object.assign({},a[i],up);state._scrollToId=id;render()}
+function updateItem(id,up,type){var a=type==='character'?state.characters:state.content;var i=a.findIndex(function(c){return c.id===id});if(i!==-1)a[i]=Object.assign({},a[i],up);state._scrollToId=id;render();if(type==='character')setTimeout(function(){_pregenCharGif(id);},100);}
+
+// 全キャラ事前生成: アイコン画像を持つ全キャラクタの口パクGIFを先に生成
+function _pregenCharGif(cid){
+  if(!cid)return;
+  var ch=state.characters.find(function(c){return c.id===cid;});if(!ch)return;
+  var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
+  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  if(!iconImg)return;
+  // 既にキャッシュ済みならスキップ
+  var cached=_lipGifCache[cid];var displaySz=state.displaySettings.iconSize||56;
+  if(cached&&cached.orig===iconImg&&cached.sz===displaySz)return;
+  console.info('[LipSync] 事前生成開始 cid='+cid);
+  _generateLipGif(cid,function(url){
+    if(url)console.info('[LipSync] 事前生成完了 cid='+cid);
+    else console.info('[LipSync] 事前生成失敗 cid='+cid+' (口パクなし)');
+  });
+}
+function _pregenAllChars(){
+  if(!state.characters)return;
+  // narrator 含む全員を順次処理（並列だとMediaPipeが混乱する可能性）
+  var i=0;
+  function next(){
+    if(i>=state.characters.length)return;
+    var ch=state.characters[i++];
+    _pregenCharGif(ch.id);
+    // 500ms置きに次へ (MediaPipeを詰まらせない)
+    setTimeout(next,500);
+  }
+  next();
+}
+var _pregenTimer=null;
+function _schedulePregen(){
+  if(_pregenTimer)clearTimeout(_pregenTimer);
+  _pregenTimer=setTimeout(function(){_pregenTimer=null;_pregenAllChars();},800);
+}
 function deleteItem(id,type){if(!confirm('削除しますか？'))return;if(type==='character'){state.characters=state.characters.filter(function(c){return c.id!==id});state.content=state.content.filter(function(c){return c.characterId!==id})}else state.content=state.content.filter(function(c){return c.id!==id});render()}
 function moveContent(id,dir){var s=state.content.slice().sort(function(a,b){return a.order-b.order});var i=s.findIndex(function(c){return c.id===id});var tmp;if(dir==='up'&&i>0){tmp=s[i].order;s[i].order=s[i-1].order;s[i-1].order=tmp}else if(dir==='down'&&i<s.length-1){tmp=s[i].order;s[i].order=s[i+1].order;s[i+1].order=tmp}state._scrollToId=id;render()}
 function addBookmark(){if(_portalMode&&!_isLoggedIn()){showToast('しおり機能を使うにはログインが必要です');return}var pc=getPC();var pv=pc.length>0?(pc[0].text||'').substring(0,30)+'...':'';state.bookmarks.push({id:'bm'+Date.now(),page:state.currentPage,title:'P'+(state.currentPage+1)+(pv?' - '+pv:''),timestamp:new Date().toISOString()});saveData();showToast('しおりを追加しました')}
@@ -1526,6 +1561,8 @@ function saveReaderCustom(workId){
   // state を最新のプロファイル情報で更新
   state.readerProfileCurrent=pb.bundle.current;
   state.readerProfileList=Object.keys(pb.bundle.profiles);
+  // 読者カスタム変更後に全キャラ口パクGIFを事前生成
+  _schedulePregen();
 }
 function switchReaderProfile(name){
   var pb=_getProfileBundle();
@@ -2000,6 +2037,7 @@ window.onload=function(){
                     state.currentScreen='reader';
                     var _ur=u&&(u.roles||[u.role||'reader']);state.isAuthorMode=(u&&(_ur.indexOf('author')>=0||_ur.indexOf('owner')>=0));
                     render();
+                    _schedulePregen();
                     // 自動保存フック: my_ 作品は localStorage 側に保存
                     window._saveMyWork=function(){
                         try{
@@ -2032,6 +2070,7 @@ window.onload=function(){
             state.currentScreen='reader';
             state.isAuthorMode=false;
             render();
+            _schedulePregen();
         }).catch(function(e){console.error(e);render()});
     } else {
         // ?work= なしで viewer.html を直接開かれた場合はポータルへ戻す
