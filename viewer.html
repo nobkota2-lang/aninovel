@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_first_always_fallback_v7';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_session_onstart_v8';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -367,6 +367,9 @@ function _assignCharVoices(){
   try{
     var assigned=Object.keys(_charVoiceMap).map(function(k){var ch=state.characters.find(function(c){return c.id===k});return (ch&&ch.name||k)+'→'+_charVoiceMap[k];});
     console.info('[TTS] 音声割当:',assigned.join(' / '));
+    // 診断用: 利用可能な日本語音声一覧を出力 (Ayumi=rate無視, Haruka/Sayaka/Ichiro=rate対応)
+    var allJa=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+    console.info('[TTS] 利用可能な日本語音声('+allJa.length+'種):',allJa.map(function(v){return v.name+(v.localService?' [offline]':' [online]');}).join(' | '));
     var nat=voices.filter(function(v){var n=(v.name||'').toLowerCase();return v.lang&&v.lang.indexOf('ja')===0&&/natural/.test(n);});
     if(!nat.length)console.warn('[TTS] Edge Natural日本語音声が見つかりません。Microsoft Edge ブラウザを使うと劇的に品質が向上します。Chrome の場合はクラウドTTSフォールバック。');
     else console.info('[TTS] Natural音声検出:',nat.length+'種');
@@ -1421,6 +1424,8 @@ var _forceOfflineChars={};
 // いずれかのキャラで Natural が失敗したら、以降セッション全体で Natural を使わない
 // (フォールバック時のキュー残存による二重発話を完全に防ぐ)
 var _disableNaturalForSession=false;
+// セッション内で一度でも onstart が発火したか (音声エンジンが生きている証拠)
+var _sessionHasOnstart=false;
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
@@ -1451,7 +1456,7 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
     var speakTime=0;
     utt.onstart=function(){
       if(isStale())return;
-      thisStarted=true;
+      thisStarted=true;_sessionHasOnstart=true;
       if(!startedOnce){startedOnce=true;if(onStart)onStart();}
     };
     utt.onend=function(){
@@ -1467,8 +1472,10 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       // ただし最初の speak() が何も再生せず失敗するケースも多いので、
       // 「このセッションで既に onstart を一度でも確認済み (startedOnce=true)」場合のみ
       // 経過時間を根拠にチャンクをスキップする。初回失敗は確実にフォールバックさせる。
-      var probablyPlayed=thisStarted||(elapsed>=350&&startedOnce);
-      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce,'skip='+probablyPlayed);
+      // startedOnce は per-item、_sessionHasOnstart はセッション全体。
+      // セッション内で一度でも音声が出ている場合は elapsed>=350 をチャンク再生済みと判断しスキップ。
+      var probablyPlayed=thisStarted||(elapsed>=350&&(startedOnce||_sessionHasOnstart));
+      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce,'sessionOnstart='+_sessionHasOnstart,'skip='+probablyPlayed);
       if(probablyPlayed){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
       // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
@@ -1525,7 +1532,7 @@ function startTTS(){
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   state.tts.active=true;state.tts.paused=false;
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
-  _forceOfflineChars={};_disableNaturalForSession=false; // 再生開始時にリセット(セッション毎に1度は Natural を試す)
+  _forceOfflineChars={};_disableNaturalForSession=false;_sessionHasOnstart=false;
   _clearAllLipSync();
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
