@@ -1429,7 +1429,18 @@ function startTTS(){
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
-  _drainQueue();
+  // Edgeはページ読込後の最初のspeak()が必ずsynthesis-failedになる既知不具合。
+  // 無音ダミー発話でエンジンをウォームアップしてからキューを流す。
+  try{
+    var warm=new SpeechSynthesisUtterance(' ');
+    warm.volume=0;warm.rate=2.0;warm.lang='ja-JP';
+    var warmed=false;
+    function afterWarm(){if(warmed)return;warmed=true;setTimeout(_drainQueue,200);}
+    warm.onend=afterWarm;
+    warm.onerror=afterWarm;
+    speechSynthesis.speak(warm);
+    setTimeout(afterWarm,800); // 念のためタイムアウトでも進める
+  }catch(e){_drainQueue();}
 }
 function pauseTTS(){
   if(!state.tts.active)return;
