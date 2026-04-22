@@ -1323,6 +1323,8 @@ function _speakItem(item,onEnd){
   _stopAllSpeech();
   var ch=state.characters.find(function(c){return c.id===(item.characterId||'narrator')});
   state.tts.currentItemId=item.id;
+  // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
+  state.tts.currentCharId=null;
   // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
   var targetCharId=item.type==='dialogue'?(item.characterId||null):'narrator';
   function applyCharId(){
@@ -1422,6 +1424,8 @@ function startTTS(){
   _ttsQueue=items.filter(function(i){return i.type==='dialogue'||i.type==='narration'});
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   state.tts.active=true;state.tts.paused=false;
+  state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
+  _clearAllLipSync();
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
