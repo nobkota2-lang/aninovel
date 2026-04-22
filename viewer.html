@@ -1247,7 +1247,7 @@ function _cloudTTSUrls(text,voice){
   ];
 }
 var _cloudAudioCtrl=null; // {stop,pause,resume,setRate}
-function _speakCloud(text,ch,rate,session,onEnd,onError){
+function _speakCloud(text,ch,rate,session,onEnd,onError,onStart){
   // 後方互換: sessionがfunction(旧onEnd)なら引数シフト
   if(typeof session==='function'){onError=onEnd;onEnd=session;session=null;}
   var chunks=_ttsChunk(text,180);
@@ -1274,7 +1274,7 @@ function _speakCloud(text,ch,rate,session,onEnd,onError){
       playIdx(i,urlIdx+1);
     },3000);
     audio.oncanplay=function(){if(done||stopped)return;};
-    audio.onplaying=function(){if(done||stopped)return;done=true;clearTimeout(timer);started=true;};
+    audio.onplaying=function(){if(done||stopped)return;done=true;clearTimeout(timer);if(!started){started=true;if(onStart)try{onStart();}catch(e){}}};
     audio.onended=function(){if(stopped)return;done=true;clearTimeout(timer);playIdx(i+1,0);};
     audio.onerror=function(e){
       if(done||stopped)return;done=true;clearTimeout(timer);
@@ -1333,19 +1333,20 @@ function _speakItem(item,onEnd){
   _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
   if(_hasNaturalJaVoice()){
-    _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err){
+    _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err,remainingText){
       if(mySession!==_speakSessionId)return;
-      console.warn('[TTS] Web Speech 失敗→クラウドTTSへ:',err&&err.message||err);
+      console.warn('[TTS] Web Speech 失敗→クラウドTTSへ:',err&&err.message||err,'残='+(remainingText||'').length);
       _stopAllSpeech();
-      // クラウドフォールバック時点で lipsync を切替 (onstart 相当)
-      applyCharId();
-      _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
+      // 既に部分再生済みの場合は未再生分のみクラウドで続行(二重発話防止)
+      var textToSpeak=(remainingText!=null)?remainingText:(item.text||'');
+      if(!textToSpeak){safeEnd();return;}
+      _cloudAudioCtrl=_speakCloud(textToSpeak,ch,state.tts.rate,mySession,
         function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
-        function(err2){if(mySession!==_speakSessionId)return;console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;safeEnd();});
+        function(err2){if(mySession!==_speakSessionId)return;console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;safeEnd();},
+        applyCharId /* onStart: 音声再生開始時に口パク */);
     });
     return;
   }
-  applyCharId();
   _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
     function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
     function(err){
@@ -1353,7 +1354,8 @@ function _speakItem(item,onEnd){
       console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
       _cloudAudioCtrl=null;
       _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
-    }
+    },
+    applyCharId /* onStart */
   );
 }
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
@@ -1362,9 +1364,14 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var primaryVoice=_ttsVoice(ch);
   var idx=0,consecutiveErrors=0,startedOnce=false;
   function isStale(){return session!==_speakSessionId;}
+  function remainingText(){return chunks.slice(idx).join('');}
   function speakNext(){
     if(isStale())return;
     if(idx>=chunks.length){_ttsUtterance=null;if(onEnd)onEnd();return;}
+    // Edge: cancel直後のspeakが synthesis-failed になるので speaking/pending が落ちるまで待つ
+    if(speechSynthesis.speaking||speechSynthesis.pending){
+      setTimeout(function(){if(!isStale())speakNext();},80);return;
+    }
     var utt=new SpeechSynthesisUtterance(chunks[idx]);
     utt.lang='ja-JP';
     utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
@@ -1384,19 +1391,20 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       if(settled||isStale())return;settled=true;
       var err=e&&(e.error||e.message)||e;
       if(err==='canceled'||err==='interrupted')return;
-      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'idx='+idx);
-      // 既に音声が出始めていた → 部分的に再生された可能性 → 同じチャンクを再試行しない
-      if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},120);return;}
-      // まだ始まっていない = 完全失敗 → エラーカウント増やしリトライなしで進める
+      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'idx='+idx,'startedOnce='+startedOnce);
+      // 既に音声が出始めていた → このチャンクは部分再生済みなので再試行しない
+      if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
-      if(consecutiveErrors>=2&&onError){onError(new Error('web speech '+err));return;}
-      idx++;setTimeout(function(){if(!isStale())speakNext();},150);
+      // 連続2回失敗 → クラウドへフォールバック(未再生分のみ渡す: 二重発話防止)
+      if(consecutiveErrors>=2&&onError){onError(new Error('web speech '+err),remainingText());return;}
+      // 1回目はリトライ(同じチャンクをもう一度)。Edge は cancel 直後の speak を落としやすい
+      setTimeout(function(){if(!isStale())speakNext();},300);
     };
     _ttsUtterance=utt;
-    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);settled=true;idx++;setTimeout(function(){if(!isStale())speakNext();},150);}
+    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);settled=true;idx++;setTimeout(function(){if(!isStale())speakNext();},200);}
   }
-  // cancel済み前提。余裕をもって150ms後に発話
-  setTimeout(function(){if(!isStale())speakNext();},150);
+  // cancel済み前提。余裕をもって300ms後に発話(Edge対策)
+  setTimeout(function(){if(!isStale())speakNext();},300);
 }
 function _drainQueue(){
   if(!state.tts.active||state.tts.paused||!_ttsQueue.length){
