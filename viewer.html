@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_no_respeak_v9';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_pregen_voicevox_v10';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1356,7 +1356,79 @@ function _warmUpSpeech(done){
 function _stopAllSpeech(){
   try{speechSynthesis.cancel();}catch(e){}
   if(_cloudAudioCtrl){try{_cloudAudioCtrl.stop();}catch(e){}_cloudAudioCtrl=null;}
+  if(_preAudioCtrl){try{_preAudioCtrl.stop();}catch(e){}_preAudioCtrl=null;}
   _ttsUtterance=null;
+}
+// ===== 事前生成音声 (VOICEVOX) =====
+var _preAudioCtrl=null;
+var _audioManifest=null; // { workId, items: { [itemId]: {...} } } or false (no manifest)
+var _audioManifestLoading=null;
+function _audioBaseUrl(){
+  // _workParam はファイル末尾近くで定義されるが、_speakItem 実行時には解決済み
+  var wp=(typeof _workParam!=='undefined')?_workParam:null;
+  if(!wp)return null;
+  return 'data/audio/'+encodeURIComponent(wp)+'/';
+}
+function _loadAudioManifest(){
+  if(_audioManifest!==null)return Promise.resolve(_audioManifest);
+  if(_audioManifestLoading)return _audioManifestLoading;
+  var base=_audioBaseUrl();
+  if(!base){_audioManifest=false;return Promise.resolve(false);}
+  _audioManifestLoading=fetch(base+'manifest.json',{cache:'no-cache'})
+    .then(function(r){if(!r.ok)throw new Error('manifest '+r.status);return r.json();})
+    .then(function(m){_audioManifest=m;console.info('[TTS] 事前生成音声マニフェスト読込:',Object.keys(m.items||{}).length+'件');return m;})
+    .catch(function(e){console.info('[TTS] 事前生成音声なし(Web Speechにフォールバック):',e.message);_audioManifest=false;return false;})
+    .finally(function(){_audioManifestLoading=null;});
+  return _audioManifestLoading;
+}
+function _hasPreAudio(itemId){
+  if(!_audioManifest||!_audioManifest.items)return false;
+  return !!_audioManifest.items[itemId];
+}
+function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
+  var base=_audioBaseUrl();
+  if(!base){if(onError)onError(new Error('no workId'));return null;}
+  var url=base+encodeURIComponent(item.id)+'.wav';
+  var audio=new Audio();
+  audio.preload='auto';
+  audio.src=url;
+  var rate=Math.max(0.5,Math.min(2.5,state.tts.rate||1.4));
+  try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
+  var settled=false,started=false;
+  function isStale(){return session!==_speakSessionId;}
+  function cleanup(){try{audio.pause();}catch(e){}audio.src='';}
+  audio.onplaying=function(){
+    if(started||isStale())return;
+    started=true;
+    // 速度の設定は一部ブラウザで src 設定後に上書きされるため再適用
+    try{audio.playbackRate=rate;}catch(e){}
+    if(onStart)onStart();
+  };
+  audio.onended=function(){
+    if(settled||isStale())return;settled=true;
+    cleanup();if(onEnd)onEnd();
+  };
+  audio.onerror=function(){
+    if(settled)return;settled=true;
+    var code=(audio.error&&audio.error.code)||'?';
+    console.warn('[TTS] 事前生成音声再生失敗 item='+item.id,'code='+code);
+    cleanup();
+    if(onError)onError(new Error('audio error '+code));
+  };
+  var playPromise=audio.play();
+  if(playPromise&&playPromise.catch){
+    playPromise.catch(function(e){
+      if(settled)return;settled=true;
+      console.warn('[TTS] audio.play() reject:',e&&e.message||e);
+      cleanup();
+      if(onError)onError(e);
+    });
+  }
+  return {
+    stop:function(){if(settled)return;settled=true;cleanup();},
+    pause:function(){try{audio.pause();}catch(e){}},
+    resume:function(){try{audio.play();}catch(e){}},
+  };
 }
 function _speakItem(item,onEnd){
   var mySession=++_speakSessionId;
@@ -1374,6 +1446,22 @@ function _speakItem(item,onEnd){
   }
   _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
+  // 最優先: 事前生成音声 (VOICEVOX) があればそれを使用
+  if(_hasPreAudio(item.id)){
+    _preAudioCtrl=_speakItemAudio(item,ch,mySession,applyCharId,
+      function(){if(mySession!==_speakSessionId)return;_preAudioCtrl=null;safeEnd();},
+      function(err){
+        if(mySession!==_speakSessionId)return;
+        console.warn('[TTS] 事前生成音声失敗→Web Speechへフォールバック:',err&&err.message||err);
+        _preAudioCtrl=null;
+        if(_hasNaturalJaVoice()){
+          _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
+        }else{
+          safeEnd();
+        }
+      });
+    return;
+  }
   if(_hasNaturalJaVoice()){
     _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err,remainingText){
       if(mySession!==_speakSessionId)return;
@@ -1542,20 +1630,34 @@ function startTTS(){
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
-  // Edgeはページ読込後の最初のspeak()がしばしば synthesis-failed になる既知不具合。
-  // ブラウザ組込のデフォルト音声(非Natural)で無音ウォームアップし、
-  // 成功するまで最大3回試す。成功後に本キューを流す。
-  _warmUpSpeech(function(){setTimeout(_drainQueue,250);});
+  // 事前生成音声のマニフェストを読込(初回のみ)。存在すれば Web Speech は使わず高品質な
+  // VOICEVOX 生成音声を再生。無ければ従来通り Web Speech にフォールバック。
+  _loadAudioManifest().then(function(manifest){
+    // 全アイテムが事前生成済みならウォームアップ不要(Web Speech を使わないので)
+    var allPreGen=_ttsQueue.every(function(i){return _hasPreAudio(i.id);});
+    if(allPreGen){
+      console.info('[TTS] 全セリフが事前生成音声で再生されます');
+      setTimeout(_drainQueue,50);
+    }else{
+      // Edgeはページ読込後の最初のspeak()がしばしば synthesis-failed になる既知不具合。
+      // ブラウザ組込のデフォルト音声(非Natural)で無音ウォームアップし、成功するまで最大3回試す。
+      _warmUpSpeech(function(){setTimeout(_drainQueue,250);});
+    }
+  });
 }
 function pauseTTS(){
   if(!state.tts.active)return;
   if(state.tts.paused){
     state.tts.paused=false;
-    if(_cloudAudioCtrl)_cloudAudioCtrl.resume();else speechSynthesis.resume();
+    if(_preAudioCtrl&&_preAudioCtrl.resume)_preAudioCtrl.resume();
+    else if(_cloudAudioCtrl)_cloudAudioCtrl.resume();
+    else speechSynthesis.resume();
     _updateLipSync();
   }else{
     state.tts.paused=true;
-    if(_cloudAudioCtrl)_cloudAudioCtrl.pause();else speechSynthesis.pause();
+    if(_preAudioCtrl&&_preAudioCtrl.pause)_preAudioCtrl.pause();
+    else if(_cloudAudioCtrl)_cloudAudioCtrl.pause();
+    else speechSynthesis.pause();
     _stopLipSyncChar(state.tts.currentCharId);
   }
   // 一時停止ボタンのみ更新（render不要）

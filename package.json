@@ -1,0 +1,12 @@
+{
+  "name": "aninovel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build-voices": "node scripts/build-voices.mjs",
+    "build-voices:summer": "node scripts/build-voices.mjs summer-adventure",
+    "build-voices:mystery": "node scripts/build-voices.mjs mystery-garden",
+    "build-voices:starlight": "node scripts/build-voices.mjs starlight-cafe"
+  }
+}

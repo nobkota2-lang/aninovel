@@ -1,0 +1,68 @@
+{
+  "workId": "starlight-cafe",
+  "generatedAt": "2026-04-22T13:05:57.304Z",
+  "engine": "voicevox",
+  "engineUrl": "http://localhost:50021",
+  "items": {
+    "c1": {
+      "speaker": 2,
+      "hash": "176a2bj",
+      "chars": 59,
+      "bytes": 513580
+    },
+    "c2": {
+      "speaker": 8,
+      "hash": "1rooys2",
+      "chars": 38,
+      "bytes": 271404
+    },
+    "c3": {
+      "speaker": 13,
+      "hash": "ie14yf",
+      "chars": 37,
+      "bytes": 300076
+    },
+    "c4": {
+      "speaker": 2,
+      "hash": "19irq06",
+      "chars": 40,
+      "bytes": 304684
+    },
+    "c6": {
+      "speaker": 13,
+      "hash": "1o4nvd6",
+      "chars": 30,
+      "bytes": 214060
+    },
+    "c7": {
+      "speaker": 8,
+      "hash": "1dfoiur",
+      "chars": 18,
+      "bytes": 125996
+    },
+    "c8": {
+      "speaker": 13,
+      "hash": "qz0vso",
+      "chars": 46,
+      "bytes": 336428
+    },
+    "c9": {
+      "speaker": 2,
+      "hash": "e32qbd",
+      "chars": 50,
+      "bytes": 433708
+    },
+    "c10": {
+      "speaker": 8,
+      "hash": "14wdyl0",
+      "chars": 50,
+      "bytes": 368172
+    },
+    "c11": {
+      "speaker": 2,
+      "hash": "zwyjtf",
+      "chars": 35,
+      "bytes": 292908
+    }
+  }
+}

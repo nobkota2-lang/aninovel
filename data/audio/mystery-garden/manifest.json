@@ -1,0 +1,68 @@
+{
+  "workId": "mystery-garden",
+  "generatedAt": "2026-04-22T13:04:34.362Z",
+  "engine": "voicevox",
+  "engineUrl": "http://localhost:50021",
+  "items": {
+    "c1": {
+      "speaker": 2,
+      "hash": "19ei7a1",
+      "chars": 48,
+      "bytes": 389676
+    },
+    "c2": {
+      "speaker": 8,
+      "hash": "oii4mi",
+      "chars": 32,
+      "bytes": 277036
+    },
+    "c3": {
+      "speaker": 13,
+      "hash": "1ivwglf",
+      "chars": 40,
+      "bytes": 244268
+    },
+    "c4": {
+      "speaker": 2,
+      "hash": "n7pt0w",
+      "chars": 45,
+      "bytes": 349740
+    },
+    "c5": {
+      "speaker": 8,
+      "hash": "3flxqc",
+      "chars": 28,
+      "bytes": 200748
+    },
+    "c7": {
+      "speaker": 2,
+      "hash": "159w17x",
+      "chars": 76,
+      "bytes": 573996
+    },
+    "c8": {
+      "speaker": 8,
+      "hash": "13a82l4",
+      "chars": 37,
+      "bytes": 302636
+    },
+    "c9": {
+      "speaker": 8,
+      "hash": "1504b2c",
+      "chars": 27,
+      "bytes": 207404
+    },
+    "c10": {
+      "speaker": 8,
+      "hash": "10psnu9",
+      "chars": 45,
+      "bytes": 376876
+    },
+    "c11": {
+      "speaker": 2,
+      "hash": "x78rxp",
+      "chars": 46,
+      "bytes": 416300
+    }
+  }
+}
