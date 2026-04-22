@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_session_onstart_v8';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_no_respeak_v9';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1478,16 +1478,21 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce,'sessionOnstart='+_sessionHasOnstart,'skip='+probablyPlayed);
       if(probablyPlayed){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
-      // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
-      if(consecutiveErrors===1&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
+      // 【絶対原則】失敗したチャンクは二度と再発話しない。必ず idx++ で次へ進める。
+      // 理由: Edge Natural は onstart を発火せず音声を出してから synthesis-failed を投げる
+      // バグがあり、同じチャンクを別音声で再発話すると必ず二重発話になる。
+      // 次チャンク以降は offline 音声で続行する。
+      if(!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
         switchedToFallback=true;currentVoice=fallbackVoice;
         _forceOfflineChars[chId]=true;
-        _disableNaturalForSession=true; // 以降全キャラで Natural 無効 (二重発話防止)
+        _disableNaturalForSession=true; // 以降全キャラで Natural 無効
         try{speechSynthesis.cancel();}catch(e){}
-        console.info('[TTS] Natural失敗→以降セッション全体でオフライン固定:',fallbackVoice.name,'ch='+chId);
-        // 切替時は長めに待つ (Edgeが古い utterance をフラッシュするまで)
-        setTimeout(function(){if(!isStale())speakNext();},700);return;
+        console.info('[TTS] Natural失敗→失敗chunkスキップ、次chunkからオフライン:',fallbackVoice.name,'ch='+chId,'skippedIdx='+idx);
+      }else{
+        console.info('[TTS] 失敗chunkスキップ(再発話しない) idx='+idx);
       }
+      idx++;consecutiveErrors=0;
+      setTimeout(function(){if(!isStale())speakNext();},250);return;
       // それでも連続4回失敗 → クラウドへフォールバック(未再生分のみ: 二重発話防止)
       if(consecutiveErrors>=4&&onError){onError(new Error('web speech '+err),remainingText());return;}
       var delay=300+consecutiveErrors*200;
