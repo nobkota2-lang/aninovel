@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_pregen_voicevox_v10';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_voicevox_idb_v11';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -196,6 +196,39 @@ function scrollToItem(id){if(!id)return;requestAnimationFrame(function(){var el=
 function saveData(){try{localStorage.setItem('aninovel_data',JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,darkMode:state.darkMode,timestamp:new Date().toISOString()}));state.lastSaved=new Date().toLocaleTimeString()}catch(e){console.error(e)}render()}
 function loadData(){try{var s=localStorage.getItem('aninovel_data');if(s){var d=JSON.parse(s);state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.darkMode!==undefined)state.darkMode=d.darkMode}}catch(e){console.error(e)}}
 function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,timestamp:new Date().toISOString()},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(state.novel.title||'作品')+'_'+Date.now()+'.aninovel';a.click();URL.revokeObjectURL(a.href)}
+// 音声埋込みエクスポート: IndexedDBに保存された生成音声をBase64でJSONに同梱
+async function exportDataWithAudio(){
+  var wid=_currentWorkId();
+  var recs=await _idbListByWork(wid);
+  if(!recs.length){
+    if(!confirm('このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「🎤 音声生成」ボタンで先に作れます)'))return;
+    return exportData();
+  }
+  var pg=_showProgress('📦 音声埋込みエクスポート中');
+  try{
+    var audioStore={};var i=0;
+    for(var k=0;k<recs.length;k++){
+      var r=recs[k];
+      _updateProgress(pg,++i,recs.length,r.itemId);
+      var b64=await _blobToB64(r.blob);
+      audioStore[r.itemId]={b64:b64,mime:(r.blob&&r.blob.type)||'audio/wav',meta:r.meta||{}};
+    }
+    var payload={
+      version:'2.3',
+      novel:state.novel,chapters:state.chapters,characters:state.characters,
+      content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,
+      audioStore:audioStore,
+      audioEngine:'voicevox',
+      timestamp:new Date().toISOString()
+    };
+    var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=(state.novel.title||'作品')+'_音声付_'+Date.now()+'.aninovel';a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    alert('エクスポート完了 ('+recs.length+'音声を埋込み, サイズ約'+Math.round(blob.size/1024)+'KB)');
+  }finally{_hideProgress(pg);}
+}
+window.exportDataWithAudio=exportDataWithAudio;
 function exportTxt(){
   var lines=[];var title=state.novel.title||'無題';var author=state.novel.author||'';
   lines.push(title);if(author)lines.push('著：'+author);lines.push('');lines.push('');
@@ -253,7 +286,7 @@ function showExportMenu(btn){
   var old=document.getElementById('export-popup');if(old){old.remove();return;}
   var pop=document.createElement('div');pop.id='export-popup';
   pop.style.cssText='position:absolute;right:0;top:100%;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:999;min-width:200px;padding:6px 0;white-space:nowrap;';
-  [['📄 .aninovel（推奨）','exportData()'],['📝 テキスト（.txt）','exportTxt()'],['📚 EPUB（.epub）','exportEpub()']]
+  [['📄 .aninovel（推奨）','exportData()'],['🔊 .aninovel（音声付き）','exportDataWithAudio()'],['📝 テキスト（.txt）','exportTxt()'],['📚 EPUB（.epub）','exportEpub()']]
     .forEach(function(item){
       var el=document.createElement('button');
       el.style.cssText='display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-family:inherit;color:var(--text-primary);text-align:left;';
@@ -1363,12 +1396,93 @@ function _stopAllSpeech(){
 var _preAudioCtrl=null;
 var _audioManifest=null; // { workId, items: { [itemId]: {...} } } or false (no manifest)
 var _audioManifestLoading=null;
+// 音声ソース統合マップ: itemId → {type:'repo'|'idb'|'embedded', ...}
+var _audioSources={};
+function _currentWorkId(){
+  var wp=(typeof _workParam!=='undefined')?_workParam:null;
+  return wp||'_local';
+}
 function _audioBaseUrl(){
-  // _workParam はファイル末尾近くで定義されるが、_speakItem 実行時には解決済み
+  // リポジトリに事前配置された音声のみ。投稿作品(pub_*)やマイ作品(my_*)は null を返す。
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   if(!wp)return null;
+  if(wp.indexOf('pub_')===0||wp.indexOf('my_')===0)return null;
   return 'data/audio/'+encodeURIComponent(wp)+'/';
 }
+
+// ===== IndexedDB 音声ストア (投稿作品/マイ作品用) =====
+var _IDB_NAME='aninovel_audio',_IDB_VERSION=1,_IDB_STORE='audio';
+var _idbPromise=null;
+function _idbOpen(){
+  if(_idbPromise)return _idbPromise;
+  _idbPromise=new Promise(function(res,rej){
+    if(!window.indexedDB){rej(new Error('IndexedDB未対応'));return;}
+    var req=indexedDB.open(_IDB_NAME,_IDB_VERSION);
+    req.onupgradeneeded=function(e){
+      var db=e.target.result;
+      if(!db.objectStoreNames.contains(_IDB_STORE)){
+        var s=db.createObjectStore(_IDB_STORE,{keyPath:'key'});
+        s.createIndex('workId','workId',{unique:false});
+      }
+    };
+    req.onsuccess=function(e){res(e.target.result);};
+    req.onerror=function(e){rej(e.target.error);};
+  });
+  return _idbPromise;
+}
+function _idbKey(workId,itemId){return workId+'::'+itemId;}
+function _idbPut(workId,itemId,blob,meta){
+  return _idbOpen().then(function(db){
+    return new Promise(function(res,rej){
+      var tx=db.transaction(_IDB_STORE,'readwrite'),st=tx.objectStore(_IDB_STORE);
+      var rec={key:_idbKey(workId,itemId),workId:workId,itemId:itemId,blob:blob,meta:meta||{},updatedAt:Date.now()};
+      var r=st.put(rec);r.onsuccess=function(){res();};r.onerror=function(){rej(r.error);};
+    });
+  });
+}
+function _idbGet(workId,itemId){
+  return _idbOpen().then(function(db){
+    return new Promise(function(res,rej){
+      var tx=db.transaction(_IDB_STORE,'readonly'),st=tx.objectStore(_IDB_STORE);
+      var r=st.get(_idbKey(workId,itemId));
+      r.onsuccess=function(){res(r.result||null);};r.onerror=function(){rej(r.error);};
+    });
+  }).catch(function(){return null;});
+}
+function _idbListByWork(workId){
+  return _idbOpen().then(function(db){
+    return new Promise(function(res,rej){
+      var tx=db.transaction(_IDB_STORE,'readonly'),st=tx.objectStore(_IDB_STORE);
+      var idx=st.index('workId'),r=idx.getAll(workId);
+      r.onsuccess=function(){res(r.result||[]);};r.onerror=function(){rej(r.error);};
+    });
+  }).catch(function(){return [];});
+}
+function _idbDeleteByWork(workId){
+  return _idbOpen().then(function(db){
+    return new Promise(function(res,rej){
+      var tx=db.transaction(_IDB_STORE,'readwrite'),st=tx.objectStore(_IDB_STORE);
+      var idx=st.index('workId'),r=idx.openCursor(IDBKeyRange.only(workId));
+      r.onsuccess=function(e){var c=e.target.result;if(c){c.delete();c.continue();}else res();};
+      r.onerror=function(){rej(r.error);};
+    });
+  });
+}
+function _simpleHashJS(s){var h=5381;for(var i=0;i<s.length;i++){h=((h<<5)+h)+s.charCodeAt(i);h|=0;}return (h>>>0).toString(36);}
+function _b64ToBlob(b64,mime){
+  var bin=atob(b64),len=bin.length,arr=new Uint8Array(len);
+  for(var i=0;i<len;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime||'audio/wav'});
+}
+function _blobToB64(blob){
+  return new Promise(function(res,rej){
+    var r=new FileReader();
+    r.onload=function(){var s=r.result||'';var i=s.indexOf(',');res(i>=0?s.slice(i+1):s);};
+    r.onerror=function(){rej(r.error);};
+    r.readAsDataURL(blob);
+  });
+}
+
 function _loadAudioManifest(){
   if(_audioManifest!==null)return Promise.resolve(_audioManifest);
   if(_audioManifestLoading)return _audioManifestLoading;
@@ -1377,18 +1491,49 @@ function _loadAudioManifest(){
   _audioManifestLoading=fetch(base+'manifest.json',{cache:'no-cache'})
     .then(function(r){if(!r.ok)throw new Error('manifest '+r.status);return r.json();})
     .then(function(m){_audioManifest=m;console.info('[TTS] 事前生成音声マニフェスト読込:',Object.keys(m.items||{}).length+'件');return m;})
-    .catch(function(e){console.info('[TTS] 事前生成音声なし(Web Speechにフォールバック):',e.message);_audioManifest=false;return false;})
+    .catch(function(e){console.info('[TTS] 事前生成音声なし(マニフェスト):',e.message);_audioManifest=false;return false;})
     .finally(function(){_audioManifestLoading=null;});
   return _audioManifestLoading;
 }
-function _hasPreAudio(itemId){
-  if(!_audioManifest||!_audioManifest.items)return false;
-  return !!_audioManifest.items[itemId];
+// 統合ソースマップを構築: リポジトリ事前生成 + IndexedDB + content.audio (埋込み)
+function _buildAudioSources(){
+  _audioSources={};
+  // 優先度: embedded(item.audio) > IDB > repo  (ユーザが明示的に埋込んだものを最優先)
+  var wid=_currentWorkId();
+  var repo=(_audioManifest&&_audioManifest.items)||{};
+  Object.keys(repo).forEach(function(id){_audioSources[id]={type:'repo'};});
+  return _idbListByWork(wid).then(function(list){
+    list.forEach(function(rec){_audioSources[rec.itemId]={type:'idb',blob:rec.blob,meta:rec.meta};});
+    (state.content||[]).forEach(function(it){
+      if(it.audio)_audioSources[it.id]={type:'embedded',b64:it.audio};
+    });
+    var n=Object.keys(_audioSources).length;
+    var repoN=Object.values(_audioSources).filter(function(v){return v.type==='repo';}).length;
+    var idbN=Object.values(_audioSources).filter(function(v){return v.type==='idb';}).length;
+    var embN=Object.values(_audioSources).filter(function(v){return v.type==='embedded';}).length;
+    console.info('[TTS] 音声ソース統合: 合計'+n+' (repo='+repoN+' idb='+idbN+' embedded='+embN+')');
+    return _audioSources;
+  });
+}
+function _hasPreAudio(itemId){return !!_audioSources[itemId];}
+function _resolveAudioUrl(itemId){
+  var src=_audioSources[itemId];
+  if(!src)return null;
+  if(src.type==='repo'){
+    return {url:_audioBaseUrl()+encodeURIComponent(itemId)+'.wav',revoke:false};
+  }
+  if(src.type==='idb'&&src.blob){
+    var u=URL.createObjectURL(src.blob);return {url:u,revoke:true};
+  }
+  if(src.type==='embedded'&&src.b64){
+    var blob=_b64ToBlob(src.b64,'audio/wav');var u2=URL.createObjectURL(blob);return {url:u2,revoke:true};
+  }
+  return null;
 }
 function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
-  var base=_audioBaseUrl();
-  if(!base){if(onError)onError(new Error('no workId'));return null;}
-  var url=base+encodeURIComponent(item.id)+'.wav';
+  var resolved=_resolveAudioUrl(item.id);
+  if(!resolved){if(onError)onError(new Error('no audio source'));return null;}
+  var url=resolved.url,needsRevoke=resolved.revoke;
   var audio=new Audio();
   audio.preload='auto';
   audio.src=url;
@@ -1396,7 +1541,7 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
   var settled=false,started=false;
   function isStale(){return session!==_speakSessionId;}
-  function cleanup(){try{audio.pause();}catch(e){}audio.src='';}
+  function cleanup(){try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
   audio.onplaying=function(){
     if(started||isStale())return;
     started=true;
@@ -1430,6 +1575,98 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
     resume:function(){try{audio.play();}catch(e){}},
   };
 }
+// ===== VOICEVOX ローカル生成 (投稿作品/マイ作品用) =====
+// 投稿前、あるいは既存投稿作品の音声生成用に、ブラウザからローカル VOICEVOX Engine
+// (http://localhost:50021) を叩いて全セリフを合成し IndexedDB に保存する。
+// 同じテキスト+話者の場合はハッシュ照合でスキップ (再生成不要)。
+var _VOICEVOX_DEFAULTS={male:13,female:8,neutral:2};
+function _voicevoxSpeakerFor(ch){
+  if(!ch)return _VOICEVOX_DEFAULTS.neutral;
+  if(typeof ch.voicevoxSpeaker==='number')return ch.voicevoxSpeaker;
+  return _VOICEVOX_DEFAULTS[ch.gender]||_VOICEVOX_DEFAULTS.neutral;
+}
+async function generateVoicesLocal(opts){
+  opts=opts||{};
+  var engineUrl=opts.engineUrl||'http://localhost:50021';
+  var wid=_currentWorkId();
+  // ヘルスチェック
+  try{
+    var vr=await fetch(engineUrl+'/version');
+    if(!vr.ok)throw new Error('HTTP '+vr.status);
+    var ver=(await vr.text()).replace(/"/g,'').trim();
+    console.info('[VOICEVOX] connected:',ver);
+  }catch(e){
+    alert('VOICEVOX Engine に接続できません ('+engineUrl+')\n\nVOICEVOX を起動してから再実行してください。\n詳しくはマニュアル参照。');
+    return {ok:false,error:e};
+  }
+  // 既存IDB キャッシュをロード
+  var existing={};
+  (await _idbListByWork(wid)).forEach(function(r){existing[r.itemId]=r;});
+  var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
+  var total=items.length,generated=0,cached=0,failed=0;
+  if(!total){alert('生成対象のセリフがありません');return {ok:true,total:0};}
+  if(!confirm('VOICEVOX でこの作品の全セリフ('+total+'件)を音声生成します。\n数十秒〜数分かかります。続行しますか?'))return {ok:false,cancelled:true};
+  var progressBox=_showProgress('🎤 音声生成中');
+  try{
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
+      var speaker=_voicevoxSpeakerFor(ch);
+      var hash=_simpleHashJS((it.text||'')+'|sp='+speaker);
+      var prev=existing[it.id];
+      if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
+      _updateProgress(progressBox,i+1,total,it.id);
+      try{
+        // audio_query
+        var qr=await fetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(it.text),{method:'POST'});
+        if(!qr.ok)throw new Error('audio_query '+qr.status);
+        var query=await qr.json();
+        query.speedScale=1.0;
+        // synthesis
+        var sr=await fetch(engineUrl+'/synthesis?speaker='+speaker,{
+          method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},
+          body:JSON.stringify(query)
+        });
+        if(!sr.ok)throw new Error('synthesis '+sr.status);
+        var blob=await sr.blob();
+        await _idbPut(wid,it.id,blob,{speaker:speaker,hash:hash,chars:(it.text||'').length,bytes:blob.size});
+        generated++;
+      }catch(e){
+        console.warn('[VOICEVOX] 失敗 item='+it.id,e&&e.message||e);failed++;
+      }
+    }
+  }finally{_hideProgress(progressBox);}
+  // 再生時に使えるようソースマップを再構築
+  _audioManifest=_audioManifest||false; // 既存維持
+  await _buildAudioSources();
+  alert('音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
+  return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
+}
+function _showProgress(title){
+  var el=document.createElement('div');
+  el.style.cssText='position:fixed;top:20px;right:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#000);border:2px solid var(--accent,#6366F1);border-radius:8px;padding:16px 20px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);min-width:280px;font-size:13px';
+  el.innerHTML='<div style="font-weight:700;margin-bottom:8px">'+title+'</div><div class="pg-bar" style="background:#eee;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px"><div class="pg-fill" style="background:#6366F1;height:100%;width:0%;transition:width .2s"></div></div><div class="pg-text" style="font-size:11px;color:#666">開始中...</div>';
+  document.body.appendChild(el);
+  return el;
+}
+function _updateProgress(el,cur,total,label){
+  if(!el)return;
+  var pct=Math.round(cur/total*100);
+  var fill=el.querySelector('.pg-fill'),text=el.querySelector('.pg-text');
+  if(fill)fill.style.width=pct+'%';
+  if(text)text.textContent=cur+' / '+total+(label?' ('+label+')':'');
+}
+function _hideProgress(el){if(el&&el.parentNode)el.parentNode.removeChild(el);}
+async function clearGeneratedVoices(){
+  var wid=_currentWorkId();
+  if(!confirm('この作品に保存された生成音声を削除しますか?\n(ブラウザのIndexedDB から削除)'))return;
+  await _idbDeleteByWork(wid);
+  await _buildAudioSources();
+  alert('削除しました');
+}
+window.generateVoicesLocal=generateVoicesLocal;
+window.clearGeneratedVoices=clearGeneratedVoices;
+
 function _speakItem(item,onEnd){
   var mySession=++_speakSessionId;
   _stopAllSpeech();
@@ -1630,10 +1867,9 @@ function startTTS(){
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
-  // 事前生成音声のマニフェストを読込(初回のみ)。存在すれば Web Speech は使わず高品質な
-  // VOICEVOX 生成音声を再生。無ければ従来通り Web Speech にフォールバック。
-  _loadAudioManifest().then(function(manifest){
-    // 全アイテムが事前生成済みならウォームアップ不要(Web Speech を使わないので)
+  // 音声ソース統合: リポジトリ事前生成 + IndexedDB(投稿作品) + 埋込(インポート作品)
+  // 存在すれば Web Speech は使わず高品質な VOICEVOX 生成音声を再生。無ければ Web Speech へ。
+  _loadAudioManifest().then(_buildAudioSources).then(function(){
     var allPreGen=_ttsQueue.every(function(i){return _hasPreAudio(i.id);});
     if(allPreGen){
       console.info('[TTS] 全セリフが事前生成音声で再生されます');
@@ -1764,7 +2000,7 @@ function hlText(text,query){if(!query||!state.searchOpen)return esc(text);var e=
 function displayText(text,query){var c=toFullWidth(text||'');if(!query)return hlText(c,null);var fq=toFullWidth(query);var r1=hlText(c,fq);if(r1!==esc(c))return r1;return hlText(c,query)}
 function showToast(msg){var t=document.createElement('div');t.className='anim-slide-up';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg-toolbar);color:#fff;padding:10px 24px;border-radius:24px;font-size:14px;z-index:999;box-shadow:0 4px 16px var(--shadow-strong)';t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s'},2000);setTimeout(function(){t.remove()},2500)}
 
-async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];showToast('インポート完了');render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert('エラー: '+e.message)}}
+async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.audioStore){var wid=_currentWorkId();var ids=Object.keys(d.audioStore),cnt=0;var pg=_showProgress('🔊 音声データ取込中');try{for(var k=0;k<ids.length;k++){var iid=ids[k],rec=d.audioStore[iid];_updateProgress(pg,k+1,ids.length,iid);try{var blob=_b64ToBlob(rec.b64,rec.mime||'audio/wav');await _idbPut(wid,iid,blob,rec.meta||{});cnt++;}catch(ie){console.warn('音声取込失敗',iid,ie);}}}finally{_hideProgress(pg);}console.info('[Import] 音声'+cnt+'件をIndexedDBに保存 workId='+wid);}showToast('インポート完了'+(d.audioStore?' (音声'+Object.keys(d.audioStore).length+'件)':''));render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert('エラー: '+e.message)}}
 async function detEnc(file){return new Promise(function(r){var rd=new FileReader;rd.onload=function(e){var a=new Uint8Array(e.target.result);if(a.length>=3&&a[0]===0xEF&&a[1]===0xBB&&a[2]===0xBF)return r('UTF-8');r('UTF-8')};rd.readAsArrayBuffer(file)})}
 async function rdTxt(f,e){return new Promise(function(r,j){var rd=new FileReader;rd.onload=function(ev){r(ev.target.result)};rd.onerror=j;rd.readAsText(f,e||'UTF-8')})}
 function detGender(n){if(/[子美香織恵愛花里奈沙菜実梨彩由佳理代紀]/.test(n))return'female';if(/[郎太介助男雄彦司夫治朗]/.test(n))return'male';return'male'}
@@ -1788,7 +2024,7 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=ds
 
 function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div><button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
-function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(state.novel.title)+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 投稿</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
+function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(state.novel.title)+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 投稿</button>';h+='<button onclick="generateVoicesLocal()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="VOICEVOX (localhost:50021) でこの作品の全セリフを音声生成し、このブラウザに保存">🎤 音声生成</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar
     h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border)"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(ch.name)+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';h+='<div class="page-footer"><button onclick="jP('+(state.currentPage-1)+')"'+(state.currentPage===0?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage===0?'opacity:.4;cursor:default':'')+'">← 前</button><div style="display:flex;align-items:center;gap:12px"><span style="font-size:13px;color:var(--text-secondary)"><strong>'+(state.currentPage+1)+'</strong> / '+tp+'</span><input type="number" min="1" max="'+tp+'" value="'+(state.currentPage+1)+'" onchange="jP(parseInt(this.value)-1)" style="width:56px;text-align:center;padding:4px;font-size:13px">'+(state.isAuthorMode?'<span style="font-size:11px;color:var(--text-muted)">💾 '+state.lastSaved+'</span>':'')+'</div><button onclick="jP('+(state.currentPage+1)+')"'+(state.currentPage>=tp-1?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage>=tp-1?'opacity:.4;cursor:default':'')+'">次 →</button></div>';if(state.settingsOpen)h+=renderSettings();if(state.tocOpen)h+=renderTOC();if(state.bookmarkListOpen)h+=renderBM();h+='</div>';return h}
 
