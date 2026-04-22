@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_elapsed_skip_v6';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_first_always_fallback_v7';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1464,9 +1464,11 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       if(err==='canceled'||err==='interrupted')return;
       var elapsed=Date.now()-speakTime;
       // Edge Natural は onstart を発火せず音声だけ出してから synthesis-failed を投げることがある。
-      // speak()後 350ms 以上経過していれば音声が既に再生された可能性が高い→チャンクをスキップして二重発話を防止
-      var probablyPlayed=thisStarted||elapsed>=350;
-      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce);
+      // ただし最初の speak() が何も再生せず失敗するケースも多いので、
+      // 「このセッションで既に onstart を一度でも確認済み (startedOnce=true)」場合のみ
+      // 経過時間を根拠にチャンクをスキップする。初回失敗は確実にフォールバックさせる。
+      var probablyPlayed=thisStarted||(elapsed>=350&&startedOnce);
+      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce,'skip='+probablyPlayed);
       if(probablyPlayed){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
       // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
