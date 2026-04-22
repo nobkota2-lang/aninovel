@@ -1319,49 +1319,48 @@ function _stopAllSpeech(){
   _ttsUtterance=null;
 }
 function _speakItem(item,onEnd){
-  // 新しいセッションIDを発行 → 古い発話のコールバックは無視される
   var mySession=++_speakSessionId;
-  // 前の発話を完全停止 (重要: これで二重読み防止)
   _stopAllSpeech();
   var ch=state.characters.find(function(c){return c.id===(item.characterId||'narrator')});
   state.tts.currentItemId=item.id;
-  state.tts.currentCharId=item.type==='dialogue'?(item.characterId||null):'narrator';
-  _updateTTSDisplay();
+  // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
+  var targetCharId=item.type==='dialogue'?(item.characterId||null):'narrator';
+  function applyCharId(){
+    if(mySession!==_speakSessionId)return;
+    state.tts.currentCharId=targetCharId;
+    _updateTTSDisplay();
+  }
+  _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
   if(_hasNaturalJaVoice()){
-    _speakItemWebAPI(item,ch,mySession,safeEnd,function(err){
+    _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err){
       if(mySession!==_speakSessionId)return;
-      console.warn('[TTS] Web Speech 連続失敗→クラウドTTSへ:',err&&err.message||err);
+      console.warn('[TTS] Web Speech 失敗→クラウドTTSへ:',err&&err.message||err);
       _stopAllSpeech();
+      // クラウドフォールバック時点で lipsync を切替 (onstart 相当)
+      applyCharId();
       _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
         function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
         function(err2){if(mySession!==_speakSessionId)return;console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;safeEnd();});
     });
     return;
   }
+  applyCharId();
   _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
     function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
     function(err){
       if(mySession!==_speakSessionId)return;
       console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
       _cloudAudioCtrl=null;
-      _speakItemWebAPI(item,ch,mySession,safeEnd);
+      _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
     }
   );
 }
-function _speakItemWebAPI(item,ch,session,onEnd,onError){
+function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
   var primaryVoice=_ttsVoice(ch);
-  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
-  var offlineFallback=null;
-  var gender=ch&&ch.gender;
-  var offlineCandidates=gender==='male'?['Ichiro','Microsoft Ichiro']:['Haruka','Ayumi','Sayaka','Microsoft Haruka','Microsoft Ayumi','Microsoft Sayaka'];
-  for(var oi=0;oi<offlineCandidates.length&&!offlineFallback;oi++){
-    var oc=offlineCandidates[oi].toLowerCase();
-    offlineFallback=voices.find(function(v){var n=(v.name||'').toLowerCase();return v.lang&&v.lang.indexOf('ja')===0&&(n===oc||n.indexOf(oc)>=0);})||null;
-  }
-  var idx=0,failCount=0,useOffline=false;
+  var idx=0,consecutiveErrors=0,startedOnce=false;
   function isStale(){return session!==_speakSessionId;}
   function speakNext(){
     if(isStale())return;
@@ -1370,32 +1369,34 @@ function _speakItemWebAPI(item,ch,session,onEnd,onError){
     utt.lang='ja-JP';
     utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
     utt.pitch=ch&&ch.gender==='male'?0.92:(ch&&ch.gender==='female'?1.06:1.0);
-    var voice=useOffline&&offlineFallback?offlineFallback:primaryVoice;
-    if(voice)utt.voice=voice;
-    var done=false;
-    utt.onend=function(){if(done||isStale())return;done=true;idx++;failCount=0;speakNext();};
+    if(primaryVoice)utt.voice=primaryVoice;
+    var settled=false,thisStarted=false;
+    utt.onstart=function(){
+      if(isStale())return;
+      thisStarted=true;
+      if(!startedOnce){startedOnce=true;if(onStart)onStart();}
+    };
+    utt.onend=function(){
+      if(settled||isStale())return;settled=true;
+      idx++;consecutiveErrors=0;speakNext();
+    };
     utt.onerror=function(e){
-      if(done||isStale())return;done=true;
+      if(settled||isStale())return;settled=true;
       var err=e&&(e.error||e.message)||e;
-      if(err==='canceled'||err==='interrupted')return; // キャンセル由来は無視
-      console.info('[TTS] Web Speech エラー:',err,'voice=',voice&&voice.name);
-      failCount++;
-      if(!useOffline&&offlineFallback&&(err==='synthesis-failed'||err==='network'||err==='audio-busy')){
-        console.info('[TTS] Natural失敗→オフライン声へフォールバック:',offlineFallback.name);
-        useOffline=true;
-        try{speechSynthesis.cancel();}catch(_){}
-        setTimeout(function(){if(!isStale())speakNext();},150);
-        return;
-      }
-      if(failCount>=3&&onError){console.warn('[TTS] Web Speech連続失敗→クラウド切替');onError(new Error('web speech '+err));return;}
-      idx++;
-      setTimeout(function(){if(!isStale())speakNext();},150);
+      if(err==='canceled'||err==='interrupted')return;
+      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'idx='+idx);
+      // 既に音声が出始めていた → 部分的に再生された可能性 → 同じチャンクを再試行しない
+      if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},120);return;}
+      // まだ始まっていない = 完全失敗 → エラーカウント増やしリトライなしで進める
+      consecutiveErrors++;
+      if(consecutiveErrors>=2&&onError){onError(new Error('web speech '+err));return;}
+      idx++;setTimeout(function(){if(!isStale())speakNext();},150);
     };
     _ttsUtterance=utt;
-    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);done=true;idx++;setTimeout(function(){if(!isStale())speakNext();},150);}
+    try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);settled=true;idx++;setTimeout(function(){if(!isStale())speakNext();},150);}
   }
-  // cancel済み後 (呼び出し側で _stopAllSpeech 済) 80ms待機してから speak
-  setTimeout(function(){if(!isStale())speakNext();},80);
+  // cancel済み前提。余裕をもって150ms後に発話
+  setTimeout(function(){if(!isStale())speakNext();},150);
 }
 function _drainQueue(){
   if(!state.tts.active||state.tts.paused||!_ttsQueue.length){
