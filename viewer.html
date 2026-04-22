@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_drain_idle_v4';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_session_offline_v5';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1410,13 +1410,17 @@ function _offlineFallbackVoice(ch){
 }
 // 一度でも Natural で失敗したキャラはセッション中オフラインに固定(二重発話防止)
 var _forceOfflineChars={};
+// いずれかのキャラで Natural が失敗したら、以降セッション全体で Natural を使わない
+// (フォールバック時のキュー残存による二重発話を完全に防ぐ)
+var _disableNaturalForSession=false;
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
   var chId=ch&&ch.id||(item.characterId||'narrator');
   var fallbackVoice=_offlineFallbackVoice(ch);
-  // このキャラが以前 Natural で失敗していたらオフライン音声で即開始
-  var primaryVoice=_forceOfflineChars[chId]&&fallbackVoice?fallbackVoice:_ttsVoice(ch);
+  // このキャラが以前 Natural で失敗、あるいはセッション全体で Natural 無効ならオフライン音声で即開始
+  var useOffline=(_forceOfflineChars[chId]||_disableNaturalForSession)&&fallbackVoice;
+  var primaryVoice=useOffline?fallbackVoice:_ttsVoice(ch);
   var currentVoice=primaryVoice;
   var switchedToFallback=(currentVoice===fallbackVoice);
   var idx=0,consecutiveErrors=0,startedOnce=false;
@@ -1456,10 +1460,12 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
       if(consecutiveErrors===1&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
         switchedToFallback=true;currentVoice=fallbackVoice;
-        _forceOfflineChars[chId]=true; // このキャラは以降オフライン固定
+        _forceOfflineChars[chId]=true;
+        _disableNaturalForSession=true; // 以降全キャラで Natural 無効 (二重発話防止)
         try{speechSynthesis.cancel();}catch(e){}
-        console.info('[TTS] Natural失敗→オフライン音声に切替(以降固定):',fallbackVoice.name,'ch='+chId);
-        setTimeout(function(){if(!isStale())speakNext();},500);return;
+        console.info('[TTS] Natural失敗→以降セッション全体でオフライン固定:',fallbackVoice.name,'ch='+chId);
+        // 切替時は長めに待つ (Edgeが古い utterance をフラッシュするまで)
+        setTimeout(function(){if(!isStale())speakNext();},700);return;
       }
       // それでも連続4回失敗 → クラウドへフォールバック(未再生分のみ: 二重発話防止)
       if(consecutiveErrors>=4&&onError){onError(new Error('web speech '+err),remainingText());return;}
@@ -1504,7 +1510,7 @@ function startTTS(){
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   state.tts.active=true;state.tts.paused=false;
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
-  _forceOfflineChars={}; // 再生開始時にリセット(セッション毎に1度は Natural を試す)
+  _forceOfflineChars={};_disableNaturalForSession=false; // 再生開始時にリセット(セッション毎に1度は Natural を試す)
   _clearAllLipSync();
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
