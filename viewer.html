@@ -3,7 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>アニノベル - 完全版</title>
+    <script>
+      // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_warmup_v2';
+      console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
+      // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations().then(function(rs){
+          rs.forEach(function(r){r.unregister();console.info('[Aninovel] ServiceWorker解除:',r.scope);});
+        }).catch(function(){});
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -1383,10 +1397,24 @@ function _speakItem(item,onEnd){
     applyCharId /* onStart */
   );
 }
+// Natural でない安定オフライン音声(Haruka/Ayumi/Ichiro/Sayaka等)を性別別に返す
+function _offlineFallbackVoice(ch){
+  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
+  var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+  var nonNat=ja.filter(function(v){return !/natural|neural|wavenet|online/i.test(v.name||'');});
+  if(!nonNat.length)nonNat=ja;
+  var g=ch?(ch.gender||'male'):'male';
+  var gv=nonNat.filter(function(v){return _voiceGender(v)===g});
+  if(gv.length)return gv[0];
+  return nonNat[0]||null;
+}
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
   var primaryVoice=_ttsVoice(ch);
+  var fallbackVoice=_offlineFallbackVoice(ch);
+  var currentVoice=primaryVoice;
+  var switchedToFallback=false;
   var idx=0,consecutiveErrors=0,startedOnce=false;
   function isStale(){return session!==_speakSessionId;}
   function remainingText(){return chunks.slice(idx).join('');}
@@ -1401,7 +1429,7 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
     utt.lang='ja-JP';
     utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
     utt.pitch=ch&&ch.gender==='male'?0.92:(ch&&ch.gender==='female'?1.06:1.0);
-    if(primaryVoice)utt.voice=primaryVoice;
+    if(currentVoice)utt.voice=currentVoice;
     var settled=false,thisStarted=false;
     utt.onstart=function(){
       if(isStale())return;
@@ -1420,9 +1448,14 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       // 既に音声が出始めていた → このチャンクは部分再生済みなので再試行しない
       if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
-      // 連続4回失敗 → クラウドへフォールバック(未再生分のみ渡す: 二重発話防止)
+      // 2回失敗した段階で Natural → オフライン音声(Haruka等)へ切替を試みる
+      if(consecutiveErrors===2&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
+        switchedToFallback=true;currentVoice=fallbackVoice;
+        console.info('[TTS] Natural失敗続く→オフライン音声にフォールバック:',fallbackVoice.name);
+        setTimeout(function(){if(!isStale())speakNext();},400);return;
+      }
+      // それでも連続4回失敗 → クラウドへフォールバック(未再生分のみ: 二重発話防止)
       if(consecutiveErrors>=4&&onError){onError(new Error('web speech '+err),remainingText());return;}
-      // Edgeのsynthesis-failedは初回に頻発するため複数回リトライ。遅延を徐々に伸ばす
       var delay=300+consecutiveErrors*200;
       setTimeout(function(){if(!isStale())speakNext();},delay);
     };
