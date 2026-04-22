@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_session_offline_v5';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_elapsed_skip_v6';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1397,13 +1397,21 @@ function _speakItem(item,onEnd){
     applyCharId /* onStart */
   );
 }
-// Natural でない安定オフライン音声(Haruka/Ayumi/Ichiro/Sayaka等)を性別別に返す
+// Natural でない安定オフライン音声を性別別に返す。
+// 優先: Haruka/Sayaka/Ichiro(rate対応) > Ayumi(モバイル音声: rate無視) > その他
+var _OFFLINE_PREF_FEMALE=['Haruka','Sayaka','Nanami','Ayumi'];
+var _OFFLINE_PREF_MALE=['Ichiro','Keita','Naoki'];
 function _offlineFallbackVoice(ch){
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
   var nonNat=ja.filter(function(v){return !/natural|neural|wavenet|online/i.test(v.name||'');});
   if(!nonNat.length)nonNat=ja;
   var g=ch?(ch.gender||'male'):'male';
+  var prefs=g==='male'?_OFFLINE_PREF_MALE:_OFFLINE_PREF_FEMALE;
+  for(var i=0;i<prefs.length;i++){
+    var hit=nonNat.find(function(v){return (v.name||'').indexOf(prefs[i])>=0;});
+    if(hit)return hit;
+  }
   var gv=nonNat.filter(function(v){return _voiceGender(v)===g});
   if(gv.length)return gv[0];
   return nonNat[0]||null;
@@ -1440,6 +1448,7 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
     utt.pitch=ch&&ch.gender==='male'?0.92:(ch&&ch.gender==='female'?1.06:1.0);
     if(currentVoice)utt.voice=currentVoice;
     var settled=false,thisStarted=false;
+    var speakTime=0;
     utt.onstart=function(){
       if(isStale())return;
       thisStarted=true;
@@ -1453,9 +1462,12 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       if(settled||isStale())return;settled=true;
       var err=e&&(e.error||e.message)||e;
       if(err==='canceled'||err==='interrupted')return;
-      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'idx='+idx,'startedOnce='+startedOnce);
-      // 既に音声が出始めていた → このチャンクは部分再生済みなので再試行しない
-      if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
+      var elapsed=Date.now()-speakTime;
+      // Edge Natural は onstart を発火せず音声だけ出してから synthesis-failed を投げることがある。
+      // speak()後 350ms 以上経過していれば音声が既に再生された可能性が高い→チャンクをスキップして二重発話を防止
+      var probablyPlayed=thisStarted||elapsed>=350;
+      console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce);
+      if(probablyPlayed){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
       // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
       if(consecutiveErrors===1&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
@@ -1473,6 +1485,7 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       setTimeout(function(){if(!isStale())speakNext();},delay);
     };
     _ttsUtterance=utt;
+    speakTime=Date.now();
     try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);settled=true;idx++;setTimeout(function(){if(!isStale())speakNext();},200);}
   }
   // cancel済み前提。余裕をもって300ms後に発話(Edge対策)
