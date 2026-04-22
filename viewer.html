@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_voicevox_idb_v11';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_voicevox_idb_v12';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1496,14 +1496,31 @@ function _loadAudioManifest(){
   return _audioManifestLoading;
 }
 // 統合ソースマップを構築: リポジトリ事前生成 + IndexedDB + content.audio (埋込み)
+// 投稿作品(pub_*)を開いた場合、対応する my_* 側のIDBも探索 (作者が my_ で生成→投稿
+// したパターンに対応)。逆方向(my_* を開いたとき pub_* を見に行く)は通常不要。
+function _relatedWorkIds(wid){
+  var ids=[wid];
+  if(wid&&wid.indexOf('pub_')===0)ids.push('my_'+wid.slice(4));
+  else if(wid&&wid.indexOf('my_')===0)ids.push('pub_'+wid.slice(3));
+  return ids;
+}
 function _buildAudioSources(){
   _audioSources={};
   // 優先度: embedded(item.audio) > IDB > repo  (ユーザが明示的に埋込んだものを最優先)
   var wid=_currentWorkId();
+  var relIds=_relatedWorkIds(wid);
   var repo=(_audioManifest&&_audioManifest.items)||{};
   Object.keys(repo).forEach(function(id){_audioSources[id]={type:'repo'};});
-  return _idbListByWork(wid).then(function(list){
-    list.forEach(function(rec){_audioSources[rec.itemId]={type:'idb',blob:rec.blob,meta:rec.meta};});
+  // 自workId→関連workId の順で探索(先勝ち=自workIdが優先)
+  return Promise.all(relIds.map(function(w){return _idbListByWork(w);})).then(function(lists){
+    lists.forEach(function(list,i){
+      list.forEach(function(rec){
+        // 既に自workIdのIDBが埋まっていれば上書きしない
+        if(!_audioSources[rec.itemId]||_audioSources[rec.itemId].type==='repo'){
+          _audioSources[rec.itemId]={type:'idb',blob:rec.blob,meta:rec.meta,fromWorkId:relIds[i]};
+        }
+      });
+    });
     (state.content||[]).forEach(function(it){
       if(it.audio)_audioSources[it.id]={type:'embedded',b64:it.audio};
     });
@@ -2511,7 +2528,19 @@ function publishMyWork(){
     // 投稿前に最新データを保存
     if(window._saveMyWork)window._saveMyWork();
     if(!confirm('この作品を投稿しますか？\n投稿すると他の読者がこの作品を読んで評価できるようになります。'))return;
-    window.AninovelServices.publishWork(_workParam).then(function(res){
+    window.AninovelServices.publishWork(_workParam).then(async function(res){
+        // マイ作品側で生成済みの音声があれば投稿版(pub_*)のIDBにも複製しておく
+        try{
+          var srcList=await _idbListByWork(_workParam);
+          if(srcList.length){
+            var pubId=res.publishedId;
+            for(var i=0;i<srcList.length;i++){
+              var r=srcList[i];
+              await _idbPut(pubId,r.itemId,r.blob,r.meta||{});
+            }
+            console.info('[Publish] 生成音声'+srcList.length+'件を投稿版IDBへ複製:',pubId);
+          }
+        }catch(e){console.warn('[Publish] 音声複製エラー:',e);}
         alert('投稿しました！\n作品ID: '+res.publishedId+'\n\nポータルの作品一覧に表示されます。');
     }).catch(function(err){alert('投稿エラー: '+err.message);});
 }
