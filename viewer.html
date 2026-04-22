@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_voicevox_idb_v12';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_audio_started_guard_v13';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1573,9 +1573,16 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   audio.onerror=function(){
     if(settled)return;settled=true;
     var code=(audio.error&&audio.error.code)||'?';
-    console.warn('[TTS] 事前生成音声再生失敗 item='+item.id,'code='+code);
     cleanup();
-    if(onError)onError(new Error('audio error '+code));
+    // 【絶対原則】再生が一度でも開始していればエラーでも完了扱い。
+    // Web Speech フォールバックを走らせると全文が再発話され二重発話になる。
+    if(started){
+      console.info('[TTS] 事前生成音声エラー(再生開始後→完了扱い) item='+item.id,'code='+code);
+      if(onEnd)onEnd();
+    }else{
+      console.warn('[TTS] 事前生成音声再生失敗(未開始) item='+item.id,'code='+code);
+      if(onError)onError(new Error('audio error '+code));
+    }
   };
   var playPromise=audio.play();
   if(playPromise&&playPromise.catch){
@@ -1708,6 +1715,8 @@ function _speakItem(item,onEnd){
         if(mySession!==_speakSessionId)return;
         console.warn('[TTS] 事前生成音声失敗→Web Speechへフォールバック:',err&&err.message||err);
         _preAudioCtrl=null;
+        // 念のためすべての音声経路を停止してから Web Speech 開始(二重発話防止)
+        try{speechSynthesis.cancel();}catch(e){}
         if(_hasNaturalJaVoice()){
           _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
         }else{
