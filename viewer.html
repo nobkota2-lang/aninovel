@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_warmup_v2';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_offline_lock_v3';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1408,22 +1408,27 @@ function _offlineFallbackVoice(ch){
   if(gv.length)return gv[0];
   return nonNat[0]||null;
 }
+// 一度でも Natural で失敗したキャラはセッション中オフラインに固定(二重発話防止)
+var _forceOfflineChars={};
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk(item.text||'',100);
   if(!chunks.length){if(onEnd)onEnd();return;}
-  var primaryVoice=_ttsVoice(ch);
+  var chId=ch&&ch.id||(item.characterId||'narrator');
   var fallbackVoice=_offlineFallbackVoice(ch);
+  // このキャラが以前 Natural で失敗していたらオフライン音声で即開始
+  var primaryVoice=_forceOfflineChars[chId]&&fallbackVoice?fallbackVoice:_ttsVoice(ch);
   var currentVoice=primaryVoice;
-  var switchedToFallback=false;
+  var switchedToFallback=(currentVoice===fallbackVoice);
   var idx=0,consecutiveErrors=0,startedOnce=false;
   function isStale(){return session!==_speakSessionId;}
   function remainingText(){return chunks.slice(idx).join('');}
   function speakNext(){
     if(isStale())return;
     if(idx>=chunks.length){_ttsUtterance=null;if(onEnd)onEnd();return;}
-    // Edge: cancel直後のspeakが synthesis-failed になるので speaking/pending が落ちるまで待つ
+    // Edge: 前の utterance がキューに残ると二重発話になる。明示 cancel してキューを空にしてから発話
     if(speechSynthesis.speaking||speechSynthesis.pending){
-      setTimeout(function(){if(!isStale())speakNext();},80);return;
+      try{speechSynthesis.cancel();}catch(e){}
+      setTimeout(function(){if(!isStale())speakNext();},120);return;
     }
     var utt=new SpeechSynthesisUtterance(chunks[idx]);
     utt.lang='ja-JP';
@@ -1448,11 +1453,13 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       // 既に音声が出始めていた → このチャンクは部分再生済みなので再試行しない
       if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
-      // 2回失敗した段階で Natural → オフライン音声(Haruka等)へ切替を試みる
-      if(consecutiveErrors===2&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
+      // 1回失敗した段階で即 Natural → オフライン音声へ切替 (リトライで二重発話になるリスクを排除)
+      if(consecutiveErrors===1&&!switchedToFallback&&fallbackVoice&&fallbackVoice!==primaryVoice){
         switchedToFallback=true;currentVoice=fallbackVoice;
-        console.info('[TTS] Natural失敗続く→オフライン音声にフォールバック:',fallbackVoice.name);
-        setTimeout(function(){if(!isStale())speakNext();},400);return;
+        _forceOfflineChars[chId]=true; // このキャラは以降オフライン固定
+        try{speechSynthesis.cancel();}catch(e){}
+        console.info('[TTS] Natural失敗→オフライン音声に切替(以降固定):',fallbackVoice.name,'ch='+chId);
+        setTimeout(function(){if(!isStale())speakNext();},500);return;
       }
       // それでも連続4回失敗 → クラウドへフォールバック(未再生分のみ: 二重発話防止)
       if(consecutiveErrors>=4&&onError){onError(new Error('web speech '+err),remainingText());return;}
@@ -1482,6 +1489,7 @@ function startTTS(){
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   state.tts.active=true;state.tts.paused=false;
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
+  _forceOfflineChars={}; // 再生開始時にリセット(セッション毎に1度は Natural を試す)
   _clearAllLipSync();
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
