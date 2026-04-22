@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_audio_started_guard_v13';
+      window.__ANINOVEL_BUILD__='2026-04-23_tts_diag_v14';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1551,6 +1551,10 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   var resolved=_resolveAudioUrl(item.id);
   if(!resolved){if(onError)onError(new Error('no audio source'));return null;}
   var url=resolved.url,needsRevoke=resolved.revoke;
+  var src=_audioSources[item.id];
+  var spk=src&&src.meta&&src.meta.speaker;
+  var fromW=src&&src.fromWorkId;
+  console.info('[TTS] 再生開始 item='+item.id+' chId='+(ch&&ch.id)+' chName='+(ch&&ch.name)+' txt="'+(item.text||'').substring(0,20)+'…" type='+(src&&src.type)+(spk!=null?' speaker='+spk:'')+(fromW?' fromWorkId='+fromW:''));
   var audio=new Audio();
   audio.preload='auto';
   audio.src=url;
@@ -2210,7 +2214,11 @@ function render(){
   if(state.tts&&state.tts.active&&state.tts.currentItemId){
     var _te=document.querySelector('[data-cid="'+state.tts.currentItemId+'"]');
     if(_te){_te.classList.add('tts-highlight');_te.scrollIntoView({behavior:'smooth',block:'center'});}
-    if(state.tts.currentCharId)_startLipSyncChar(state.tts.currentCharId);
+    // 再生中に DOM が再構築された場合のみ LipSync を再起動。
+    // _clearAllLipSync が直前で呼ばれているので、currentCharId に対して未起動のはず。
+    // _startLipSyncChar 内のガードに任せず、_updateLipSync 経由で起動すると
+    // 二重ログ・二重起動が起きにくい。
+    if(state.tts.currentCharId)_updateLipSync();
   }
 }
 
