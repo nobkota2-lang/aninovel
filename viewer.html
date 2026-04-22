@@ -1313,6 +1313,29 @@ function _hasNaturalJaVoice(){
 }
 // --- 発話処理（セッションID管理で重複・ズレ防止） ---
 var _speakSessionId=0;
+// Edge ではページ読込後の最初の speak() が synthesis-failed で落ちやすい。
+// デフォルト音声(非Natural)で無音発話を成功させてからキューを始める。
+function _warmUpSpeech(done){
+  var tries=0;
+  function attempt(){
+    tries++;
+    try{speechSynthesis.cancel();}catch(e){}
+    var warm=new SpeechSynthesisUtterance('あ');
+    warm.volume=0;warm.rate=2.0;warm.lang='ja-JP'; // voice指定せず: デフォルト(安定音声)
+    var settled=false;
+    warm.onstart=function(){if(settled)return;settled=true;console.info('[TTS] warmup成功 try='+tries);done();};
+    warm.onend=function(){if(settled)return;settled=true;done();};
+    warm.onerror=function(e){
+      if(settled)return;settled=true;
+      var err=e&&(e.error||e.message)||e;
+      console.info('[TTS] warmup失敗 try='+tries,err);
+      if(tries<4)setTimeout(attempt,250);else done();
+    };
+    setTimeout(function(){if(settled)return;settled=true;if(tries<4)attempt();else done();},1500);
+    try{speechSynthesis.speak(warm);}catch(e){settled=true;done();}
+  }
+  attempt();
+}
 function _stopAllSpeech(){
   try{speechSynthesis.cancel();}catch(e){}
   if(_cloudAudioCtrl){try{_cloudAudioCtrl.stop();}catch(e){}_cloudAudioCtrl=null;}
@@ -1397,10 +1420,11 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       // 既に音声が出始めていた → このチャンクは部分再生済みなので再試行しない
       if(thisStarted){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
       consecutiveErrors++;
-      // 連続2回失敗 → クラウドへフォールバック(未再生分のみ渡す: 二重発話防止)
-      if(consecutiveErrors>=2&&onError){onError(new Error('web speech '+err),remainingText());return;}
-      // 1回目はリトライ(同じチャンクをもう一度)。Edge は cancel 直後の speak を落としやすい
-      setTimeout(function(){if(!isStale())speakNext();},300);
+      // 連続4回失敗 → クラウドへフォールバック(未再生分のみ渡す: 二重発話防止)
+      if(consecutiveErrors>=4&&onError){onError(new Error('web speech '+err),remainingText());return;}
+      // Edgeのsynthesis-failedは初回に頻発するため複数回リトライ。遅延を徐々に伸ばす
+      var delay=300+consecutiveErrors*200;
+      setTimeout(function(){if(!isStale())speakNext();},delay);
     };
     _ttsUtterance=utt;
     try{speechSynthesis.speak(utt);}catch(e){console.warn('[TTS] speak失敗:',e);settled=true;idx++;setTimeout(function(){if(!isStale())speakNext();},200);}
@@ -1429,18 +1453,10 @@ function startTTS(){
   state.tts.voices=speechSynthesis.getVoices();
   _assignCharVoices(); // キャラクター別に音声を割り当て
   render(); // TTSバーを先に表示してからキューを開始
-  // Edgeはページ読込後の最初のspeak()が必ずsynthesis-failedになる既知不具合。
-  // 無音ダミー発話でエンジンをウォームアップしてからキューを流す。
-  try{
-    var warm=new SpeechSynthesisUtterance(' ');
-    warm.volume=0;warm.rate=2.0;warm.lang='ja-JP';
-    var warmed=false;
-    function afterWarm(){if(warmed)return;warmed=true;setTimeout(_drainQueue,200);}
-    warm.onend=afterWarm;
-    warm.onerror=afterWarm;
-    speechSynthesis.speak(warm);
-    setTimeout(afterWarm,800); // 念のためタイムアウトでも進める
-  }catch(e){_drainQueue();}
+  // Edgeはページ読込後の最初のspeak()がしばしば synthesis-failed になる既知不具合。
+  // ブラウザ組込のデフォルト音声(非Natural)で無音ウォームアップし、
+  // 成功するまで最大3回試す。成功後に本キューを流す。
+  _warmUpSpeech(function(){setTimeout(_drainQueue,250);});
 }
 function pauseTTS(){
   if(!state.tts.active)return;
