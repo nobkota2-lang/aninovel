@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-22_tts_offline_lock_v3';
+      window.__ANINOVEL_BUILD__='2026-04-22_tts_drain_idle_v4';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1477,8 +1477,23 @@ function _drainQueue(){
     if(!_ttsQueue.length){state.tts.active=false;state.tts.currentItemId=null;state.tts.currentCharId=null;_clearAllLipSync();render();}
     return;
   }
-  var item=_ttsQueue.shift();
-  _speakItem(item,function(){_drainQueue();});
+  // Edgeの onend は発話完了前に発火することがある。speechSynthesis.speaking が落ちるまで待機してから次 item
+  var waitStart=Date.now();
+  function waitIdle(){
+    if(!state.tts.active||state.tts.paused)return;
+    var busy=speechSynthesis.speaking||speechSynthesis.pending;
+    if(busy&&Date.now()-waitStart<1200){
+      if(_cloudAudioCtrl)return next();
+      setTimeout(waitIdle,50);return;
+    }
+    next();
+  }
+  function next(){
+    var item=_ttsQueue.shift();
+    if(!item){_drainQueue();return;}
+    _speakItem(item,function(){_drainQueue();});
+  }
+  waitIdle();
 }
 function startTTS(){
   if(!window.speechSynthesis){alert('このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。');return;}
