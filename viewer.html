@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-24_dup_detector_v15';
+      window.__ANINOVEL_BUILD__='2026-04-24_save_pub_fix_v16';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -193,7 +193,22 @@ function getPC(){var a=state.content.slice().sort(function(x,y){return x.order-y
 function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render()}}
 function scrollToItem(id){if(!id)return;requestAnimationFrame(function(){var el=document.querySelector('[data-cid="'+id+'"]');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})})}
-function saveData(){try{localStorage.setItem('aninovel_data',JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,darkMode:state.darkMode,timestamp:new Date().toISOString()}));state.lastSaved=new Date().toLocaleTimeString()}catch(e){console.error(e)}render()}
+function saveData(){try{
+  var wp=(typeof _workParam!=='undefined')?_workParam:null;
+  var payload={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
+  if(wp&&wp.indexOf('my_')===0){
+    if(typeof window._saveMyWork==='function'){window._saveMyWork();console.info('[Save] my_ → aninovel_my_works に保存',wp);}
+    else{console.warn('[Save] _saveMyWork未定義');}
+  }else if(wp&&wp.indexOf('pub_')===0){
+    var pub=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}');
+    if(pub[wp]){pub[wp].data=payload;pub[wp].updatedAt=new Date().toISOString();localStorage.setItem('aninovel_published_works',JSON.stringify(pub));console.info('[Save] pub_ → aninovel_published_works に保存',wp);}
+    else{console.warn('[Save] pub_ エントリなし',wp);alert('保存先(pub_)が見つかりません: '+wp);}
+  }else{
+    localStorage.setItem('aninovel_data',JSON.stringify(Object.assign({},payload,{bookmarks:state.bookmarks,darkMode:state.darkMode,timestamp:new Date().toISOString()})));
+  }
+  state.lastSaved=new Date().toLocaleTimeString();
+  if(typeof showToast==='function')showToast('保存しました');
+}catch(e){console.error('[Save]エラー',e);alert('保存エラー: '+e.message);}render()}
 function loadData(){try{var s=localStorage.getItem('aninovel_data');if(s){var d=JSON.parse(s);state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.darkMode!==undefined)state.darkMode=d.darkMode}}catch(e){console.error(e)}}
 function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,timestamp:new Date().toISOString()},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(state.novel.title||'作品')+'_'+Date.now()+'.aninovel';a.click();URL.revokeObjectURL(a.href)}
 // 音声埋込みエクスポート: IndexedDBに保存された生成音声をBase64でJSONに同梱
@@ -2721,7 +2736,8 @@ window.onload=function(){
             if(data.content)state.content=data.content;
             if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
             state.currentScreen='reader';
-            state.isAuthorMode=false;
+            // 投稿版でも作者(author/owner)としてログイン中なら作者モードを許可
+            try{var _u=JSON.parse(localStorage.getItem('aninovel_user'));var _r=_u&&(_u.roles||[_u.role||'reader']);state.isAuthorMode=!!(_u&&_u.loggedIn&&_r&&(_r.indexOf('author')>=0||_r.indexOf('owner')>=0));}catch(e){state.isAuthorMode=false;}
             render();
             _schedulePregen();
         }).catch(function(e){console.error(e);render()});
