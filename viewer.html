@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-23_tts_diag_v14';
+      window.__ANINOVEL_BUILD__='2026-04-24_dup_detector_v15';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -124,7 +124,7 @@ currentScreen:'home',isAuthorMode:false,sidebarOpen:false,settingsOpen:false,
 tocOpen:false,bookmarkListOpen:false,editModalOpen:false,colorPickerOpen:false,
 imageGalleryOpen:false,galleryTab:'photo',
 searchOpen:false,searchQuery:'',searchResults:[],searchCurrentIdx:-1,
-metaEditOpen:false,fullscreen:false,darkMode:false,
+metaEditOpen:false,fullscreen:false,darkMode:false,dupModalOpen:false,
 editingItem:null,currentPage:0,bookmarks:[],lastSaved:'未保存',draggedItem:null,readerCustom:null,readerCustomOpen:false,readerCustomCharId:null,
 tts:{active:false,paused:false,rate:1.4,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
 _scrollToId:null,
@@ -2054,7 +2054,7 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=ds
 
 function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div><button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
-function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(state.novel.title)+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 投稿</button>';h+='<button onclick="generateVoicesLocal()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="VOICEVOX (localhost:50021) でこの作品の全セリフを音声生成し、このブラウザに保存">🎤 音声生成</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
+function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(state.novel.title)+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 投稿</button>';h+='<button onclick="generateVoicesLocal()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="VOICEVOX (localhost:50021) でこの作品の全セリフを音声生成し、このブラウザに保存">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar
     h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border)"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(ch.name)+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';h+='<div class="page-footer"><button onclick="jP('+(state.currentPage-1)+')"'+(state.currentPage===0?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage===0?'opacity:.4;cursor:default':'')+'">← 前</button><div style="display:flex;align-items:center;gap:12px"><span style="font-size:13px;color:var(--text-secondary)"><strong>'+(state.currentPage+1)+'</strong> / '+tp+'</span><input type="number" min="1" max="'+tp+'" value="'+(state.currentPage+1)+'" onchange="jP(parseInt(this.value)-1)" style="width:56px;text-align:center;padding:4px;font-size:13px">'+(state.isAuthorMode?'<span style="font-size:11px;color:var(--text-muted)">💾 '+state.lastSaved+'</span>':'')+'</div><button onclick="jP('+(state.currentPage+1)+')"'+(state.currentPage>=tp-1?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage>=tp-1?'opacity:.4;cursor:default':'')+'">次 →</button></div>';if(state.settingsOpen)h+=renderSettings();if(state.tocOpen)h+=renderTOC();if(state.bookmarkListOpen)h+=renderBM();h+='</div>';return h}
 
@@ -2203,11 +2203,105 @@ function renderReaderCustomModal(){
   h+='</div></div></div>';
   return h;
 }
+// === 重複コンテンツ検出 ===
+function _normDupText(t){return (t||'').replace(/[「」『』""''\s\u3000.。、,，!！?？]/g,'');}
+function _findDuplicates(){
+  var arr=state.content.slice().sort(function(a,b){return a.order-b.order;});
+  var pairs=[];
+  for(var i=0;i<arr.length;i++){
+    if(arr[i].type==='pageBreak')continue;
+    var ni=_normDupText(arr[i].text);if(ni.length<3)continue;
+    for(var j=i+1;j<arr.length;j++){
+      if(arr[j].type==='pageBreak')continue;
+      var nj=_normDupText(arr[j].text);if(nj.length<3)continue;
+      // 距離が遠すぎるペアは除外（誤検出抑制）
+      if(Math.abs(arr[i].order-arr[j].order)>20)continue;
+      var kind=null;
+      if(ni===nj)kind='完全一致';
+      else if(ni.length>=8&&nj.length>=8&&(ni.indexOf(nj)>=0||nj.indexOf(ni)>=0)){
+        var lr=Math.min(ni.length,nj.length)/Math.max(ni.length,nj.length);
+        if(lr>=0.7)kind='包含一致('+Math.round(lr*100)+'%)';
+      }
+      if(!kind)continue;
+      // どちらを削除推奨にするか:
+      // 1. ナレーターが「キャラセリフ」を引用している場合 → ナレーター側を削除推奨
+      // 2. それ以外 → 後ろのitemを削除推奨
+      var a=arr[i],b=arr[j];
+      var aIsN=(a.type==='narration'||a.characterId==='narrator'||!a.characterId);
+      var bIsN=(b.type==='narration'||b.characterId==='narrator'||!b.characterId);
+      var suggest=b.id;
+      if(aIsN&&!bIsN)suggest=a.id;
+      else if(!aIsN&&bIsN)suggest=b.id;
+      pairs.push({a:a,b:b,kind:kind,suggest:suggest});
+    }
+  }
+  return pairs;
+}
+function _itemLabel(it){
+  if(!it)return '?';
+  if(it.type==='narration'||it.characterId==='narrator'||!it.characterId)return '📝 ナレーター';
+  var ch=state.characters.find(function(c){return c.id===it.characterId;});
+  return '💬 '+(ch?ch.name:'(不明)');
+}
+function _itemPageNo(it){
+  var arr=state.content.slice().sort(function(a,b){return a.order-b.order;});
+  var p=0;for(var k=0;k<arr.length;k++){if(arr[k].type==='pageBreak'){p++;continue;}if(arr[k].id===it.id)return p+1;}
+  return p+1;
+}
+function openDupModal(){state.dupModalOpen=true;render();}
+function closeDupModal(){state.dupModalOpen=false;render();}
+function deleteDupItem(id){
+  var it=state.content.find(function(c){return c.id===id;});
+  if(!it){showToast('既に削除済み');render();return;}
+  if(!confirm('削除しますか?\n['+_itemLabel(it)+'] '+(it.text||'').substring(0,40)))return;
+  state.content=state.content.filter(function(c){return c.id!==id;});
+  saveData&&saveData();
+  showToast('削除しました');
+  render();
+}
+function jumpToDupItem(id){
+  var it=state.content.find(function(c){return c.id===id;});
+  if(!it){showToast('既に削除済み');return;}
+  var p=_itemPageNo(it)-1;
+  state.dupModalOpen=false;
+  if(p!==state.currentPage)state.currentPage=p;
+  state._scrollToId=id;
+  render();
+}
+function renderDupModal(){
+  if(!state.dupModalOpen)return '';
+  var pairs=_findDuplicates();
+  var h='<div class="modal-overlay" onclick="if(event.target===this)closeDupModal()"><div class="modal-content" style="max-width:780px;max-height:85vh;overflow-y:auto">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="font-weight:700;font-size:16px">🔍 重複コンテンツ検出 ('+pairs.length+'件)</h3><button onclick="closeDupModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">同一テキストが複数ある箇所を表示します。ナレーター側がキャラセリフを引用しているケース等が候補です。<br>★ = 削除推奨。「ジャンプ」で本文の位置を確認できます。</p>';
+  if(!pairs.length){h+='<p style="text-align:center;color:var(--text-muted);padding:30px">重複は検出されませんでした 🎉</p>';}
+  else{
+    h+='<div style="display:flex;flex-direction:column;gap:14px">';
+    pairs.forEach(function(p,idx){
+      h+='<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-secondary)">';
+      h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">No.'+(idx+1)+' / '+esc(p.kind)+'</div>';
+      [p.a,p.b].forEach(function(it){
+        var rec=(it.id===p.suggest);
+        h+='<div style="border:'+(rec?'2px solid #F59E0B':'1px solid var(--border)')+';border-radius:6px;padding:8px;margin-bottom:6px;background:var(--bg-primary)">';
+        h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:12px;font-weight:600">'+(rec?'★ ':'')+_itemLabel(it)+'</span><span style="font-size:10px;color:var(--text-muted)">P'+_itemPageNo(it)+' / id='+esc(it.id)+'</span></div>';
+        h+='<div style="font-size:13px;line-height:1.5;color:var(--text-secondary);margin-bottom:6px;white-space:pre-wrap">'+esc((it.text||'').substring(0,200))+((it.text||'').length>200?'…':'')+'</div>';
+        h+='<div style="display:flex;gap:6px"><button onclick="jumpToDupItem(\''+it.id+'\')" class="btn btn-ghost" style="font-size:11px;padding:4px 10px">📍 ジャンプ</button><button onclick="deleteDupItem(\''+it.id+'\')" class="btn" style="font-size:11px;padding:4px 10px;background:#FEE2E2;color:#DC2626">🗑️ 削除</button></div>';
+        h+='</div>';
+      });
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  h+='<div style="display:flex;justify-content:flex-end;margin-top:16px"><button onclick="closeDupModal()" class="btn btn-ghost">閉じる</button></div>';
+  h+='</div></div>';
+  return h;
+}
+
 function render(){
   _clearAllLipSync(); // DOM再構築前にcanvasアニメ停止
   _ec={};_acts=[];
   document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
-  document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar();
+  document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();
   if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動
@@ -2498,6 +2592,7 @@ window.openEditModal=openEditModal;window.closeEditModal=closeEditModal;window.s
 window.toggleDarkMode=toggleDarkMode;window.performSearch=performSearch;window.navSearch=navSearch;
 window.showToast=showToast;window.toFullWidth=toFullWidth;window.triggerEdit=triggerEdit;
 window.cacheForEdit=cacheForEdit;window.dblClickChar=dblClickChar;window._ec=_ec;window._acts=_acts;
+window.openDupModal=openDupModal;window.closeDupModal=closeDupModal;window.deleteDupItem=deleteDupItem;window.jumpToDupItem=jumpToDupItem;
 
 
 // ===== PORTAL INTEGRATION =====
