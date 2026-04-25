@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-24_voice_override_v19';
+      window.__ANINOVEL_BUILD__='2026-04-24_voice_override_v20';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -1726,13 +1726,18 @@ function _speakItem(item,onEnd){
   }
   _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
-  // 読者が音声をカスタム指定している場合は事前生成音声を使わず Web Speech 側で再生
-  // (事前生成は作者指定の話者で固定されているため、ユーザの音声変更が反映されない)
-  var _rcVoice=null;
-  try{var _rcEntry=ch&&state.readerCustom&&state.readerCustom[ch.id];if(_rcEntry&&_rcEntry.ttsVoice)_rcVoice=_rcEntry.ttsVoice;}catch(e){}
-  if(_rcVoice && _hasPreAudio(item.id)){console.info('[TTS] 事前生成音声をスキップ (読者音声設定あり) item='+item.id+' ch='+(ch&&ch.name)+' voice='+_rcVoice);}
+  // 音声オーバーライドが設定されている場合は事前生成音声を使わず Web Speech 側で再生
+  // (事前生成はビルド時の話者で固定されているため、ユーザの音声変更が反映されない)
+  // オーバーライド元は2系統: ① 作者編集の character.ttsVoice ② 読者カスタムの readerCustom[id].ttsVoice
+  var _voiceOverride=null,_voiceOverrideSrc=null;
+  try{
+    var _rcEntry=ch&&state.readerCustom&&state.readerCustom[ch.id];
+    if(_rcEntry&&_rcEntry.ttsVoice){_voiceOverride=_rcEntry.ttsVoice;_voiceOverrideSrc='readerCustom';}
+    else if(ch&&ch.ttsVoice){_voiceOverride=ch.ttsVoice;_voiceOverrideSrc='character';}
+  }catch(e){}
+  if(_voiceOverride && _hasPreAudio(item.id)){console.info('[TTS] 事前生成音声をスキップ (音声オーバーライド: '+_voiceOverrideSrc+') item='+item.id+' ch='+(ch&&ch.name)+' voice='+_voiceOverride);}
   // 最優先: 事前生成音声 (VOICEVOX) があればそれを使用 (音声オーバーライド未設定時のみ)
-  if(!_rcVoice && _hasPreAudio(item.id)){
+  if(!_voiceOverride && _hasPreAudio(item.id)){
     _preAudioCtrl=_speakItemAudio(item,ch,mySession,applyCharId,
       function(){if(mySession!==_speakSessionId)return;_preAudioCtrl=null;safeEnd();},
       function(err){
