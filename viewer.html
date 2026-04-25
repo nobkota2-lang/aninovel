@@ -9,7 +9,7 @@
     <title>アニノベル - 完全版</title>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-24_voice_override_v20';
+      window.__ANINOVEL_BUILD__='2026-04-24_bundled_override_v21';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
       if('serviceWorker' in navigator){
@@ -203,6 +203,13 @@ function saveData(){try{
     var pub=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}');
     if(pub[wp]){pub[wp].data=payload;pub[wp].updatedAt=new Date().toISOString();localStorage.setItem('aninovel_published_works',JSON.stringify(pub));console.info('[Save] pub_ → aninovel_published_works に保存',wp);}
     else{console.warn('[Save] pub_ エントリなし',wp);alert('保存先(pub_)が見つかりません: '+wp);}
+  }else if(wp){
+    // 同梱作品(リポジトリ配信のJSON)のオーバーライドを localStorage に保存
+    // → 次回ロード時に静的JSONにマージされる
+    var ov=JSON.parse(localStorage.getItem('aninovel_bundled_overrides')||'{}');
+    ov[wp]={data:payload,updatedAt:new Date().toISOString()};
+    localStorage.setItem('aninovel_bundled_overrides',JSON.stringify(ov));
+    console.info('[Save] 同梱作品 → aninovel_bundled_overrides に保存',wp);
   }else{
     localStorage.setItem('aninovel_data',JSON.stringify(Object.assign({},payload,{bookmarks:state.bookmarks,darkMode:state.darkMode,timestamp:new Date().toISOString()})));
   }
@@ -2746,6 +2753,21 @@ window.onload=function(){
             if(data.characters)state.characters=data.characters;
             if(data.content)state.content=data.content;
             if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
+            // 同梱作品オーバーライド適用 (pub_/my_ 以外のとき)
+            if(_workParam.indexOf('pub_')!==0&&_workParam.indexOf('my_')!==0){
+              try{
+                var _ov=JSON.parse(localStorage.getItem('aninovel_bundled_overrides')||'{}');
+                var _od=_ov[_workParam]&&_ov[_workParam].data;
+                if(_od){
+                  if(_od.novel)state.novel=_od.novel;
+                  if(_od.chapters)state.chapters=_od.chapters;
+                  if(_od.characters)state.characters=_od.characters;
+                  if(_od.content)state.content=_od.content;
+                  if(_od.displaySettings)Object.assign(state.displaySettings,_od.displaySettings);
+                  console.info('[Load] 同梱作品オーバーライド適用',_workParam,'updatedAt='+_ov[_workParam].updatedAt);
+                }
+              }catch(e){console.warn('[Load] オーバーライド読込失敗',e);}
+            }
             state.currentScreen='reader';
             // 投稿版でも作者(author/owner)としてログイン中なら作者モードを許可
             try{var _u=JSON.parse(localStorage.getItem('aninovel_user'));var _r=_u&&(_u.roles||[_u.role||'reader']);state.isAuthorMode=!!(_u&&_u.loggedIn&&_r&&(_r.indexOf('author')>=0||_r.indexOf('owner')>=0));}catch(e){state.isAuthorMode=false;}
