@@ -54,6 +54,7 @@
   }
   </script>
   <link rel="stylesheet" href="css/portal.css">
+  <link rel="stylesheet" href="css/a11y.css">
 </head>
 <body>
 
@@ -143,7 +144,7 @@
 </section>
 
 <!-- メインコンテンツ -->
-<main class="portal-container">
+<main id="main" class="portal-container">
 
   <!-- 作品一覧 -->
   <h2 class="section-title"><span class="icon">&#x1F4DA;</span>作品一覧</h2>
@@ -177,6 +178,7 @@
     <a href="legal/privacy.html">プライバシーポリシー</a>
     <a href="legal/tokushoho.html">特商法表記</a>
     <a href="legal/dmca.html" data-i18n="nav.dmca">著作権窓口</a>
+    <a href="legal/accessibility.html">アクセシビリティ</a>
     <a href="#" data-i18n="nav.plan" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">💎 プラン</a>
     <a href="#" data-i18n="nav.share" data-aninovel-share="auto" data-share-title="アニノベル - アニメ風吹き出しで読むオリジナル小説">📤 シェア</a>
     <a href="#" data-i18n="nav.newsletter" onclick="if(window.AninovelNewsletter)AninovelNewsletter.openSubscribeModal();return false;">📬 メルマガ購読</a>
@@ -207,6 +209,7 @@
   // window.ANINOVEL_ERROR_SAMPLE=0.1;
 </script>
 <script src="js/error-monitor.js" defer></script>
+<script src="js/a11y.js" defer></script>
 <script>document.addEventListener('DOMContentLoaded',function(){var s=document.getElementById('aninovel-lang-slot');if(s&&window.AninovelI18n)AninovelI18n.renderSwitcher(s);});</script>
 <!-- 解析・同意バナー (ID は商用化時に置換) -->
 <script>

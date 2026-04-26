@@ -1,0 +1,84 @@
+/* アニノベル アクセシビリティ補強CSS
+ * すべてのページで読込推奨
+ */
+
+/* === スキップリンク (Tab最初に「本文へスキップ」が出る) === */
+.aninovel-skip-link{
+  position:absolute;
+  top:-40px;
+  left:8px;
+  background:#C0392B;
+  color:#fff;
+  padding:8px 14px;
+  border-radius:0 0 6px 6px;
+  text-decoration:none;
+  font-weight:600;
+  z-index:100000;
+  font-size:14px;
+}
+.aninovel-skip-link:focus{
+  top:0;
+}
+
+/* === フォーカスリング統一 === */
+*:focus-visible{
+  outline:3px solid #6366F1 !important;
+  outline-offset:2px !important;
+  border-radius:4px;
+}
+button:focus-visible,
+a:focus-visible{
+  outline-offset:3px !important;
+}
+
+/* === スクリーンリーダ専用テキスト === */
+.aninovel-sr-only{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+
+/* === prefers-reduced-motion 対応 === */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+/* === prefers-contrast: more 対応 === */
+@media (prefers-contrast: more){
+  body{color:#000 !important;background:#fff !important;}
+  a{text-decoration:underline !important;}
+  button,input,select,textarea{border:2px solid #000 !important;}
+}
+
+/* === タッチターゲット最小44pxの推奨 (アイコンボタン) === */
+.btn-icon,
+button.btn-sm{
+  min-width:44px;
+  min-height:44px;
+}
+
+/* === コントラスト改善 === */
+:root{
+  /* 元: --text-muted:#A39E96 (3.5:1) → AAクリア */
+  --text-muted: #6B635A; /* 7:1 達成 */
+}
+[data-theme="dark"]{
+  --text-muted: #B8B0A8;
+}
+
+/* === 自動再生・点滅の抑制 === */
+.aninovel-no-autoplay video,
+.aninovel-no-autoplay audio{
+  autoplay: false;
+}
