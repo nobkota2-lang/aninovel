@@ -1,0 +1,25 @@
+name: Lighthouse CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for GitHub Pages deploy
+        if: github.event_name == 'push'
+        run: sleep 60
+      - uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            https://nobkota2-lang.github.io/aninovel/
+            https://nobkota2-lang.github.io/aninovel/manual.html
+            https://nobkota2-lang.github.io/aninovel/viewer.html?work=mystery-garden
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          configPath: ./lighthouserc.json
