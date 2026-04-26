@@ -177,6 +177,7 @@
     <a href="legal/privacy.html">プライバシーポリシー</a>
     <a href="legal/tokushoho.html">特商法表記</a>
     <a href="legal/dmca.html">著作権窓口</a>
+    <a href="#" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">💎 プラン</a>
   </div>
   <p class="note">アニノベル &copy; 2026 — Phase 1 ローカル版</p>
 </footer>
@@ -190,6 +191,11 @@
   // window.ANINOVEL_AD_SLOTS={inline:'XXXXXXXXXX',sidebar:'XXXXXXXXXX',footer:'XXXXXXXXXX'};
 </script>
 <script src="js/ads.js" defer></script>
+<script>
+  // window.ANINOVEL_BILLING_API='https://api.aninovel.com';
+  // window.ANINOVEL_STRIPE_PRICES={'reader-premium-monthly':'price_xxx','author-pro-monthly':'price_yyy'};
+</script>
+<script src="js/billing.js" defer></script>
 <!-- 解析・同意バナー (ID は商用化時に置換) -->
 <script>
   // window.ANINOVEL_GA4_ID='G-XXXXXXXXXX';
