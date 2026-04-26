@@ -163,6 +163,11 @@
 
 </main>
 
+<!-- 広告枠 (作品一覧の下) -->
+<div class="portal-container" style="margin:32px auto">
+  <div class="aninovel-ad" data-slot="footer" data-format="auto" style="min-height:90px"></div>
+</div>
+
 <!-- フッター -->
 <footer class="portal-footer">
   <div class="footer-links">
@@ -179,6 +184,12 @@
 <script src="js/anti-piracy.js" defer></script>
 <script src="js/services.js"></script>
 <script src="js/portal.js"></script>
+<!-- 広告枠 (PublisherID 設定後に有効化) -->
+<script>
+  // window.ANINOVEL_ADSENSE_PUBLISHER='ca-pub-XXXXXXXXXXXXXXXX';
+  // window.ANINOVEL_AD_SLOTS={inline:'XXXXXXXXXX',sidebar:'XXXXXXXXXX',footer:'XXXXXXXXXX'};
+</script>
+<script src="js/ads.js" defer></script>
 <!-- 解析・同意バナー (ID は商用化時に置換) -->
 <script>
   // window.ANINOVEL_GA4_ID='G-XXXXXXXXXX';
