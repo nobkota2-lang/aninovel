@@ -1,0 +1,23 @@
+# アニノベル robots.txt
+User-agent: *
+Allow: /
+Disallow: /lipsync_batch.html
+Disallow: /scripts/
+Disallow: /data/audio/
+Disallow: /data/lipsync/
+
+# 海賊サイト構築ツールはブロック
+User-agent: HTTrack
+Disallow: /
+User-agent: WebCopier
+Disallow: /
+User-agent: WebZIP
+Disallow: /
+User-agent: SiteSnagger
+Disallow: /
+User-agent: ProWebWalker
+Disallow: /
+User-agent: CheeseBot
+Disallow: /
+
+Sitemap: https://nobkota2-lang.github.io/aninovel/sitemap.xml

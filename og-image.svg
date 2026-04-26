@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2D2A26"/>
+      <stop offset="50%" stop-color="#4A3728"/>
+      <stop offset="100%" stop-color="#6B4423"/>
+    </linearGradient>
+    <pattern id="dots" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M30 0L60 30L30 60L0 30z" fill="none" stroke="#ffffff" stroke-width="0.4" opacity="0.06"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <!-- 縦書きの巨大装飾文字 -->
+  <text x="1080" y="320" font-family="serif" font-size="380" font-weight="700" fill="#ffffff" opacity="0.04" text-anchor="middle" writing-mode="tb">物語</text>
+  <!-- メインタイトル -->
+  <text x="80" y="280" font-family="'Noto Serif JP',serif" font-size="96" font-weight="700" fill="#FAF6F0" letter-spacing="8">アニノベル</text>
+  <text x="80" y="350" font-family="'Noto Sans JP',sans-serif" font-size="28" fill="#FAF6F0" opacity="0.75">アニメ風吹き出しで読む</text>
+  <text x="80" y="395" font-family="'Noto Sans JP',sans-serif" font-size="28" fill="#FAF6F0" opacity="0.75">オリジナル小説プラットフォーム</text>
+  <!-- 装飾線 -->
+  <line x1="80" y1="445" x2="280" y2="445" stroke="#C0392B" stroke-width="3"/>
+  <text x="80" y="500" font-family="'Noto Sans JP',sans-serif" font-size="20" fill="#FAF6F0" opacity="0.5">読者・作者、2つのモードで物語の世界を</text>
+</svg>
