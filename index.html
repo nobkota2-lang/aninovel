@@ -9,6 +9,13 @@
   <meta name="author" content="アニノベル">
   <meta name="theme-color" content="#3D3A36">
   <link rel="canonical" href="https://nobkota2-lang.github.io/aninovel/">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/icon-192.svg">
+  <script>
+    if('serviceWorker' in navigator){
+      window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(e){console.warn('[PWA] SW登録失敗',e);});});
+    }
+  </script>
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="アニノベル">

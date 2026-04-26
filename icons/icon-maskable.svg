@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3D3A36"/>
+      <stop offset="100%" stop-color="#6B4423"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="80" fill="url(#g)"/>
+  <!-- 開いた本 -->
+  <g transform="translate(256,260)">
+    <path d="M-140 -60 Q-140 -90 -110 -90 L-10 -90 L-10 90 L-110 90 Q-140 90 -140 60 Z" fill="#FAF6F0" stroke="#C0392B" stroke-width="4"/>
+    <path d="M140 -60 Q140 -90 110 -90 L10 -90 L10 90 L110 90 Q140 90 140 60 Z" fill="#FAF6F0" stroke="#C0392B" stroke-width="4"/>
+    <line x1="0" y1="-90" x2="0" y2="90" stroke="#C0392B" stroke-width="4"/>
+    <!-- 文字行 -->
+    <line x1="-115" y1="-50" x2="-25" y2="-50" stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="-115" y1="-25" x2="-35" y2="-25" stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="-115" y1="0"   x2="-25" y2="0"   stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="-115" y1="25"  x2="-45" y2="25"  stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="25"   y1="-50" x2="115" y2="-50" stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="25"   y1="-25" x2="105" y2="-25" stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="25"   y1="0"   x2="115" y2="0"   stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+    <line x1="25"   y1="25"  x2="95"  y2="25"  stroke="#3D3A36" stroke-width="3" opacity="0.4"/>
+  </g>
+  <!-- 吹き出し -->
+  <g transform="translate(370,140)">
+    <ellipse cx="0" cy="0" rx="60" ry="40" fill="#C0392B"/>
+    <path d="M-30 30 L-50 50 L-15 35 Z" fill="#C0392B"/>
+    <text x="0" y="6" text-anchor="middle" font-family="serif" font-size="28" fill="#fff" font-weight="700">!</text>
+  </g>
+  <!-- ロゴテキスト -->
+  <text x="256" y="450" text-anchor="middle" font-family="serif" font-size="56" font-weight="700" fill="#FAF6F0" letter-spacing="6">アニノベル</text>
+</svg>

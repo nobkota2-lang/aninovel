@@ -20,15 +20,28 @@
     <meta name="twitter:image" content="https://nobkota2-lang.github.io/aninovel/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-24_bundled_override_v21';
+      window.__ANINOVEL_BUILD__='2026-04-26_pwa_v22';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
-      // 古いService Workerが残っていたら解除(過去版のキャッシュ防止)
+      // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
-        navigator.serviceWorker.getRegistrations().then(function(rs){
-          rs.forEach(function(r){r.unregister();console.info('[Aninovel] ServiceWorker解除:',r.scope);});
-        }).catch(function(){});
+        window.addEventListener('load',function(){
+          navigator.serviceWorker.register('./sw.js').then(function(reg){
+            console.info('[PWA] SW登録成功 scope=',reg.scope);
+            // 更新検知
+            reg.addEventListener('updatefound',function(){
+              var w=reg.installing;if(!w)return;
+              w.addEventListener('statechange',function(){
+                if(w.state==='installed'&&navigator.serviceWorker.controller){
+                  console.info('[PWA] 新バージョン検出。次回ロードで反映されます。');
+                }
+              });
+            });
+          }).catch(function(e){console.warn('[PWA] SW登録失敗',e);});
+        });
       }
     </script>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icons/icon-192.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
