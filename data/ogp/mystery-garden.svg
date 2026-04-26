@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2D2A26"/>
+      <stop offset="55%" stop-color="#4A3728"/>
+      <stop offset="100%" stop-color="#6B4423"/>
+    </linearGradient>
+    <pattern id="dots" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M30 0L60 30L30 60L0 30z" fill="none" stroke="#ffffff" stroke-width="0.4" opacity="0.05"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <text x="1160" y="320" font-family="serif" font-size="380" font-weight="700" fill="#ffffff" opacity="0.04" text-anchor="end" writing-mode="tb">物語</text>
+  <text x="80" y="120" font-family="'Noto Serif JP',serif" font-size="22" fill="#10B981" font-weight="700" letter-spacing="6">アニノベル</text>
+  <line x1="80" y1="140" x2="220" y2="140" stroke="#10B981" stroke-width="2"/>
+  <text x="80" y="230" font-family="'Noto Serif JP',serif" font-size="76" font-weight="700" fill="#FAF6F0" letter-spacing="4">秘密の庭</text>
+  
+  <text x="80" y="570" font-family="'Noto Sans JP',sans-serif" font-size="20" fill="#FAF6F0" opacity="0.6">作: 鈴木花子</text>
+  
+</svg>

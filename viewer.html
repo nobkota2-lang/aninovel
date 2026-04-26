@@ -2642,6 +2642,17 @@ window.openDupModal=openDupModal;window.closeDupModal=closeDupModal;window.delet
 // ===== PORTAL INTEGRATION =====
 var _workParam=(new URLSearchParams(window.location.search)).get('work');
 var _portalMode=!!_workParam;
+// 作品別OGP画像を動的に差替え (SNSクローラはJS実行しないので主に直接アクセスSEO向上用)
+(function(){
+  if(!_workParam) return;
+  var safe=encodeURIComponent(_workParam);
+  var ogpUrl='https://nobkota2-lang.github.io/aninovel/data/ogp/'+safe+'.svg';
+  function setMeta(sel,attr,val){var m=document.querySelector(sel);if(m)m.setAttribute(attr,val);}
+  setMeta('meta[property="og:image"]','content',ogpUrl);
+  setMeta('meta[name="twitter:image"]','content',ogpUrl);
+  setMeta('link[rel="canonical"]','href','https://nobkota2-lang.github.io/aninovel/viewer.html?work='+safe);
+  setMeta('meta[property="og:url"]','content','https://nobkota2-lang.github.io/aninovel/viewer.html?work='+safe);
+})();
 
 function goHome(){
     if(_portalMode){window.location.href='index.html'}

@@ -7,6 +7,8 @@
     "build-voices": "node scripts/build-voices.mjs",
     "build-voices:summer": "node scripts/build-voices.mjs summer-adventure",
     "build-voices:mystery": "node scripts/build-voices.mjs mystery-garden",
-    "build-voices:starlight": "node scripts/build-voices.mjs starlight-cafe"
+    "build-voices:starlight": "node scripts/build-voices.mjs starlight-cafe",
+    "build-ogp": "node scripts/build-ogp.mjs",
+    "build-all": "npm run build-voices && npm run build-ogp"
   }
 }
