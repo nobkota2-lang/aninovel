@@ -113,15 +113,23 @@
     return d[key]||DICT[DEFAULT_LANG][key]||key;
   }
 
+  var _applying=false;
   function applyToDOM(){
-    document.documentElement.lang=currentLang;
-    document.querySelectorAll('[data-i18n]').forEach(function(el){
-      var key=el.dataset.i18n;
-      var val=t(key);
-      var attr=el.dataset.i18nAttr;
-      if(attr)el.setAttribute(attr,val);
-      else el.textContent=val;
-    });
+    if(_applying)return; // MutationObserver無限ループ防止
+    _applying=true;
+    try{
+      document.documentElement.lang=currentLang;
+      document.querySelectorAll('[data-i18n]').forEach(function(el){
+        var key=el.dataset.i18n;
+        var val=t(key);
+        var attr=el.dataset.i18nAttr;
+        if(attr){if(el.getAttribute(attr)!==val)el.setAttribute(attr,val);}
+        else{if(el.textContent!==val)el.textContent=val;}
+      });
+    }finally{
+      // 自分が起こしたMutationが届く前に待ってから解除
+      setTimeout(function(){_applying=false;},0);
+    }
   }
 
   function setLang(lang){
@@ -149,9 +157,24 @@
   if(document.readyState!=='loading')applyToDOM();
   else document.addEventListener('DOMContentLoaded',applyToDOM);
 
-  // 動的追加要素にも対応
+  // 動的追加要素にも対応(childListのみ・親要素を限定してパフォーマンス確保)
   if(typeof MutationObserver!=='undefined'){
-    new MutationObserver(applyToDOM).observe(document.documentElement,{childList:true,subtree:true});
+    var _scheduled=false;
+    var obs=new MutationObserver(function(muts){
+      if(_applying||_scheduled)return;
+      // 新しく追加された要素に data-i18n が含まれている場合のみ再適用
+      var hasI18n=muts.some(function(m){
+        for(var i=0;i<m.addedNodes.length;i++){
+          var n=m.addedNodes[i];
+          if(n.nodeType===1&&(n.matches&&(n.matches('[data-i18n]')||n.querySelector('[data-i18n]'))))return true;
+        }
+        return false;
+      });
+      if(!hasI18n)return;
+      _scheduled=true;
+      requestAnimationFrame(function(){_scheduled=false;applyToDOM();});
+    });
+    obs.observe(document.body||document.documentElement,{childList:true,subtree:true});
   }
 
   window.AninovelI18n={

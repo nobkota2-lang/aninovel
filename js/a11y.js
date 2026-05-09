@@ -88,8 +88,14 @@
     ensureLiveRegion();
     observeModals();
     checkAltTags();
-    // 動的追加にも対応
-    new MutationObserver(observeModals).observe(document.body,{childList:true,subtree:true});
+    // 動的追加にも対応(無限ループ防止: childListのみ、debounce)
+    var _t=null;
+    new MutationObserver(function(muts){
+      var hasNew=muts.some(function(m){return m.addedNodes&&m.addedNodes.length>0;});
+      if(!hasNew)return;
+      if(_t)return;
+      _t=setTimeout(function(){_t=null;observeModals();},100);
+    }).observe(document.body,{childList:true,subtree:false});
   }
   if(document.readyState!=='loading')init();
   else document.addEventListener('DOMContentLoaded',init);

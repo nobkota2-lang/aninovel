@@ -124,10 +124,14 @@
     });
   }
 
-  // 動的追加にも対応
+  // 動的追加にも対応(debounce、無限ループ防止)
   if(document.readyState!=='loading')bindAuto();
   document.addEventListener('DOMContentLoaded',bindAuto);
-  new MutationObserver(bindAuto).observe(document.documentElement,{childList:true,subtree:true});
+  var _shareT=null;
+  new MutationObserver(function(){
+    if(_shareT)return;
+    _shareT=setTimeout(function(){_shareT=null;bindAuto();},150);
+  }).observe(document.body||document.documentElement,{childList:true,subtree:true});
 
   window.AninovelShare={openMenu:openMenu,open:open,copyLink:copyLink,nativeShare:nativeShare};
 })();
