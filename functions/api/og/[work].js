@@ -16,17 +16,23 @@
  *
  * 注意:
  *   一部SNS (古いLINE等) はSVGをサポートしない可能性がある。
- *   完璧を期すなら resvg や satori でPNG化するが、Workersのバンドル制限的に
- *   SVGをCloudflareのImage Resizing経由で配信するのが現実的。
- *
- * Image Resizing 利用 (有料、$5/月で500万リクエスト):
+ *   完璧を期すなら Cloudflare Image Resizing 経由でPNG化:
  *   <meta property="og:image" content="/cdn-cgi/image/format=png,width=1200,height=630/api/og/mystery-garden.svg">
  *
  * 必要: なし (静的JSON参照のみ)
+ *
+ * データスキーマ (アニノベルv2.2):
+ *   {
+ *     "version": "2.2",
+ *     "novel": {"title": "秘密の庭", "author": "鈴木花子"},
+ *     "chapters": [{"title": "第1章...", ...}],
+ *     "content": [{"type":"narration|dialogue|pageBreak", "text":"...", ...}],
+ *     "characters": [...]
+ *   }
  */
 
 export async function onRequest(context) {
-  const { params, request, env } = context;
+  const { params, request } = context;
   const workId = (params.work || '').replace(/\.(svg|png|jpg|jpeg)$/i, '');
 
   // 作品データ取得 (data/works/{id}.json)
@@ -36,31 +42,74 @@ export async function onRequest(context) {
     const origin = `${url.protocol}//${url.host}`;
     const r = await fetch(`${origin}/data/works/${encodeURIComponent(workId)}.json`);
     if (r.ok) work = await r.json();
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[og] fetch failed:', e);
+  }
 
   if (!work) {
-    // 作品が見つからない場合はデフォルトOGPを返す
     return svgResponse(buildDefaultOGP());
   }
 
-  return svgResponse(buildOGP(work));
+  return svgResponse(buildOGP(extractInfo(work, workId)));
+}
+
+// ===== 作品データの正規化 (v2.2スキーマ + 古い・新しい両方サポート) =====
+
+function extractInfo(work, workId) {
+  // タイトル・著者: novel ネストまたはトップレベル
+  const novel = work.novel || {};
+  const title = String(novel.title || work.title || '').trim();
+  const author = String(novel.author || work.author || '').trim();
+
+  // 説明文: 明示的なフィールドがなければ最初の narration/dialogue から
+  let description = String(work.description || work.summary || '').trim();
+  if (!description && Array.isArray(work.content)) {
+    const firstText = work.content.find(
+      c => c && c.text && (c.type === 'narration' || c.type === 'dialogue')
+    );
+    if (firstText) description = String(firstText.text);
+  }
+
+  // 文字数: 明示またはcontent配列から計算
+  let charCount = parseInt(work.totalChars || work.charCount || 0, 10);
+  if (!charCount && Array.isArray(work.content)) {
+    charCount = work.content.reduce((sum, c) => {
+      return sum + (c && c.text ? String(c.text).length : 0);
+    }, 0);
+  }
+
+  // ページ数: pageBreak の数 + 1
+  let pageCount = parseInt(work.totalPages || work.pageCount || 0, 10);
+  if (!pageCount && Array.isArray(work.content)) {
+    pageCount = work.content.filter(c => c && c.type === 'pageBreak').length + 1;
+  }
+
+  // 章数: chapters の数
+  let chapterCount = Array.isArray(work.chapters) ? work.chapters.length : 0;
+
+  // 投票数 (将来の機能用、現状なし)
+  const voteCount = parseInt(work.totalVotes || work.voteCount || 0, 10);
+
+  return {
+    id: workId,
+    title: title || '無題',
+    author: author || '匿名',
+    description,
+    charCount,
+    pageCount,
+    chapterCount,
+    voteCount,
+  };
 }
 
 // ===== SVG生成 =====
 
-function buildOGP(work) {
-  const title = (work.title || '無題').slice(0, 30);
-  const author = (work.author || '匿名').slice(0, 24);
-  const desc = (work.description || work.summary || '').slice(0, 80);
-  const charCount = work.totalChars || work.charCount || 0;
-  const pageCount = work.totalPages || work.pageCount || 0;
-
-  // タイトルが長い場合の改行 (10文字毎)
-  const titleLines = wrapText(title, 14);
+function buildOGP(info) {
+  const titleLines = wrapText(info.title.slice(0, 30), 14);
   const titleFontSize = titleLines.length > 1 ? 60 : 72;
 
-  // ランダム背景バリエーション (作品IDからシード)
-  const variant = hashSeed(work.id || work.workId || title) % 5;
+  // テーマ色 (作品IDのハッシュで決定論的に決まる)
+  const variant = hashSeed(info.id || info.title) % 5;
   const themes = [
     { bg: '#2D2A26', accent: '#C0392B', light: '#FFB39B', sub: '#FAF6F0' },  // ノクターン
     { bg: '#1B3A4B', accent: '#FF9F1C', light: '#FFD7A8', sub: '#FAF6F0' },  // 黄昏
@@ -70,10 +119,15 @@ function buildOGP(work) {
   ];
   const t = themes[variant];
 
+  // 統計バッジ
   const stats = [];
-  if (pageCount > 0) stats.push(`📖 ${pageCount}ページ`);
-  if (charCount > 0) stats.push(`📝 ${formatNum(charCount)}文字`);
-  if (work.totalVotes > 0) stats.push(`❤ ${work.totalVotes}票`);
+  if (info.pageCount > 0) stats.push(`$D83D$DCD6 ${info.pageCount}ページ`);
+  if (info.charCount > 0) stats.push(`$D83D$DCDD ${formatNum(info.charCount)}文字`);
+  if (info.chapterCount > 0) stats.push(`$D83D$DCDA ${info.chapterCount}章`);
+  if (info.voteCount > 0) stats.push(`$2764 ${info.voteCount}`);
+
+  // 説明文ラップ
+  const descLines = info.description ? wrapText(info.description.slice(0, 80), 36).slice(0, 2) : [];
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
@@ -110,19 +164,19 @@ function buildOGP(work) {
   `).join('')}
 
   <!-- 著者 -->
-  <text x="120" y="${250 + titleLines.length * (titleFontSize + 8) + 24}" font-family="'Hiragino Sans',sans-serif" font-size="22" fill="${t.light}" opacity="0.9">作者: ${escapeXml(author)}</text>
+  <text x="120" y="${250 + titleLines.length * (titleFontSize + 8) + 24}" font-family="'Hiragino Sans',sans-serif" font-size="22" fill="${t.light}" opacity="0.95">作: ${escapeXml(info.author)}</text>
 
-  <!-- 説明 (任意) -->
-  ${desc ? `
-  <text x="120" y="${250 + titleLines.length * (titleFontSize + 8) + 64}" font-family="'Hiragino Mincho ProN',serif" font-size="20" fill="${t.sub}" opacity="0.65" font-style="italic">${escapeXml(wrapText(desc, 36)[0])}</text>
-  ` : ''}
+  <!-- 説明 (1$301C2行) -->
+  ${descLines.map((line, i) => `
+  <text x="120" y="${250 + titleLines.length * (titleFontSize + 8) + 64 + i * 28}" font-family="'Hiragino Mincho ProN',serif" font-size="20" fill="${t.sub}" opacity="0.65" font-style="italic">${escapeXml(line)}</text>
+  `).join('')}
 
-  <!-- 統計 (右下) -->
+  <!-- 統計 (左下) -->
   ${stats.length > 0 ? `
   <g transform="translate(120, 530)">
-    <rect x="0" y="0" width="${stats.length * 200}" height="48" rx="24" fill="${t.bg}" stroke="${t.accent}" stroke-width="2" stroke-opacity="0.4"/>
+    <rect x="0" y="0" width="${stats.length * 180}" height="48" rx="24" fill="${t.bg}" stroke="${t.accent}" stroke-width="2" stroke-opacity="0.4"/>
     ${stats.map((s, i) => `
-    <text x="${i * 200 + 20}" y="32" font-family="'Hiragino Sans',sans-serif" font-size="18" fill="${t.sub}" opacity="0.95">${escapeXml(s)}</text>
+    <text x="${i * 180 + 20}" y="32" font-family="'Hiragino Sans',sans-serif" font-size="17" fill="${t.sub}" opacity="0.95">${escapeXml(s)}</text>
     `).join('')}
   </g>
   ` : ''}
@@ -132,7 +186,7 @@ function buildOGP(work) {
   <circle cx="1050" cy="120" r="50" fill="none" stroke="${t.light}" stroke-width="1" opacity="0.4"/>
   <text x="1050" y="128" font-family="'Hiragino Mincho ProN',serif" font-size="32" fill="${t.accent}" text-anchor="middle" opacity="0.9">物</text>
 
-  <!-- 装飾: 右下の漢字 -->
+  <!-- 装飾: 右下の漢字 (薄く大きく) -->
   <text x="1080" y="580" font-family="'Hiragino Mincho ProN',serif" font-size="120" fill="${t.accent}" opacity="0.08" text-anchor="end">語</text>
 
   <!-- URL -->
@@ -166,7 +220,6 @@ function escapeXml(s) {
 }
 
 function wrapText(text, maxLen) {
-  // 日本語向けの簡易ラップ (語の境界を見ない、文字数のみ)
   const lines = [];
   let cur = '';
   for (const c of text) {
@@ -206,7 +259,6 @@ function svgResponse(svg) {
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
       'Cache-Control': 'public, max-age=3600, s-maxage=86400',
-      // 検索エンジンに優しく
       'X-Robots-Tag': 'noindex',
     }
   });
