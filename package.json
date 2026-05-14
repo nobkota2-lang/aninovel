@@ -1,14 +1,29 @@
 {
   "name": "aninovel",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "アニメ風吹き出しで読むオリジナル小説プラットフォーム",
   "private": true,
-  "type": "module",
   "scripts": {
-    "build-voices": "node scripts/build-voices.mjs",
-    "build-voices:summer": "node scripts/build-voices.mjs summer-adventure",
-    "build-voices:mystery": "node scripts/build-voices.mjs mystery-garden",
-    "build-voices:starlight": "node scripts/build-voices.mjs starlight-cafe",
-    "build-ogp": "node scripts/build-ogp.mjs",
-    "build-all": "npm run build-voices && npm run build-ogp"
+    "build": "bash scripts/build.sh",
+    "build:obf": "OBFUSCATE=1 bash scripts/build.sh",
+    "fill-legal": "node scripts/fill-legal-placeholders.cjs",
+    "dev": "wrangler pages dev dist --port 8788 --compatibility-date=2025-05-01 --compatibility-flag=nodejs_compat",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=aninovel --branch=main",
+    "deploy:preview": "npm run build && wrangler pages deploy dist --project-name=aninovel --branch=preview",
+    "logs": "wrangler pages deployment tail --project-name=aninovel",
+    "validate:legal": "node scripts/fill-legal-placeholders.cjs --check",
+    "kv:create": "echo 'See README - KVは Cloudflare ダッシュボードで作成し、Pages > Functions で binding する'",
+    "test:csp": "echo 'CSP テスト: https://csp-evaluator.withgoogle.com/ で _headers の Content-Security-Policy をペースト'",
+    "stripe:listen": "stripe listen --forward-to localhost:8788/api/billing/stripe-webhook"
+  },
+  "devDependencies": {
+    "html-minifier-terser": "^7.2.0",
+    "terser": "^5.31.0",
+    "clean-css-cli": "^5.6.3",
+    "javascript-obfuscator": "^4.1.0",
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

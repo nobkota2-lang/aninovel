@@ -1,42 +1,101 @@
-# Cloudflare Pages headers
-# (GitHub Pages では無視されます。Cloudflare Pages 移行時に自動適用)
+# =============================================================================
+# アニノベル Cloudflare Pages _headers
+# 配置: ビルド出力ルート (publishディレクトリのトップ)
+#
+# 注意:
+#   現状 viewer.html に 218KB の inline JS があるため 'unsafe-inline' が必要。
+#   将来 inline JS を外部化したらnonce方式に変更 (より安全)。
+# =============================================================================
 
-# === キャッシュ戦略 ===
-/*.wav
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.css
-  Cache-Control: public, max-age=2592000
-
-/*.js
-  Cache-Control: public, max-age=2592000
-
-/*.svg
-  Cache-Control: public, max-age=2592000
-
-/*.png
-  Cache-Control: public, max-age=2592000
-
-/*.jpg
-  Cache-Control: public, max-age=2592000
-
-/*.webp
-  Cache-Control: public, max-age=2592000
-
-/data/catalog.json
-  Cache-Control: public, max-age=60
-
-/data/works/*
-  Cache-Control: public, max-age=300
-
-/data/audio/*/manifest.json
-  Cache-Control: public, max-age=300
-
-# === セキュリティヘッダー (全ページ共通) ===
+# ===== 全ページ共通 =====
 /*
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  # ----- Content Security Policy -----
+  # アニノベルの実依存:
+  #   Tailwind CDN: cdn.tailwindcss.com
+  #   mammoth/pdf.js/jszip: cdnjs.cloudflare.com
+  #   GA4: googletagmanager.com, google-analytics.com
+  #   Cloudflare Insights: static.cloudflareinsights.com, cloudflareinsights.com
+  #   AdSense: pagead2.googlesyndication.com, googleads.g.doubleclick.net, partner.googleadservices.com
+  #   Stripe: js.stripe.com, api.stripe.com, checkout.stripe.com
+  #   Sentry (将来): *.sentry.io, *.ingest.sentry.io
+  #   randomuser.me, pravatar.cc, ぱくたそ系 (data/lipsync/Gallery のフォールバック)
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://js.stripe.com https://*.ingest.sentry.io; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://www.google-analytics.com https://*.analytics.google.com https://cloudflareinsights.com https://api.stripe.com https://*.ingest.sentry.io http://localhost:50021; frame-src https://js.stripe.com https://checkout.stripe.com https://googleads.g.doubleclick.net https://*.googlesyndication.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'none'; upgrade-insecure-requests
+
+  # ----- HSTS (2年, サブドメイン含, preload可) -----
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
-  Cache-Control: public, max-age=300
+
+  # ----- 各種ヘッダ -----
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # ----- Permissions Policy -----
+  # paymentはStripe決済で必要、autoplayはTTS音声で必要
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(self "https://js.stripe.com" "https://checkout.stripe.com"), usb=(), interest-cohort=(), browsing-topics=()
+
+  # ----- オリジン分離 -----
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Resource-Policy: cross-origin
+
+  # ----- サーバー情報秘匿 -----
+  X-Powered-By:
+  Server:
+
+# ===== /api/* はAPI応答 (キャッシュ無効, JSON, robots除外) =====
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate
+  X-Robots-Tag: noindex, nofollow
+
+# ===== 動的OGP画像 (短期キャッシュ) =====
+/api/og/*
+  Cache-Control: public, max-age=3600, s-maxage=86400
+  Content-Type: image/svg+xml; charset=utf-8
+
+# ===== 静的アセット (長期キャッシュ) =====
+/css/*
+  Cache-Control: public, max-age=2592000, must-revalidate
+/js/*
+  Cache-Control: public, max-age=2592000, must-revalidate
+/icons/*
+  Cache-Control: public, max-age=31536000, immutable
+/data/audio/*
+  Cache-Control: public, max-age=31536000, immutable
+/data/lipsync/*
+  Cache-Control: public, max-age=31536000, immutable
+/data/ogp/*
+  Cache-Control: public, max-age=86400
+/data/works/*.json
+  Cache-Control: public, max-age=300, must-revalidate
+/data/catalog.json
+  Cache-Control: public, max-age=60, must-revalidate
+
+# ===== HTML (常にrevalidate, SW更新を阻害しない) =====
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+# ===== Service Worker (キャッシュ禁止 - 更新確実に) =====
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Service-Worker-Allowed: /
+
+# ===== マニフェスト =====
+/manifest.json
+  Cache-Control: public, max-age=3600
+  Content-Type: application/manifest+json; charset=utf-8
+
+# ===== sitemap/robots =====
+/sitemap.xml
+  Cache-Control: public, max-age=3600
+  Content-Type: application/xml; charset=utf-8
+/robots.txt
+  Cache-Control: public, max-age=3600
+  Content-Type: text/plain; charset=utf-8
+
+# ===== 内部限定 =====
+/scripts/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-store
+/lipsync_batch.html
+  X-Robots-Tag: noindex, nofollow

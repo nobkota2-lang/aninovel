@@ -3,3 +3,10 @@
 .DS_Store
 Thumbs.db
 node_modules/
+
+# Phase 2 追加
+node_modules/
+dist/
+legal.config.json
+legal/*.backup-*
+.wrangler/

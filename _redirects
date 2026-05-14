@@ -1,15 +1,42 @@
-# Cloudflare Pages redirects
-# (GitHub Pages では無視されます。Cloudflare Pages 移行時に自動適用)
+# =============================================================================
+# アニノベル Cloudflare Pages _redirects
+# 配置: ビルド出力ルート
+# 構文: <from> <to> <status>
+#   末尾の "!" は強制リダイレクト (途中HTMLマッチを優先しない)
+# =============================================================================
 
-# 旧 GitHub Pages URL → 新ドメイン (移行時に有効化)
-# https://aninovel.com/old-path への 301 リダイレクト規則をここに記述
+# ----- wwwなし統一 (重複コンテンツ回避) -----
+https://www.aninovel.com/* https://aninovel.com/:splat 301!
 
-# 例:
-# /aninovel/*  /:splat  301
-# /old-page    /        301
+# ----- GitHub Pagesから新ドメインへ -----
+# GitHubのrepoに留めておく旧サイトを新ドメインへ誘導したい場合は、
+# GitHub側でmetaリフレッシュor301を設置 (Pagesでは直接できない)。
+# Cloudflare側はここでは何もしない。
 
-# 末尾スラッシュ正規化 (Cloudflareは標準で行うが明示)
-# /index.html  /        301
+# ----- *.pages.dev からカスタムドメインへ強制 (Cloudflare Pages特有) -----
+# プレビュー以外はカスタムドメインに統一
+https://aninovel.pages.dev/* https://aninovel.com/:splat 301!
 
-# 404 ページ
-/*  /404.html  404
+# ----- 法務ページの分かりやすいエイリアス -----
+/terms /legal/terms.html 301
+/privacy /legal/privacy.html 301
+/tokushoho /legal/tokushoho.html 301
+/dmca /legal/dmca.html 301
+/accessibility /legal/accessibility.html 301
+/sct /legal/tokushoho.html 301
+
+# ----- 作品の短縮URL (将来用準備) -----
+# /work/* → /viewer.html?work=:splat 200 (rewriteしてSEO的に個別URL化)
+/work/* /viewer.html?work=:splat 200
+/works /index.html#works 302
+/ranking /index.html#ranking 302
+
+# ----- 古いパスからの移行 (もしあれば) -----
+# /old/path /new/path 301
+
+# ----- API (Functions ハンドラ) は処理させる -----
+# /api/* は functions/api/ に書かれたファイルで処理される。
+# ここでは明示的にスルー (302やrewriteしない)。
+
+# ----- 404 catchall は最後に -----
+/* /404.html 404
