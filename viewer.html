@@ -133,6 +133,13 @@ input[type="color"]{padding:2px;cursor:pointer;height:40px}
 .narration-plain{border-left:3px solid var(--border);padding-left:16px;margin:0 auto}
 .gallery-tab{padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--panel-bg);transition:all .2s}.gallery-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .gallery-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.gallery-item{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:pointer;transition:all .2s;border:3px solid transparent;background:var(--bg-secondary)}.gallery-item:hover{border-color:var(--accent);transform:scale(1.05)}
+.gallery-cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-height:56vh;overflow-y:auto;padding:4px}
+.gallery-cat-btn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;border:2px solid var(--border);border-radius:12px;background:var(--panel-bg);cursor:pointer;transition:all .15s}
+.gallery-cat-btn:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 10px rgba(0,0,0,.1)}
+.gallery-cat-btn img{width:66px;height:66px;border-radius:50%;object-fit:cover;background:var(--bg-secondary)}
+.gallery-cat-label{font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:var(--text-primary)}
+.gallery-cat-count{font-size:10px;color:var(--text-muted)}
+@media(max-width:768px){.gallery-cat-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:768px){.panel-slide{width:100%;right:-100%}.bubble{max-width:280px}.toolbar{padding:6px 10px;min-height:48px}.gallery-grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
@@ -146,7 +153,7 @@ function toFullWidth(s){return s?s.replace(/[!-~]/g,function(c){return String.fr
 var state={
 currentScreen:'home',isAuthorMode:false,sidebarOpen:false,settingsOpen:false,
 tocOpen:false,bookmarkListOpen:false,editModalOpen:false,colorPickerOpen:false,
-imageGalleryOpen:false,galleryTab:'photo',
+imageGalleryOpen:false,galleryTab:'photo',galleryGroup:null,galleryPage:0,galleryManifest:null,
 searchOpen:false,searchQuery:'',searchResults:[],searchCurrentIdx:-1,
 metaEditOpen:false,fullscreen:false,darkMode:false,dupModalOpen:false,
 editingItem:null,currentPage:0,bookmarks:[],lastSaved:'未保存',draggedItem:null,readerCustom:null,readerCustomOpen:false,readerCustomCharId:null,
@@ -1071,8 +1078,26 @@ function _generateLipGif(cid,callback){
   var cacheKey='v7mp|'+sz+'|'+iconImg;
   var _iconDebug=iconImg.length>80?iconImg.substring(0,60)+'...(len='+iconImg.length+')':iconImg;
   console.info('[LipSync] '+cid+' icon=',_iconDebug);
-  // 事前生成GIF (data/lipsync/Gallery/...) は古い暗口色で焼き込み済みのため使わない。常にMediaPipeで再生成。
-  function tryPreGen(next){return next();}
+  // 事前生成GIF優先: iconImg が /gallery/.../X.png 形式なら 対応する /lipsync/.../X.gif を探す。
+  // 見つかればそれを採用、無ければ next() で MediaPipe 生成にフォールバック。
+  function tryPreGen(next){
+    var m=/^\/gallery\/(.+)\.png$/i.exec(iconImg||"");
+    if(!m){return next();}
+    var gifUrl="/lipsync/"+m[1]+".gif";
+    var probe=new Image(),done=false;
+    probe.onload=function(){
+      if(done)return;done=true;
+      console.info("[LipSync] 事前生成GIF採用:",gifUrl);
+      _lipGifCache[cid]={gif:gifUrl,orig:iconImg,sz:displaySz};
+      callback(gifUrl);
+    };
+    probe.onerror=function(){
+      if(done)return;done=true;
+      console.info("[LipSync] 事前生成GIFなし→MediaPipe生成");
+      next();
+    };
+    probe.src=gifUrl;
+  }
   tryPreGen(function(){
   // 1) IndexedDB キャッシュ確認
   _lipDBGet(cacheKey).then(function(cachedBlob){
@@ -1659,20 +1684,59 @@ function _voicevoxSpeakerFor(ch){
   if(typeof ch.voicevoxSpeaker==='number')return ch.voicevoxSpeaker;
   return _VOICEVOX_DEFAULTS[ch.gender]||_VOICEVOX_DEFAULTS.neutral;
 }
+// VOICEVOX 接続診断: 正常 / CORS拒否 / オフライン を切り分ける
+async function _voicevoxHealthCheck(engineUrl){
+  // 1) 通常リクエスト (CORS が許可されている時のみ成功)
+  try{
+    var vr=await fetch(engineUrl+'/version');
+    if(vr.ok){
+      var ver=(await vr.text()).replace(/"/g,'').trim();
+      return {ok:true,version:ver};
+    }
+    return {ok:false,reason:'http',status:vr.status};
+  }catch(e){ /* CORS拒否 or 到達不可 — 下の no-cors プローブで切り分け */ }
+  // 2) no-cors プローブ: サーバーが生きていれば成功 (応答内容は読めない)
+  try{
+    await fetch(engineUrl+'/version',{mode:'no-cors'});
+    return {ok:false,reason:'cors'};   // 到達できた = 起動中 = CORS が原因
+  }catch(e2){
+    return {ok:false,reason:'offline'}; // 到達不可 = VOICEVOX 未起動
+  }
+}
+// CORS拒否時の案内モーダル (設定画面を新規タブで開く)
+function _showVoicevoxCorsHelp(engineUrl){
+  var origin=location.origin;
+  var msg='VOICEVOX は起動していますが、このサイト ('+origin+') からの利用を許可していません。\n\n'+
+    '【解決手順 — 最初の1回だけ設定すれば、以降ずっと使えます】\n\n'+
+    '1. これから VOICEVOX 設定画面を新しいタブで開きます\n'+
+    '2. 「CORS Policy Mode」を localapps → all に変更\n'+
+    '   ※または「Allow Origin」欄に  '+origin+'  を追加\n'+
+    '3. 「保存」ボタンを押す\n'+
+    '4. VOICEVOX 本体を一度終了し、再起動する\n'+
+    '5. このページに戻って「🎤 音声生成」を再実行\n\n'+
+    'VOICEVOX 設定画面を今すぐ開きますか?';
+  if(confirm(msg)){
+    try{ window.open(engineUrl+'/setting','_blank','noopener'); }
+    catch(e){ alert('設定画面を手動で開いてください:\n'+engineUrl+'/setting'); }
+  }
+}
 async function generateVoicesLocal(opts){
   opts=opts||{};
   var engineUrl=opts.engineUrl||'http://localhost:50021';
   var wid=_currentWorkId();
-  // ヘルスチェック
-  try{
-    var vr=await fetch(engineUrl+'/version');
-    if(!vr.ok)throw new Error('HTTP '+vr.status);
-    var ver=(await vr.text()).replace(/"/g,'').trim();
-    console.info('[VOICEVOX] connected:',ver);
-  }catch(e){
-    alert('VOICEVOX Engine に接続できません ('+engineUrl+')\n\nVOICEVOX を起動してから再実行してください。\n詳しくはマニュアル参照。');
-    return {ok:false,error:e};
+  // ヘルスチェック (CORS / オフライン を判別して適切な案内を出す)
+  var _hc=await _voicevoxHealthCheck(engineUrl);
+  if(!_hc.ok){
+    if(_hc.reason==='cors'){
+      _showVoicevoxCorsHelp(engineUrl);
+    }else if(_hc.reason==='http'){
+      alert('VOICEVOX Engine がエラーを返しました ('+engineUrl+' / HTTP '+(_hc.status||'?')+')\n\nVOICEVOX を再起動してから再実行してください。');
+    }else{
+      alert('VOICEVOX Engine に接続できません ('+engineUrl+')\n\nVOICEVOX が起動していません。\nVOICEVOX を起動してから再実行してください。');
+    }
+    return {ok:false,reason:_hc.reason};
   }
+  console.info('[VOICEVOX] connected:',_hc.version);
   // 既存IDB キャッシュをロード
   var existing={};
   (await _idbListByWork(wid)).forEach(function(r){existing[r.itemId]=r;});
@@ -2092,7 +2156,7 @@ async function rdTxt(f,e){return new Promise(function(r,j){var rd=new FileReader
 function detGender(n){if(/[子美香織恵愛花里奈沙菜実梨彩由佳理代紀]/.test(n))return'female';if(/[郎太介助男雄彦司夫治朗]/.test(n))return'male';return'male'}
 function parseText(text){state.content=[];var nar=state.characters.find(function(c){return c.id==='narrator'});state.characters=nar?[nar]:[state.characters[state.characters.length-1]];var lines=text.split('\n').filter(function(l){return l.trim()});var order=0;var det=new Set();lines.forEach(function(line,idx){line=line.trim();if(!line)return;var m=line.match(/(.+?)「(.+?)」/);if(m&&m[1].length<20){var sp=m[1].trim();var dl=m[2];var ch=state.characters.find(function(c){return c.id!=='narrator'&&(c.name===sp||c.shortName===sp)});if(!ch){var g=detGender(sp);var pr=(CP[g]||CP.male)[det.size%5];ch={id:'char'+Date.now()+idx,name:sp,shortName:sp.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};state.characters.push(ch);det.add(sp)}state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:ch.id,order:order++})}else{state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++})}});state.currentPage=0;render()}
 
-function openEditModal(type,data){state.editingItem={type:type,data:JSON.parse(JSON.stringify(data))};state.editModalOpen=true;state.colorPickerOpen=false;state.imageGalleryOpen=false;state.galleryTab='photo';render()}
+function openEditModal(type,data){state.editingItem={type:type,data:JSON.parse(JSON.stringify(data))};state.editModalOpen=true;state.colorPickerOpen=false;state.imageGalleryOpen=false;state.galleryTab='photo';state.galleryGroup=null;state.galleryPage=0;render()}
 function closeEditModal(){state.editModalOpen=false;state.editingItem=null;state.colorPickerOpen=false;state.imageGalleryOpen=false;render()}
 function saveEditModal(){if(!state.editingItem)return;var type=state.editingItem.type,data=state.editingItem.data;if(type==='character'){if(data.name&&data.name.trim()){var base=data.name.trim();var dup=state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===base});if(dup){var n=2,nn=base+'_'+n;while(state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===nn})){n++;nn=base+'_'+n}alert('同じ名前「'+base+'」の登場人物が既に存在します。\n「'+nn+'」として登録します。');data.name=nn}}if(!data.iconImage)data.shortName=(data.shortName||(data.name||'').substring(0,2)).substring(0,10)}state._scrollToId=data.id;updateItem(data.id,data,type);closeEditModal()}
 function toggleDarkMode(){state.darkMode=!state.darkMode;document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');render()}
@@ -2117,8 +2181,64 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
 function renderSettings(){var s=state.displaySettings;return'<div class="panel-slide '+(state.settingsOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">⚙️ 表示設定</span><button onclick="state.settingsOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:20px;display:flex;flex-direction:column;gap:20px"><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">文字サイズ: <strong>'+s.fontSize+'px</strong></label><input type="range" min="12" max="32" value="'+s.fontSize+'" oninput="state.displaySettings.fontSize=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">行間: <strong>'+s.lineHeight+'</strong></label><input type="range" min="1" max="3" step="0.1" value="'+s.lineHeight+'" oninput="state.displaySettings.lineHeight=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">アイコン: <strong>'+s.iconSize+'px</strong></label><input type="range" min="32" max="96" value="'+s.iconSize+'" oninput="state.displaySettings.iconSize=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">フォント</label><select onchange="state.displaySettings.font=this.value;render()" style="width:100%"><option value="\'Shippori Mincho\', serif"'+(s.font.indexOf('Shippori')>=0?' selected':'')+'>志保里明朝</option><option value="\'Noto Serif JP\', serif"'+(s.font.indexOf('Noto Serif')>=0?' selected':'')+'>Noto明朝</option><option value="\'Zen Kaku Gothic New\', sans-serif"'+(s.font.indexOf('Zen Kaku')>=0?' selected':'')+'>禅角ゴシック</option><option value="serif"'+(s.font==='serif'?' selected':'')+'>明朝</option><option value="sans-serif"'+(s.font==='sans-serif'?' selected':'')+'>ゴシック</option></select></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">書式</label><select onchange="state.displaySettings.orientation=this.value;render()" style="width:100%"><option value="horizontal"'+(s.orientation==='horizontal'?' selected':'')+'>横書き</option><option value="vertical"'+(s.orientation==='vertical'?' selected':'')+'>縦書き</option></select></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">ナレーション</label><select onchange="state.displaySettings.narratorStyle=this.value;render()" style="width:100%"><option value="bubble"'+(s.narratorStyle==='bubble'?' selected':'')+'>吹き出し</option><option value="plain"'+(s.narratorStyle==='plain'?' selected':'')+'>べた書き</option></select></div></div></div>'}
 function renderTOC(){return'<div class="panel-slide '+(state.tocOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📑 目次</span><button onclick="state.tocOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.chapters.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">章がありません</p>':'<div style="display:flex;flex-direction:column;gap:12px">'+state.chapters.map(function(ch){return'<div style="border-left:3px solid var(--accent);padding-left:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">'+esc(ch.title)+'</div>'+ch.sections.map(function(sec){return'<div style="padding-left:12px;font-size:13px;color:var(--text-secondary);margin-top:2px">'+esc(sec.title)+'</div>'}).join('')+'</div>'}).join('')+'</div>')+'</div></div>'}
 function renderBM(){return'<div class="panel-slide '+(state.bookmarkListOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📚 しおり一覧</span><button onclick="state.bookmarkListOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.bookmarks.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">しおりがありません</p>':'<div style="display:flex;flex-direction:column;gap:8px">'+state.bookmarks.map(function(bm){var ba=_acts.length;_acts.push(function(){deleteBookmark(bm.id)});return'<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;cursor:pointer" onclick="jumpToBookmark('+bm.page+')"><span style="font-size:18px">🔖</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+esc(bm.title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+new Date(bm.timestamp).toLocaleString()+'</div></div><button onclick="event.stopPropagation();act('+ba+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-muted)">🗑️</button></div>'}).join('')+'</div>')+'</div></div>'}
-function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(data.name)+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(data.shortName)+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="state.imageGalleryOpen=true;state.galleryTab=\'photo\';render()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">吹き出しカラー</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:40px;height:40px;border-radius:50%;border:3px solid '+(data.iconColor===c.icon?'var(--accent)':'var(--border)')+';background:'+c.icon+';cursor:pointer" title="'+c.name+'"></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 カスタムカラー</button>';if(state.colorPickerOpen)h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div><div style="flex:1"><label style="font-size:11px">アイコン色</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🔊 読み上げ音声</label>';var _voices=state.tts.voices.length?state.tts.voices:(speechSynthesis?speechSynthesis.getVoices():[]);var _jaVoices=_voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});var _otherVoices=_voices.filter(function(v){return!v.lang||v.lang.indexOf('ja')!==0});h+='<select onchange="state.editingItem.data.ttsVoice=this.value" style="width:100%;margin-bottom:6px"><option value="">── 性別デフォルト（自動選択）</option>';if(_jaVoices.length){var _jaF=_jaVoices.filter(function(v){return _voiceGender(v)==='female'});var _jaM=_jaVoices.filter(function(v){return _voiceGender(v)==='male'});var _jaU=_jaVoices.filter(function(v){return _voiceGender(v)==='unknown'});if(_jaF.length){h+='<optgroup label="🚺 日本語女性音声">';_jaF.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaM.length){h+='<optgroup label="🚹 日本語男性音声">';_jaM.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaU.length){h+='<optgroup label="🎙 日本語その他">';_jaU.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}}if(_otherVoices.length){h+='<optgroup label="その他の言語">';_otherVoices.slice(0,30).forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>';});h+='</optgroup>';}h+='</select>';h+='<div style="display:flex;gap:8px;align-items:center"><button onclick="(function(){var v=state.editingItem.data;var utt=new SpeechSynthesisUtterance(v.name?v.name+\'。テスト音声です。\':\'テスト音声です。\');utt.lang=\'ja-JP\';if(v.ttsVoice){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===v.ttsVoice});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">🖥=ローカル ☁=クラウド</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
-function renderGallery(){var g=state.editingItem&&state.editingItem.data?state.editingItem.data.gender||'male':'male';var tab=TABS.find(function(t){return t.id===state.galleryTab})||TABS[0];var imgs=tab.a?GC[tab.a]:(g==='female'?GC[tab.f]:GC[tab.m])||[];var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:780px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="font-weight:700;font-size:16px">🖼️ ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">'+(g==='male'?'👨 男性':'👩 女性')+'向け ・ '+imgs.length+'枚</p><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">';TABS.forEach(function(t){h+='<button onclick="state.galleryTab=\''+t.id+'\';render()" class="gallery-tab '+(state.galleryTab===t.id?'active':'')+'">'+t.label+'</button>'});h+='</div><div class="gallery-grid" style="max-height:50vh;overflow-y:auto;padding:4px">';imgs.forEach(function(url){h+='<img src="'+url+'" loading="lazy" class="gallery-item" data-galimg="'+url.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">'});h+='</div></div></div>';return h}
+function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(data.name)+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(data.shortName)+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">吹き出しカラー</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:40px;height:40px;border-radius:50%;border:3px solid '+(data.iconColor===c.icon?'var(--accent)':'var(--border)')+';background:'+c.icon+';cursor:pointer" title="'+c.name+'"></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 カスタムカラー</button>';if(state.colorPickerOpen)h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div><div style="flex:1"><label style="font-size:11px">アイコン色</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🔊 読み上げ音声</label>';var _voices=state.tts.voices.length?state.tts.voices:(speechSynthesis?speechSynthesis.getVoices():[]);var _jaVoices=_voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});var _otherVoices=_voices.filter(function(v){return!v.lang||v.lang.indexOf('ja')!==0});h+='<select onchange="state.editingItem.data.ttsVoice=this.value" style="width:100%;margin-bottom:6px"><option value="">── 性別デフォルト（自動選択）</option>';if(_jaVoices.length){var _jaF=_jaVoices.filter(function(v){return _voiceGender(v)==='female'});var _jaM=_jaVoices.filter(function(v){return _voiceGender(v)==='male'});var _jaU=_jaVoices.filter(function(v){return _voiceGender(v)==='unknown'});if(_jaF.length){h+='<optgroup label="🚺 日本語女性音声">';_jaF.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaM.length){h+='<optgroup label="🚹 日本語男性音声">';_jaM.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaU.length){h+='<optgroup label="🎙 日本語その他">';_jaU.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}}if(_otherVoices.length){h+='<optgroup label="その他の言語">';_otherVoices.slice(0,30).forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>';});h+='</optgroup>';}h+='</select>';h+='<div style="display:flex;gap:8px;align-items:center"><button onclick="(function(){var v=state.editingItem.data;var utt=new SpeechSynthesisUtterance(v.name?v.name+\'。テスト音声です。\':\'テスト音声です。\');utt.lang=\'ja-JP\';if(v.ttsVoice){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===v.ttsVoice});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">🖥=ローカル ☁=クラウド</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
+function openGallery(){
+  state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;
+  if(!state.galleryManifest){
+    fetch('data/gallery-manifest.json',{cache:'force-cache'})
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(m){state.galleryManifest=m;render();})
+      .catch(function(e){console.warn('[Gallery] manifest読込失敗',e);state.galleryManifest={error:true};render();});
+  }
+  render();
+}
+function renderGallery(){
+  var man=state.galleryManifest;
+  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-weight:700;font-size:16px">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  if(!man){
+    h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';
+  }else if(man.error){
+    h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。<br>ローカルサーバー経由で開いているか確認してください。</p>';
+  }else if(!state.galleryGroup){
+    h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください</p>';
+    h+='<div class="gallery-cat-grid">';
+    man.groups.forEach(function(grp){
+      var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
+      h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()">'
+        +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+        +'<span class="gallery-cat-label">'+grp.label+'</span>'
+        +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+'件</span></button>';
+    });
+    h+='</div>';
+  }else{
+    var grp=null,i;
+    for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
+    var items=(grp&&grp.items)||[];
+    var PER=30;
+    var pages=Math.max(1,Math.ceil(items.length/PER));
+    var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
+    var slice=items.slice(pg*PER,pg*PER+PER);
+    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+      +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリー選択</button>'
+      +'<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>'
+      +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length+'件</span></div>';
+    h+='<div class="gallery-grid" style="max-height:48vh;overflow-y:auto;padding:4px">';
+    slice.forEach(function(it){
+      h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
+    });
+    h+='</div>';
+    if(pages>1){
+      h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px">'
+        +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>'
+        +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
+        +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>'
+        +'</div>';
+    }
+  }
+  h+='</div></div>';
+  return h;
+}
 function renderMetaModal(){if(!state.metaEditOpen)return'';return'<div class="modal-overlay" onclick="if(event.target===this){state.metaEditOpen=false;render()}"><div class="modal-content" style="max-width:480px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-weight:700">📖 小説情報</h3><button onclick="state.metaEditOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイトル</label><input type="text" value="'+esc(state.novel.title)+'" oninput="state.novel.title=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">著者名</label><input type="text" value="'+esc(state.novel.author)+'" oninput="state.novel.author=this.value" style="width:100%"></div></div><div style="margin-top:24px"><button onclick="state.metaEditOpen=false;render()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div>'}
 
 // === Reader Customize ===
