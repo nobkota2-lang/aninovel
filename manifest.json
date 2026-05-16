@@ -2,8 +2,8 @@
   "name": "アニノベル - アニメ風吹き出しで読むオリジナル小説",
   "short_name": "アニノベル",
   "description": "アニメ風の吹き出し表示と音声読み上げで小説を楽しめる新しい読書プラットフォーム",
-  "start_url": "/aninovel/",
-  "scope": "/aninovel/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#3D3A36",
@@ -45,14 +45,14 @@
       "name": "作品一覧",
       "short_name": "作品",
       "description": "公開作品の一覧",
-      "url": "/aninovel/#works",
+      "url": "/#works",
       "icons": [{ "src": "icons/icon-192.svg", "sizes": "192x192" }]
     },
     {
       "name": "マイ作品",
       "short_name": "編集",
       "description": "自分の作品を編集",
-      "url": "/aninovel/#mywork",
+      "url": "/#mywork",
       "icons": [{ "src": "icons/icon-192.svg", "sizes": "192x192" }]
     }
   ]

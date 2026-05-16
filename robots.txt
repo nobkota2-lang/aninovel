@@ -20,4 +20,4 @@ Disallow: /
 User-agent: CheeseBot
 Disallow: /
 
-Sitemap: https://nobkota2-lang.github.io/aninovel/sitemap.xml
+Sitemap: https://aninovel.com/sitemap.xml
