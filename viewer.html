@@ -221,7 +221,7 @@ function act(n){if(_acts[n])_acts[n]()}
 function cacheForEdit(t,o){var k='_e'+Date.now()+'_'+Math.random().toString(36).substr(2,5);_ec[k]={type:t,data:o};return k}
 function triggerEdit(k){var e=_ec[k];if(e)openEditModal(e.type,e.data)}
 var _sideMap={};
-function _computeSideMap(){_sideMap={};var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var seen={},n=0;arr.forEach(function(it){if(it.type==='pageBreak'){seen={};n=0;return;}if(it.type==='dialogue'&&it.characterId){if(seen[it.characterId]===undefined){seen[it.characterId]=(n%2===0)?'left':'right';n++;}_sideMap[it.id]=seen[it.characterId];}});}
+function _computeSideMap(){_sideMap={};var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var seen={},n=0;arr.forEach(function(it){if(it.type==='pageBreak'){seen={};n=0;return;}if(it.type==='dialogue'&&it.characterId){if(it.characterId==='narrator'){_sideMap[it.id]='left';return;}if(seen[it.characterId]===undefined){seen[it.characterId]=(n%2===0)?'left':'right';n++;}_sideMap[it.id]=seen[it.characterId];}});}
 function getPC(){_computeSideMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
 function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render()}}
