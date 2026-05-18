@@ -2005,6 +2005,20 @@ function _drainQueue(){
   }
   waitIdle();
 }
+function _ttsStartIndex(){
+  // 現在 #pageArea に表示されている最初のコンテンツ項目の _ttsQueue インデックスを返す。
+  // 見つからなければ 0（先頭）。
+  try{
+    var pa=document.getElementById('pageArea');
+    if(!pa)return 0;
+    var paTop=pa.getBoundingClientRect().top;
+    for(var i=0;i<_ttsQueue.length;i++){
+      var el=document.querySelector('[data-cid="'+_ttsQueue[i].id+'"]');
+      if(el&&el.getBoundingClientRect().bottom>paTop+40)return i;
+    }
+  }catch(e){console.warn('[TTS] カーソル位置の判定に失敗:',e);}
+  return 0;
+}
 function startTTS(){
   if(!window.speechSynthesis){alert('このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。');return;}
   speechSynthesis.cancel();
@@ -2016,6 +2030,10 @@ function startTTS(){
   // キュー段階で空項目を外すことで、既存データでも二重再生を防ぐ。
   _ttsQueue=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
+  // カーソル位置（画面に表示中の最初のセリフ）から再生を開始する。
+  // 先頭固定ではなく、読者が今見ている位置から読み上げる。
+  var _startIdx=_ttsStartIndex();
+  if(_startIdx>0){_ttsQueue=_ttsQueue.slice(_startIdx);console.info('[TTS] カーソル位置から再生:',(_startIdx+1)+'番目のセリフ以降');}
   state.tts.active=true;state.tts.paused=false;
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
   _forceOfflineChars={};_disableNaturalForSession=false;_sessionHasOnstart=false;
