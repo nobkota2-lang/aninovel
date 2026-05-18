@@ -75,21 +75,31 @@
 
     /** 作品カタログを取得（静的JSON＋投稿済み作品をマージ） */
     getCatalog: function() {
-      var self = this;
-      return fetch('data/catalog.json').then(function(r) {
+      var staticP = fetch('data/catalog.json').then(function(r) {
         if (!r.ok) throw new Error('カタログの読み込みに失敗しました');
         return r.json();
-      }).then(function(data) {
-        // 投稿済み作品をマージ
-        var pub = getLS(KEYS.publishedWorks) || {};
+      });
+      // サーバー(KV)の投稿作品カタログ — 他ユーザー/他端末の投稿もここから取得
+      var serverP = fetch('/api/catalog').then(function(r) {
+        return r.ok ? r.json() : { works: [] };
+      }).catch(function() { return { works: [] }; });
+      return Promise.all([staticP, serverP]).then(function(res) {
+        var data = res[0];
+        var server = res[1] || { works: [] };
         var susp = getLS(KEYS.suspendedWorks) || {};
+        var pub = getLS(KEYS.publishedWorks) || {};
+        function addEntry(entry) {
+          if (!entry || !entry.id) return;
+          if (susp[entry.id]) return; // 公開停止中はカタログに含めない
+          if (data.works.some(function(w) { return w.id === entry.id; })) return;
+          data.works.push(entry);
+        }
+        // サーバー投稿作品をマージ
+        (server.works || []).forEach(addEntry);
+        // ローカル投稿作品をマージ (サーバー未反映分のフォールバック)
         Object.keys(pub).forEach(function(pid) {
-          if (susp[pid]) return; // 公開停止中はカタログに含めない
           var p = pub[pid];
-          // 既存と重複しないようチェック
-          if (!data.works.some(function(w) { return w.id === pid; })) {
-            data.works.push(p.catalogEntry);
-          }
+          if (p && p.catalogEntry) addEntry(p.catalogEntry);
         });
         return data;
       });
@@ -666,11 +676,16 @@
       if (characterCount > 3) tags.push('群像劇');
       if (charCount > 5000) tags.push('長編'); else tags.push('短編');
 
+      // オーナーの投稿は「作者」の作品として、ニックネーム Nobby で公開する
+      var isOwner = !!(user.roles && user.roles.indexOf('owner') >= 0);
+      var penName = isOwner ? 'Nobby' : (work.data.novel.author || user.displayName);
       var catalogEntry = {
         id: pubId,
         title: work.data.novel.title || work.title,
-        author: work.data.novel.author || user.displayName,
-        description: work.description || (work.data.novel.title + ' by ' + (work.data.novel.author || user.displayName)),
+        author: penName,
+        authorId: user.id,
+        authorRole: 'author',
+        description: work.description || (work.data.novel.title + ' by ' + penName),
         coverColor: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
         pageCount: pageCount,
         charCount: charCount,

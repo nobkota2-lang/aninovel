@@ -2855,7 +2855,7 @@ function publishMyWork(){
         // サーバー(KV)へアップロード — 他のブラウザ/ユーザーでも閲覧可能にする
         try{
           var _wp={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
-          var _up=await fetch('/api/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_wp)});
+          var _up=await fetch('/api/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp,meta:res.catalogEntry})});
           if(!_up.ok){var _ue=await _up.json().catch(function(){return{};});throw new Error(_ue.error||('HTTP '+_up.status));}
           console.info('[Publish] サーバーへアップロード完了:',res.publishedId);
         }catch(e){
