@@ -106,6 +106,17 @@
     getWork: function(workId) {
       // 投稿済み作品をまずチェック（pub_ プレフィックス or localStorage にある場合）
       var pub = getLS(KEYS.publishedWorks) || {};
+      // 投稿作品(pub_)はサーバー(KV)から取得 — 他のブラウザ/ユーザーでも閲覧可能
+      if (workId && workId.indexOf('pub_') === 0) {
+        return fetch('/api/works/' + encodeURIComponent(workId)).then(function(r) {
+          if (r.ok) return r.json();
+          if (pub[workId]) return pub[workId].data;
+          throw new Error('投稿作品が見つかりません: ' + workId);
+        }).catch(function(e) {
+          if (pub[workId]) return pub[workId].data;
+          throw e;
+        });
+      }
       if (pub[workId]) return Promise.resolve(pub[workId].data);
       return this.getCatalog().then(function(catalog) {
         var entry = catalog.works.find(function(w) { return w.id === workId; });
