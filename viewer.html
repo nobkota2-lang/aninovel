@@ -1579,17 +1579,30 @@ function _relatedWorkIds(wid){
 }
 function _buildAudioSources(){
   _audioSources={};
-  // 優先度: embedded(item.audio) > IDB > repo  (ユーザが明示的に埋込んだものを最優先)
+  // 優先度: embedded(item.audio) > IDB > server(R2) > repo
   var wid=_currentWorkId();
   var relIds=_relatedWorkIds(wid);
   var repo=(_audioManifest&&_audioManifest.items)||{};
   Object.keys(repo).forEach(function(id){_audioSources[id]={type:'repo'};});
+  // 投稿作品(pub_*)はサーバー(R2)のVOICEVOX音声マニフェストを取得
+  var serverP=(wid&&wid.indexOf('pub_')===0)
+    ?fetch('/api/audio/'+encodeURIComponent(wid)).then(function(r){return r.ok?r.json():{items:{}};}).catch(function(){return {items:{}};})
+    :Promise.resolve({items:{}});
   // 自workId→関連workId の順で探索(先勝ち=自workIdが優先)
-  return Promise.all(relIds.map(function(w){return _idbListByWork(w);})).then(function(lists){
+  return Promise.all([serverP].concat(relIds.map(function(w){return _idbListByWork(w);}))).then(function(results){
+    var serverManifest=results[0]||{items:{}};
+    var lists=results.slice(1);
+    // サーバー音声を登録 (repoより優先、idb/embeddedより下)
+    Object.keys(serverManifest.items||{}).forEach(function(id){
+      if(!_audioSources[id]||_audioSources[id].type==='repo'){
+        _audioSources[id]={type:'server',workId:wid,meta:serverManifest.items[id]||{}};
+      }
+    });
     lists.forEach(function(list,i){
       list.forEach(function(rec){
         // 既に自workIdのIDBが埋まっていれば上書きしない
-        if(!_audioSources[rec.itemId]||_audioSources[rec.itemId].type==='repo'){
+        var ex=_audioSources[rec.itemId];
+        if(!ex||ex.type==='repo'||ex.type==='server'){
           _audioSources[rec.itemId]={type:'idb',blob:rec.blob,meta:rec.meta,fromWorkId:relIds[i]};
         }
       });
@@ -1597,11 +1610,9 @@ function _buildAudioSources(){
     (state.content||[]).forEach(function(it){
       if(it.audio)_audioSources[it.id]={type:'embedded',b64:it.audio};
     });
-    var n=Object.keys(_audioSources).length;
-    var repoN=Object.values(_audioSources).filter(function(v){return v.type==='repo';}).length;
-    var idbN=Object.values(_audioSources).filter(function(v){return v.type==='idb';}).length;
-    var embN=Object.values(_audioSources).filter(function(v){return v.type==='embedded';}).length;
-    console.info('[TTS] 音声ソース統合: 合計'+n+' (repo='+repoN+' idb='+idbN+' embedded='+embN+')');
+    var vals=Object.values(_audioSources);
+    function _cnt(t){return vals.filter(function(v){return v.type===t;}).length;}
+    console.info('[TTS] 音声ソース統合: 合計'+vals.length+' (repo='+_cnt('repo')+' server='+_cnt('server')+' idb='+_cnt('idb')+' embedded='+_cnt('embedded')+')');
     return _audioSources;
   });
 }
@@ -1611,6 +1622,9 @@ function _resolveAudioUrl(itemId){
   if(!src)return null;
   if(src.type==='repo'){
     return {url:_audioBaseUrl()+encodeURIComponent(itemId)+'.wav',revoke:false};
+  }
+  if(src.type==='server'){
+    return {url:'/api/audio/'+encodeURIComponent(src.workId)+'/'+encodeURIComponent(itemId),revoke:false};
   }
   if(src.type==='idb'&&src.blob){
     var u=URL.createObjectURL(src.blob);return {url:u,revoke:true};
@@ -2868,8 +2882,22 @@ function publishMyWork(){
               await _idbPut(pubId,r.itemId,r.blob,r.meta||{});
             }
             console.info('[Publish] 生成音声'+srcList.length+'件を投稿版IDBへ複製:',pubId);
+            // サーバー(R2)へVOICEVOX音声をアップロード — VOICEVOX未起動の端末でも高品質音声で再生される
+            var _aCHUNK=25,_aFail=0;
+            for(var _ac=0;_ac<srcList.length;_ac+=_aCHUNK){
+              var _aslice=srcList.slice(_ac,_ac+_aCHUNK);
+              var _afd=new FormData();
+              _aslice.forEach(function(rec){_afd.append(rec.itemId,rec.blob,rec.itemId+'.wav');});
+              try{
+                var _ares=await fetch('/api/audio/'+encodeURIComponent(pubId),{method:'PUT',body:_afd});
+                if(!_ares.ok){_aFail+=_aslice.length;}
+                else{var _aj=await _ares.json().catch(function(){return{};});_aFail+=((_aj.errors&&_aj.errors.length)||0);}
+              }catch(e){_aFail+=_aslice.length;}
+            }
+            console.info('[Publish] サーバー音声アップロード: 成功'+(srcList.length-_aFail)+'/'+srcList.length);
+            if(_aFail>0)alert('音声'+_aFail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。');
           }
-        }catch(e){console.warn('[Publish] 音声複製エラー:',e);}
+        }catch(e){console.warn('[Publish] 音声複製/アップロードエラー:',e);}
         // サーバー(KV)へアップロード — 他のブラウザ/ユーザーでも閲覧可能にする
         try{
           var _wp={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
