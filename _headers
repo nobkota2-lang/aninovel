@@ -5,6 +5,13 @@
 # 注意:
 #   現状 viewer.html に 218KB の inline JS があるため 'unsafe-inline' が必要。
 #   将来 inline JS を外部化したらnonce方式に変更 (より安全)。
+#
+# キャッシュ方針:
+#   viewer.html / services.js などは「ファイル名が固定」のため長期キャッシュ禁止。
+#   固定ファイル名に長期 max-age を付けると、デプロイしても古い版が配信され続ける。
+#   → max-age=0, must-revalidate で毎回ETag検証（変更時は即新版/未変更時は304で軽量）。
+#   長期キャッシュ・immutable を付けてよいのは、内容が変わると名前も変わる
+#   (ハッシュ付き) ファイルだけ。
 # =============================================================================
 
 # ===== 全ページ共通 =====
@@ -51,11 +58,17 @@
   Cache-Control: public, max-age=3600, s-maxage=86400
   Content-Type: image/svg+xml; charset=utf-8
 
-# ===== 静的アセット (長期キャッシュ) =====
+# ===== JS / CSS (固定ファイル名 → 長期キャッシュ禁止, 毎回revalidate) =====
+# !! ここを max-age=2592000 等の長期にすると、デプロイしても古い services.js が
+# !! 配信され続ける。固定ファイル名なので必ず max-age=0, must-revalidate にする。
 /css/*
-  Cache-Control: public, max-age=2592000, must-revalidate
+  Cache-Control: public, max-age=0, must-revalidate
 /js/*
-  Cache-Control: public, max-age=2592000, must-revalidate
+  Cache-Control: public, max-age=0, must-revalidate
+
+# ===== その他の静的アセット =====
+# icons/lipsync は内容が変わると名前も変える運用なら immutable 可。
+# 同名のまま差し替える運用に変えるなら max-age=0, must-revalidate にすること。
 /icons/*
   Cache-Control: public, max-age=31536000, immutable
 /data/audio/*
@@ -73,6 +86,9 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 /
+  Cache-Control: public, max-age=0, must-revalidate
+# クリーンURL (.html 拡張子なしでアクセスされるページ) も明示
+/viewer
   Cache-Control: public, max-age=0, must-revalidate
 
 # ===== Service Worker (キャッシュ禁止 - 更新確実に) =====
