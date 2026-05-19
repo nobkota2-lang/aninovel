@@ -1,8 +1,8 @@
 /**
  * アニノベル 投稿作品API  /api/works/:id
  * --------------------------------------------------
- * 投稿(pub_*)作品をサーバー側(Cloudflare KV)に保存・取得する。
- * PUT時にはサーバーカタログ(__catalog__)も更新する。
+ * 投稿(pub_*)作品をサーバー側(Cloudflare KV)に保存・取得・削除する。
+ * PUT/DELETE時にはサーバーカタログ(__catalog__)も更新する。
  *
  * 配置: functions/api/works/[id].js   (リポジトリ直下の functions/ 内)
  *
@@ -12,9 +12,10 @@
  *     Variable name: WORKS_KV  /  KV namespace: aninovel-works
  *
  * エンドポイント:
- *   GET  /api/works/pub_xxxxx   … 作品JSONを取得
- *   PUT  /api/works/pub_xxxxx   … 作品JSON+カタログ情報を保存(投稿時)
+ *   GET    /api/works/pub_xxxxx   … 作品JSONを取得
+ *   PUT    /api/works/pub_xxxxx   … 作品JSON+カタログ情報を保存(投稿時)
  *     PUTボディ: { "data": <作品ペイロード>, "meta": <カタログエントリ> }
+ *   DELETE /api/works/pub_xxxxx   … 作品を削除し、カタログからも除外(取り下げ時)
  *
  * 注: CORS / OPTIONS / レート制限 は functions/_middleware.js が処理する。
  */
@@ -36,6 +37,18 @@ function json(obj, status) {
       'Cache-Control': 'no-store',
     },
   });
+}
+
+// 現在のサーバーカタログ(配列)を安全に読み出す
+async function readCatalog(kv) {
+  try {
+    const cur = await kv.get(CATALOG_KEY);
+    if (!cur) return [];
+    const arr = JSON.parse(cur);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // GET /api/works/:id — 作品を取得
@@ -107,14 +120,7 @@ export async function onRequestPut(context) {
 
   // 2) サーバーカタログを更新 (read-modify-write)
   if (meta) {
-    let catalog = [];
-    try {
-      const cur = await context.env.WORKS_KV.get(CATALOG_KEY);
-      if (cur) catalog = JSON.parse(cur);
-      if (!Array.isArray(catalog)) catalog = [];
-    } catch (e) {
-      catalog = [];
-    }
+    const catalog = await readCatalog(context.env.WORKS_KV);
     const entry = Object.assign({}, meta, {
       id: id,
       updatedAt: new Date().toISOString(),
@@ -126,4 +132,28 @@ export async function onRequestPut(context) {
   }
 
   return json({ ok: true, id: id });
+}
+
+// DELETE /api/works/:id — 作品をサーバーから削除 + カタログから除外 (取り下げ時)
+export async function onRequestDelete(context) {
+  const id = context.params.id;
+  if (!id || !ID_RE.test(id)) {
+    return json({ error: 'invalid work id' }, 400);
+  }
+  if (!context.env.WORKS_KV) {
+    return json({ error: 'KV namespace "WORKS_KV" が未バインドです' }, 500);
+  }
+
+  // 1) 作品本体を削除 (存在しなくてもエラーにならない)
+  await context.env.WORKS_KV.delete('work:' + id);
+
+  // 2) サーバーカタログから除外 (read-modify-write)
+  const catalog = await readCatalog(context.env.WORKS_KV);
+  const next = catalog.filter(function (w) { return !w || w.id !== id; });
+  const removed = catalog.length - next.length;
+  if (removed > 0) {
+    await context.env.WORKS_KV.put(CATALOG_KEY, JSON.stringify(next));
+  }
+
+  return json({ ok: true, id: id, removed: removed });
 }

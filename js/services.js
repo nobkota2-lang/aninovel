@@ -705,7 +705,17 @@
         sourceWorkId: workId
       };
       setLS(KEYS.publishedWorks, pub);
-      return Promise.resolve({ success: true, publishedId: pubId, catalogEntry: catalogEntry });
+      // サーバー(KV)へアップロード — 他端末・他ユーザーから見えるようにする。
+      // 失敗してもローカル投稿は成立する(オフライン許容)。
+      return fetch('/api/works/' + encodeURIComponent(pubId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: work.data, meta: catalogEntry })
+      }).then(function(r) {
+        return { success: true, publishedId: pubId, catalogEntry: catalogEntry, serverSynced: !!(r && r.ok) };
+      }).catch(function() {
+        return { success: true, publishedId: pubId, catalogEntry: catalogEntry, serverSynced: false };
+      });
     },
 
     /** 投稿を取り下げ */
@@ -723,7 +733,14 @@
       }
       delete pub[pubId];
       setLS(KEYS.publishedWorks, pub);
-      return Promise.resolve({ success: true });
+      // サーバー(KV)からも削除する。失敗してもローカル取り下げは成立。
+      return fetch('/api/works/' + encodeURIComponent(pubId), {
+        method: 'DELETE'
+      }).then(function(r) {
+        return { success: true, serverSynced: !!(r && r.ok) };
+      }).catch(function() {
+        return { success: true, serverSynced: false };
+      });
     },
 
     /** 作品が投稿済みかチェック */
