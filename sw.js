@@ -1,13 +1,16 @@
 /* アニノベル Service Worker
  * 戦略:
- *   - HTML: network-first (常に最新を取得、オフライン時のみキャッシュ)
- *   - 静的アセット(css/js/svg/png): stale-while-revalidate
- *   - 音声(wav)・大容量データ: cache-first (一度取得したら長期キャッシュ)
- *   - data/catalog.json: network-first (作品追加を素早く反映)
+ *   - HTML / CSS / JS:  network-first  (常に最新を取得、オフライン時のみキャッシュ)
+ *   - 画像・フォント(svg/png/woff等): stale-while-revalidate
+ *   - 音声(wav 等):     cache-first    (一度取得したら長期キャッシュ)
+ *   - data/catalog.json 等の重要JSON: network-first (作品追加を素早く反映)
  *
- * バージョン管理: CACHE_NAME に日付+vタグ。更新時は必ず変更すること。
+ * !! 重要 !!
+ *   コード(HTML/CSS/JS)を network-first にしたため、デプロイは即座に全端末へ反映される。
+ *   万一に備え、デプロイのたびに CACHE_VERSION も変更すること
+ *   (変更すると activate で旧キャッシュが全削除され、各ブラウザがクリーンになる)。
  */
-const CACHE_VERSION = 'aninovel-v22-2026-04-26';
+const CACHE_VERSION = 'aninovel-v23-2026-05-19';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
@@ -52,8 +55,11 @@ self.addEventListener('activate', (event) => {
 });
 
 function isAudio(url) { return /\.(wav|mp3|ogg|m4a)$/i.test(url.pathname); }
-function isStatic(url) {
-  return /\.(css|js|svg|png|jpg|jpeg|webp|woff2?|ttf|otf|ico)$/i.test(url.pathname);
+// コード = 常に最新であるべきファイル (network-first)
+function isCode(url) { return /\.(css|js)$/i.test(url.pathname); }
+// アセット = 変化が少ない画像・フォント (stale-while-revalidate)
+function isAsset(url) {
+  return /\.(svg|png|jpg|jpeg|webp|woff2?|ttf|otf|ico)$/i.test(url.pathname);
 }
 function isHTML(url) {
   return url.pathname.endsWith('/') || url.pathname.endsWith('.html');
@@ -112,13 +118,16 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/') || url.pathname.includes('analytics')) return;
 
   if (isAudio(url)) {
+    // 音声は一度取得したら長期キャッシュ
     event.respondWith(cacheFirst(req, AUDIO_CACHE));
-  } else if (isCriticalJSON(url) || isHTML(url)) {
+  } else if (isHTML(url) || isCode(url) || isCriticalJSON(url)) {
+    // HTML / CSS / JS / 重要JSON は常に最新を取得 (デプロイ即反映)
     event.respondWith(networkFirst(req, RUNTIME_CACHE));
-  } else if (isStatic(url)) {
+  } else if (isAsset(url)) {
+    // 画像・フォントは stale-while-revalidate
     event.respondWith(staleWhileRevalidate(req, STATIC_CACHE));
   }
-  // それ以外はデフォルトのネットワーク取得
+  // それ以外 (クリーンURL /viewer 等) はデフォルトのネットワーク取得 = 常に最新
 });
 
 // ページからのメッセージで強制更新
