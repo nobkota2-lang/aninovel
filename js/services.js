@@ -412,6 +412,8 @@
       var dir = _dir();
       var susp = getLS(KEYS.suspendedWorks) || {};
       var result = [];
+      var seen = {};
+      // この端末のローカル下書き
       Object.keys(all).forEach(function(uid) {
         (all[uid] || []).forEach(function(w) {
           var owner = null;
@@ -421,11 +423,41 @@
             authorId: uid, authorEmail: owner ? owner.email : '(不明)',
             authorName: owner ? owner.displayName : '(不明)',
             createdAt: w.createdAt, updatedAt: w.updatedAt,
-            suspended: !!susp[w.id]
+            suspended: !!susp[w.id], source: 'local'
           });
+          seen[w.id] = true;
         });
       });
-      return Promise.resolve(result);
+      // サーバーの公開作品（全ユーザー分）をマージ
+      return fetch('/api/catalog?cb=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(cat) {
+          (cat && cat.works ? cat.works : []).forEach(function(w) {
+            if (!w || !w.id || seen[w.id]) return;
+            result.push({
+              id: w.id, title: w.title || '(無題)', description: w.description || '',
+              authorId: w.authorId || '', authorEmail: '',
+              authorName: w.author || '(不明)',
+              createdAt: w.createdAt, updatedAt: w.updatedAt,
+              suspended: !!susp[w.id], source: 'server'
+            });
+          });
+          return result;
+        })
+        .catch(function() { return result; });
+    },
+
+    /** 作品をサーバーから完全削除（オーナー専用・公開作品向け） */
+    adminDeleteWork: function(workId) {
+      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
+      if (!workId) return Promise.reject(new Error('作品IDが指定されていません'));
+      // ローカルの公開済み記録があれば除去
+      var pub = getLS(KEYS.publishedWorks) || {};
+      if (pub[workId]) { delete pub[workId]; setLS(KEYS.publishedWorks, pub); }
+      // サーバー(KV)からも削除
+      return fetch('/api/works/' + encodeURIComponent(workId), { method: 'DELETE' })
+        .then(function(r) { return { success: true, serverSynced: !!(r && r.ok) }; })
+        .catch(function() { return { success: true, serverSynced: false }; });
     },
 
     /** 作品を公開停止／再開 */

@@ -763,7 +763,7 @@
           var row = h('div', { style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px' + (w.suspended ? ';opacity:0.5' : '') });
           var info = h('div', { style: 'flex:1;min-width:0' });
           info.appendChild(h('div', { style: 'font-weight:600;font-size:14px' }, w.title + (w.suspended ? ' (公開停止)' : '')));
-          info.appendChild(h('div', { style: 'font-size:12px;color:var(--text-muted)' }, '作者: ' + w.authorName + ' (' + w.authorEmail + ')'));
+          info.appendChild(h('div', { style: 'font-size:12px;color:var(--text-muted)' }, '作者: ' + w.authorName + (w.authorEmail ? ' (' + w.authorEmail + ')' : '') + ' \u00B7 ' + (w.source === 'server' ? '\uD83C\uDF10 公開中(サーバー)' : '\u270F\uFE0F ローカル下書き')));
           row.appendChild(info);
           if (w.suspended) {
             var resumeBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#059669;font-size:12px' }, '\u25B6 再開');
@@ -776,6 +776,17 @@
               S.adminSetWorkSuspended(w.id, true).then(function() { toast('公開停止しました'); renderWorksTab(); });
             };
             row.appendChild(stopBtn);
+          }
+          if (w.source === 'server') {
+            var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\uD83D\uDDD1 削除');
+            delBtn.onclick = function() {
+              if (!confirm('「' + w.title + '」をサーバーから完全に削除しますか？\nこの操作は取り消せません。')) return;
+              S.adminDeleteWork(w.id).then(function(res) {
+                toast(res && res.serverSynced ? '削除しました' : '削除しました（サーバー未同期の可能性）');
+                renderWorksTab();
+              }).catch(function(e) { toast(e.message || '削除に失敗しました'); });
+            };
+            row.appendChild(delBtn);
           }
           var openBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'font-size:12px' }, '\uD83D\uDD0D');
           openBtn.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
