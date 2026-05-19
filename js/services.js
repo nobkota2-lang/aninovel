@@ -699,7 +699,6 @@
         return Promise.reject(new Error('コンテンツがない作品は投稿できません'));
       }
 
-      var pubId = 'pub_' + workId.replace(/^my_/, '');
       var charCount = 0;
       work.data.content.forEach(function(c) { charCount += (c.text || '').length; });
       var pageCount = Math.max(1, Math.ceil(work.data.content.length / 10));
@@ -711,43 +710,62 @@
       // オーナーの投稿は「作者」の作品として、ニックネーム Nobby で公開する
       var isOwner = !!(user.roles && user.roles.indexOf('owner') >= 0);
       var penName = isOwner ? 'Nobby' : (work.data.novel.author || user.displayName);
-      var catalogEntry = {
-        id: pubId,
-        title: work.data.novel.title || work.title,
-        author: penName,
-        authorId: user.id,
-        authorRole: 'author',
-        description: work.description || (work.data.novel.title + ' by ' + penName),
-        coverColor: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-        pageCount: pageCount,
-        charCount: charCount,
-        characterCount: characterCount,
-        tags: tags,
-        createdAt: work.createdAt,
-        contentUrl: null // 投稿作品は contentUrl を使わない
-      };
+      var title = work.data.novel.title || work.title;
+      var derivedId = 'pub_' + workId.replace(/^my_/, '');
 
-      var pub = getLS(KEYS.publishedWorks) || {};
-      pub[pubId] = {
-        catalogEntry: catalogEntry,
-        data: work.data,
-        authorId: user.id,
-        authorEmail: user.email,
-        publishedAt: new Date().toISOString(),
-        sourceWorkId: workId
-      };
-      setLS(KEYS.publishedWorks, pub);
-      // サーバー(KV)へアップロード — 他端末・他ユーザーから見えるようにする。
-      // 失敗してもローカル投稿は成立する(オフライン許容)。
-      return fetch('/api/works/' + encodeURIComponent(pubId), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: work.data, meta: catalogEntry })
-      }).then(function(r) {
-        return { success: true, publishedId: pubId, catalogEntry: catalogEntry, serverSynced: !!(r && r.ok) };
-      }).catch(function() {
-        return { success: true, publishedId: pubId, catalogEntry: catalogEntry, serverSynced: false };
-      });
+      // 同じタイトル & 同じ作者の公開作品が既にあれば、そのIDへ上書きする。
+      // (別の下書きを投稿しても重複作品が増えず、元の公開作品が更新される)
+      return fetch('/api/catalog?cb=' + Date.now(), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .catch(function() { return { works: [] }; })
+        .then(function(cat) {
+          var existing = (cat && cat.works ? cat.works : []).filter(function(w) {
+            return w && w.title === title && w.authorId === user.id;
+          })[0] || null;
+          var pubId = existing ? existing.id : derivedId;
+
+          var catalogEntry = {
+            id: pubId,
+            title: title,
+            author: penName,
+            authorId: user.id,
+            authorRole: 'author',
+            description: work.description || (title + ' by ' + penName),
+            coverColor: (existing && existing.coverColor) || 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+            pageCount: pageCount,
+            charCount: charCount,
+            characterCount: characterCount,
+            tags: tags,
+            createdAt: work.createdAt,
+            contentUrl: null // 投稿作品は contentUrl を使わない
+          };
+
+          var pub = getLS(KEYS.publishedWorks) || {};
+          // 上書き時、別IDの古いローカル公開記録が残っていれば掃除
+          if (pub[derivedId] && derivedId !== pubId) delete pub[derivedId];
+          pub[pubId] = {
+            catalogEntry: catalogEntry,
+            data: work.data,
+            authorId: user.id,
+            authorEmail: user.email,
+            publishedAt: new Date().toISOString(),
+            sourceWorkId: workId
+          };
+          setLS(KEYS.publishedWorks, pub);
+
+          // サーバー(KV)へアップロード（失敗してもローカル投稿は成立）
+          return fetch('/api/works/' + encodeURIComponent(pubId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: work.data, meta: catalogEntry })
+          }).then(function(r) {
+            return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
+                     overwrote: !!existing, serverSynced: !!(r && r.ok) };
+          }).catch(function() {
+            return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
+                     overwrote: !!existing, serverSynced: false };
+          });
+        });
     },
 
     /** 投稿を取り下げ */

@@ -765,17 +765,19 @@
           info.appendChild(h('div', { style: 'font-weight:600;font-size:14px' }, w.title + (w.suspended ? ' (公開停止)' : '')));
           info.appendChild(h('div', { style: 'font-size:12px;color:var(--text-muted)' }, '作者: ' + w.authorName + (w.authorEmail ? ' (' + w.authorEmail + ')' : '') + ' \u00B7 ' + (w.source === 'server' ? '\uD83C\uDF10 公開中(サーバー)' : '\u270F\uFE0F ローカル下書き')));
           row.appendChild(info);
-          if (w.suspended) {
-            var resumeBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#059669;font-size:12px' }, '\u25B6 再開');
-            resumeBtn.onclick = function() { S.adminSetWorkSuspended(w.id, false).then(function() { toast('再開しました'); renderWorksTab(); }); };
-            row.appendChild(resumeBtn);
-          } else {
-            var stopBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\u23F8 公開停止');
-            stopBtn.onclick = function() {
-              if (!confirm('「' + w.title + '」を公開停止しますか？')) return;
-              S.adminSetWorkSuspended(w.id, true).then(function() { toast('公開停止しました'); renderWorksTab(); });
-            };
-            row.appendChild(stopBtn);
+          if (w.source === 'server') {
+            if (w.suspended) {
+              var resumeBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#059669;font-size:12px' }, '\u25B6 再開');
+              resumeBtn.onclick = function() { S.adminSetWorkSuspended(w.id, false).then(function() { toast('再開しました'); renderWorksTab(); }); };
+              row.appendChild(resumeBtn);
+            } else {
+              var stopBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\u23F8 公開停止');
+              stopBtn.onclick = function() {
+                if (!confirm('「' + w.title + '」を公開停止しますか？')) return;
+                S.adminSetWorkSuspended(w.id, true).then(function() { toast('公開停止しました'); renderWorksTab(); });
+              };
+              row.appendChild(stopBtn);
+            }
           }
           if (w.source === 'server') {
             var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626;font-size:12px' }, '\uD83D\uDDD1 削除');
