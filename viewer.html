@@ -2226,7 +2226,12 @@ function renderTOC(){return'<div class="panel-slide '+(state.tocOpen?'open':'')+
 function renderBM(){return'<div class="panel-slide '+(state.bookmarkListOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📚 しおり一覧</span><button onclick="state.bookmarkListOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.bookmarks.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">しおりがありません</p>':'<div style="display:flex;flex-direction:column;gap:8px">'+state.bookmarks.map(function(bm){var ba=_acts.length;_acts.push(function(){deleteBookmark(bm.id)});return'<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;cursor:pointer" onclick="jumpToBookmark('+bm.page+')"><span style="font-size:18px">🔖</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+esc(bm.title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+new Date(bm.timestamp).toLocaleString()+'</div></div><button onclick="event.stopPropagation();act('+ba+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-muted)">🗑️</button></div>'}).join('')+'</div>')+'</div></div>'}
 function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(data.name)+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(data.shortName)+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">吹き出しカラー</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:40px;height:40px;border-radius:50%;border:3px solid '+(data.iconColor===c.icon?'var(--accent)':'var(--border)')+';background:'+c.icon+';cursor:pointer" title="'+c.name+'"></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 カスタムカラー</button>';if(state.colorPickerOpen)h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div><div style="flex:1"><label style="font-size:11px">アイコン色</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🔊 読み上げ音声</label>';var _voices=state.tts.voices.length?state.tts.voices:(speechSynthesis?speechSynthesis.getVoices():[]);var _jaVoices=_voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});var _otherVoices=_voices.filter(function(v){return!v.lang||v.lang.indexOf('ja')!==0});h+='<select onchange="state.editingItem.data.ttsVoice=this.value" style="width:100%;margin-bottom:6px"><option value="">── 性別デフォルト（自動選択）</option>';if(_jaVoices.length){var _jaF=_jaVoices.filter(function(v){return _voiceGender(v)==='female'});var _jaM=_jaVoices.filter(function(v){return _voiceGender(v)==='male'});var _jaU=_jaVoices.filter(function(v){return _voiceGender(v)==='unknown'});if(_jaF.length){h+='<optgroup label="🚺 日本語女性音声">';_jaF.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaM.length){h+='<optgroup label="🚹 日本語男性音声">';_jaM.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaU.length){h+='<optgroup label="🎙 日本語その他">';_jaU.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}}if(_otherVoices.length){h+='<optgroup label="その他の言語">';_otherVoices.slice(0,30).forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>';});h+='</optgroup>';}h+='</select>';h+='<div style="display:flex;gap:8px;align-items:center"><button onclick="(function(){var v=state.editingItem.data;var utt=new SpeechSynthesisUtterance(v.name?v.name+\'。テスト音声です。\':\'テスト音声です。\');utt.lang=\'ja-JP\';if(v.ttsVoice){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===v.ttsVoice});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">🖥=ローカル ☁=クラウド</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
 function openGallery(){
-  state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;
+  state.imageGalleryOpen=true;
+  state.galleryGroup=null;
+  state.galleryPage=0;
+  state.galleryStyle=null;
+  state.galleryGender=null;
+  state.gallerySearch='';
   if(!state.galleryManifest){
     fetch('data/gallery-manifest.json',{cache:'force-cache'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
@@ -2235,48 +2240,208 @@ function openGallery(){
   }
   render();
 }
+function parseGalleryGroupId(id){
+  var parts=id.split('_');
+  if(parts[0]==='manga'){return{style:'manga',gender:null,age:parts.slice(1).join('_')};}
+  return{style:parts[0],gender:parts[1],age:parts.slice(2).join('_')};
+}
+function buildGalleryHierarchy(groups){
+  var h={
+    photo:{label:'📷 写真',icon:'📷',genders:{},total:0,order:1},
+    anime:{label:'🎨 アニメ',icon:'🎨',genders:{},total:0,order:2},
+    manga:{label:'✏️ マンガ',icon:'✏️',genders:{},total:0,order:3}
+  };
+  var ageLabels={
+    child:'👶 子ども',
+    student:'🎓 学生',
+    adult:'💼 社会人',
+    senior:'👴 シニア',
+    design:'🎨 デザイン集',
+    kids:'👶 子ども'
+  };
+  var ageOrder={child:1,student:2,adult:3,senior:4,design:5,kids:1};
+  groups.forEach(function(grp){
+    var p=parseGalleryGroupId(grp.id);
+    if(!h[p.style])return;
+    h[p.style].total+=grp.items.length;
+    var gKey=p.gender||'_none';
+    if(!h[p.style].genders[gKey]){
+      h[p.style].genders[gKey]={
+        label:(gKey==='male'?'👨 男性':(gKey==='female'?'👩 女性':'')),
+        ages:[],
+        total:0
+      };
+    }
+    h[p.style].genders[gKey].ages.push({
+      id:grp.id,
+      ageKey:p.age,
+      ageLabel:ageLabels[p.age]||p.age,
+      ageOrder:ageOrder[p.age]||99,
+      label:grp.label,
+      items:grp.items,
+      count:grp.items.length
+    });
+    h[p.style].genders[gKey].total+=grp.items.length;
+  });
+  Object.keys(h).forEach(function(sk){
+    Object.keys(h[sk].genders).forEach(function(gk){
+      h[sk].genders[gk].ages.sort(function(a,b){return a.ageOrder-b.ageOrder;});
+    });
+  });
+  return h;
+}
+function searchGalleryItems(groups,query){
+  query=query.toLowerCase();
+  var results=[];
+  groups.forEach(function(grp){
+    if(grp.label.toLowerCase().indexOf(query)!==-1){
+      results.push({group:grp,matchedAll:true});
+    }
+  });
+  return results;
+}
 function renderGallery(){
   var man=state.galleryManifest;
-  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-weight:700;font-size:16px">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px;max-height:90vh;overflow-y:auto">';
+  
+  // ヘッダー
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2"><h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  
   if(!man){
     h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';
   }else if(man.error){
     h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。<br>ローカルサーバー経由で開いているか確認してください。</p>';
-  }else if(!state.galleryGroup){
-    h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください</p>';
-    h+='<div class="gallery-cat-grid">';
-    man.groups.forEach(function(grp){
-      var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
-      h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()">'
-        +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
-        +'<span class="gallery-cat-label">'+grp.label+'</span>'
-        +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+'件</span></button>';
-    });
-    h+='</div>';
   }else{
-    var grp=null,i;
-    for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
-    var items=(grp&&grp.items)||[];
-    var PER=30;
-    var pages=Math.max(1,Math.ceil(items.length/PER));
-    var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
-    var slice=items.slice(pg*PER,pg*PER+PER);
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-      +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリー選択</button>'
-      +'<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>'
-      +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length+'件</span></div>';
-    h+='<div class="gallery-grid" style="max-height:48vh;overflow-y:auto;padding:4px">';
-    slice.forEach(function(it){
-      h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
-    });
-    h+='</div>';
-    if(pages>1){
-      h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px">'
-        +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>'
-        +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
-        +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>'
+    // 検索ボックス（常に表示）
+    h+='<div style="margin-bottom:14px"><input type="text" id="gallerySearchInput" placeholder="🔍 カテゴリーを検索（例: 学生、シニア）" value="'+(state.gallerySearch||'').replace(/"/g,'&quot;')+'" oninput="state.gallerySearch=this.value;state.galleryStyle=null;state.galleryGender=null;state.galleryGroup=null;render();setTimeout(function(){var i=document.getElementById(\'gallerySearchInput\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)" style="width:100%;padding:10px 14px;border:1px solid var(--border,#d1d5db);border-radius:8px;font-size:14px;box-sizing:border-box"></div>';
+    
+    var hierarchy=buildGalleryHierarchy(man.groups);
+    
+    // 検索モード
+    if(state.gallerySearch&&state.gallerySearch.trim()){
+      var results=searchGalleryItems(man.groups,state.gallerySearch.trim());
+      h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">検索結果: '+results.length+' 件</p>';
+      if(results.length===0){
+        h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">😔 該当するカテゴリーが見つかりませんでした</p>';
+      }else{
+        h+='<div class="gallery-cat-grid">';
+        results.forEach(function(r){
+          var grp=r.group;
+          var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
+          h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;state.gallerySearch=\'\';render()">'
+            +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+            +'<span class="gallery-cat-label">'+grp.label+'</span>'
+            +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+'件</span></button>';
+        });
+        h+='</div>';
+      }
+    }
+    // 第4階層: 画像一覧 (グループ選択後)
+    else if(state.galleryGroup){
+      var grp=null,i;
+      for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
+      var items=(grp&&grp.items)||[];
+      var PER=30;
+      var pages=Math.max(1,Math.ceil(items.length/PER));
+      var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
+      var slice=items.slice(pg*PER,pg*PER+PER);
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+        +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← 戻る</button>'
+        +'<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>'
+        +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length+'件</span></div>';
+      h+='<div class="gallery-grid" style="max-height:48vh;overflow-y:auto;padding:4px">';
+      slice.forEach(function(it){
+        h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
+      });
+      h+='</div>';
+      if(pages>1){
+        h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px">'
+          +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>'
+          +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
+          +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>'
+          +'</div>';
+      }
+    }
+    // 第3階層: 年齢層選択 (スタイル+性別選択後)
+    else if(state.galleryStyle&&state.galleryGender){
+      var styleData=hierarchy[state.galleryStyle];
+      var genderData=styleData.genders[state.galleryGender];
+      h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+        +'<button onclick="state.galleryGender=null;render()" class="btn btn-ghost" style="font-size:12px">← 戻る</button>'
+        +'<span style="font-size:13px;color:var(--text-muted)">'+styleData.label+' &gt; '+genderData.label+'</span>'
         +'</div>';
+      h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">年齢層を選択してください</p>';
+      h+='<div class="gallery-cat-grid">';
+      genderData.ages.forEach(function(age){
+        var rep=(age.items&&age.items.length)?age.items[0].p:'';
+        h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+age.id+'\';state.galleryPage=0;render()">'
+          +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+          +'<span class="gallery-cat-label">'+age.ageLabel+'</span>'
+          +'<span class="gallery-cat-count">'+age.count+'件</span></button>';
+      });
+      h+='</div>';
+    }
+    // 第2階層: 性別選択 (スタイル選択後)
+    else if(state.galleryStyle){
+      var styleData=hierarchy[state.galleryStyle];
+      h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+        +'<button onclick="state.galleryStyle=null;render()" class="btn btn-ghost" style="font-size:12px">← 戻る</button>'
+        +'<span style="font-size:13px;color:var(--text-muted)">'+styleData.label+'</span>'
+        +'</div>';
+      
+      // マンガまたは性別分けがない場合は直接年齢層へ
+      var genderKeys=Object.keys(styleData.genders);
+      if(genderKeys.length===1&&genderKeys[0]==='_none'){
+        // 性別分けなし - 直接年齢層を表示
+        var genderData=styleData.genders['_none'];
+        h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください</p>';
+        h+='<div class="gallery-cat-grid">';
+        genderData.ages.forEach(function(age){
+          var rep=(age.items&&age.items.length)?age.items[0].p:'';
+          h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+age.id+'\';state.galleryPage=0;render()">'
+            +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+            +'<span class="gallery-cat-label">'+age.ageLabel+'</span>'
+            +'<span class="gallery-cat-count">'+age.count+'件</span></button>';
+        });
+        h+='</div>';
+      }else{
+        h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">性別を選択してください</p>';
+        h+='<div class="gallery-cat-grid">';
+        ['male','female','_none'].forEach(function(gKey){
+          var gd=styleData.genders[gKey];
+          if(!gd||gd.ages.length===0)return;
+          var rep=(gd.ages[0].items&&gd.ages[0].items.length)?gd.ages[0].items[0].p:'';
+          h+='<button class="gallery-cat-btn" onclick="state.galleryGender=\''+gKey+'\';render()">'
+            +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+            +'<span class="gallery-cat-label">'+(gd.label||'その他')+'</span>'
+            +'<span class="gallery-cat-count">'+gd.total+'件</span></button>';
+        });
+        h+='</div>';
+      }
+    }
+    // 第1階層: スタイル選択 (最初の画面)
+    else{
+      h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください</p>';
+      h+='<div class="gallery-cat-grid">';
+      ['photo','anime','manga'].forEach(function(sKey){
+        var sd=hierarchy[sKey];
+        if(!sd||sd.total===0)return;
+        // 代表画像を探す
+        var rep='';
+        var gKeys=Object.keys(sd.genders);
+        for(var gi=0;gi<gKeys.length;gi++){
+          var gd=sd.genders[gKeys[gi]];
+          if(gd.ages.length>0&&gd.ages[0].items&&gd.ages[0].items.length>0){
+            rep=gd.ages[0].items[0].p;
+            break;
+          }
+        }
+        h+='<button class="gallery-cat-btn" onclick="state.galleryStyle=\''+sKey+'\';state.galleryGender=null;render()">'
+          +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+          +'<span class="gallery-cat-label">'+sd.label+'</span>'
+          +'<span class="gallery-cat-count">'+sd.total+'件</span></button>';
+      });
+      h+='</div>';
     }
   }
   h+='</div></div>';
