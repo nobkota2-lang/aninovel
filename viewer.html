@@ -2257,7 +2257,7 @@ function filterGalleryGroups(groups){
 function renderGalleryFilterBtn(filterKey,value,label){
   var current=state['galleryFilter'+filterKey.charAt(0).toUpperCase()+filterKey.slice(1)]||'all';
   var active=current===value;
-  var style='padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid '+(active?'#6366f1':'#d1d5db')+';background:'+(active?'#6366f1':'#fff')+';color:'+(active?'#fff':'#374151')+';transition:all 0.2s;font-weight:'+(active?'600':'500');
+  var style='padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid '+(active?'#6366f1':'#d1d5db')+';background:'+(active?'#6366f1':'#fff')+';color:'+(active?'#fff':'#374151')+';transition:all 0.2s;font-weight:'+(active?'600':'500')+';margin-right:4px;margin-bottom:4px';
   return '<button onclick="state.galleryFilter'+filterKey.charAt(0).toUpperCase()+filterKey.slice(1)+'=\''+value+'\';render()" style="'+style+'">'+label+'</button>';
 }
 function renderGallery(){
@@ -2265,7 +2265,7 @@ function renderGallery(){
   var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:760px;max-height:90vh;overflow-y:auto">';
   
   // ヘッダー
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2"><h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2"><h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
   
   if(!man){
     h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';
@@ -2276,7 +2276,7 @@ function renderGallery(){
     var grp=null,i;
     for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
     var items=(grp&&grp.items)||[];
-    var PER=42;
+    var PER=60;
     var pages=Math.max(1,Math.ceil(items.length/PER));
     var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
     var slice=items.slice(pg*PER,pg*PER+PER);
@@ -2302,37 +2302,39 @@ function renderGallery(){
     // 検索ボックス
     h+='<div style="margin-bottom:10px"><input type="text" id="gallerySearchInput" placeholder="🔍 カテゴリーを検索" value="'+(state.gallerySearch||'').replace(/"/g,'&quot;')+'" oninput="state.gallerySearch=this.value;render();setTimeout(function(){var i=document.getElementById(\'gallerySearchInput\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>';
     
-    // フィルタ: スタイル
-    h+='<div style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted);margin-right:8px;font-weight:500">スタイル:</span>';
+    // フィルタ: スタイル（「その他」追加）
+    h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">スタイル:</span>';
     h+=renderGalleryFilterBtn('style','all','すべて');
-    h+=' '+renderGalleryFilterBtn('style','photo','📷写真');
-    h+=' '+renderGalleryFilterBtn('style','anime','🎨アニメ');
-    h+=' '+renderGalleryFilterBtn('style','manga','✏️マンガ');
+    h+=renderGalleryFilterBtn('style','photo','📷写真');
+    h+=renderGalleryFilterBtn('style','anime','🎨アニメ');
+    h+=renderGalleryFilterBtn('style','manga','✏️マンガ');
+    h+=renderGalleryFilterBtn('style','other','✨その他');
     h+='</div>';
     
     // フィルタ: 性別
-    h+='<div style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted);margin-right:8px;font-weight:500">性別:</span>';
+    h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">性別:</span>';
     h+=renderGalleryFilterBtn('gender','all','すべて');
-    h+=' '+renderGalleryFilterBtn('gender','male','👨男性');
-    h+=' '+renderGalleryFilterBtn('gender','female','👩女性');
+    h+=renderGalleryFilterBtn('gender','male','👨男性');
+    h+=renderGalleryFilterBtn('gender','female','👩女性');
     h+='</div>';
     
-    // フィルタ: 年齢
-    h+='<div style="margin-bottom:12px"><span style="font-size:11px;color:var(--text-muted);margin-right:8px;font-weight:500">年齢:</span>';
+    // フィルタ: 年齢（「デザイン」「その他」追加）
+    h+='<div style="margin-bottom:10px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">年齢:</span>';
     h+=renderGalleryFilterBtn('age','all','すべて');
-    h+=' '+renderGalleryFilterBtn('age','子ども','👶子ども');
-    h+=' '+renderGalleryFilterBtn('age','学生','🎓学生');
-    h+=' '+renderGalleryFilterBtn('age','社会人','💼社会人');
-    h+=' '+renderGalleryFilterBtn('age','シニア','👴シニア');
+    h+=renderGalleryFilterBtn('age','子ども','👶子ども');
+    h+=renderGalleryFilterBtn('age','学生','🎓学生');
+    h+=renderGalleryFilterBtn('age','社会人','💼社会人');
+    h+=renderGalleryFilterBtn('age','シニア','👴シニア');
+    h+=renderGalleryFilterBtn('age','デザイン','🎭デザイン');
     h+='</div>';
     
     // フィルタ結果
     var filtered=filterGalleryGroups(man.groups);
     var totalShown=filtered.reduce(function(sum,g){return sum+(g.items?g.items.length:0);},0);
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:#f9fafb;border-radius:6px;font-size:12px;color:var(--text-muted)">';
-    h+='<span>'+filtered.length+' カテゴリー / '+totalShown+' 件</span>';
+    h+='<span>'+filtered.length+' カテゴリー / '+totalShown.toLocaleString()+' 件</span>';
     if(state.galleryFilterStyle!=='all'||state.galleryFilterGender!=='all'||state.galleryFilterAge!=='all'||state.gallerySearch){
-      h+='<button onclick="state.galleryFilterStyle=\'all\';state.galleryFilterGender=\'all\';state.galleryFilterAge=\'all\';state.gallerySearch=\'\';render()" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;font-weight:500">フィルタをリセット</button>';
+      h+='<button onclick="state.galleryFilterStyle=\'all\';state.galleryFilterGender=\'all\';state.galleryFilterAge=\'all\';state.gallerySearch=\'\';render()" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;font-weight:500">リセット</button>';
     }
     h+='</div>';
     
@@ -2340,13 +2342,13 @@ function renderGallery(){
       h+='<p style="text-align:center;color:var(--text-muted);padding:40px 0">😔 該当するカテゴリーがありません</p>';
     }else{
       // カテゴリー一覧（54px アイコン）
-      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
       filtered.forEach(function(grp){
         var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
-        h+='<button onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()" style="display:flex;flex-direction:column;align-items:center;padding:10px 8px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.2s;gap:6px" onmouseover="this.style.borderColor=\'#6366f1\';this.style.boxShadow=\'0 2px 8px rgba(99,102,241,0.15)\'" onmouseout="this.style.borderColor=\'#e5e7eb\';this.style.boxShadow=\'none\'">';
+        h+='<button onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()" style="display:flex;flex-direction:column;align-items:center;padding:10px 6px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.2s;gap:6px" onmouseover="this.style.borderColor=\'#6366f1\';this.style.boxShadow=\'0 2px 8px rgba(99,102,241,0.15)\'" onmouseout="this.style.borderColor=\'#e5e7eb\';this.style.boxShadow=\'none\'">';
         h+=rep?'<img src="'+rep+'" loading="lazy" style="width:54px;height:54px;object-fit:cover;border-radius:50%" onerror="this.style.visibility=\'hidden\'">':'<div style="width:54px;height:54px;border-radius:50%;background:#f3f4f6"></div>';
         h+='<span style="font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:#1f2937">'+grp.label+'</span>';
-        h+='<span style="font-size:10px;color:#6b7280">'+(grp.items?grp.items.length:0)+'件</span>';
+        h+='<span style="font-size:10px;color:#6b7280">'+(grp.items?grp.items.length.toLocaleString():0)+'件</span>';
         h+='</button>';
       });
       h+='</div>';
