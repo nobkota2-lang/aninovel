@@ -330,23 +330,242 @@ async function exportEpub(){
   var oebps=zip.folder('OEBPS');
   oebps.file('style.css',css);
   oebps.file('content.xhtml','<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">\n<head><meta charset="UTF-8"/><title>'+_escHtml(title)+'</title><link rel="stylesheet" type="text/css" href="style.css"/></head>\n<body>\n'+bodyHtml+'\n
-<script id="phase1.4-legacy-path-mapper">
+<!-- ==================================================== -->
+<!-- Phase 1.4 Gallery Extension Script                  -->
+<!-- 既存コードに一切触らず、関数を上書きする安全な実装  -->
+<!-- ==================================================== -->
+<script id="phase14-gallery-extension">
 (function(){
-  function tryMapLegacyPaths(){
-    if(typeof window.state==='undefined'||typeof window.normalizeAllIconPaths!=='function'){
-      setTimeout(tryMapLegacyPaths,200);
+  'use strict';
+  
+  console.log('[Phase 1.4] Gallery Extension Loading...');
+  
+  // ====================================================
+  // 1. 旧パスマッピング関数
+  // ====================================================
+  function mapLegacyGalleryPath(p){
+    if(!p||typeof p!=='string')return p;
+    // /gallery/SUBFOLDER/xxx.png → /gallery/xxx.png
+    var m=p.match(/\/gallery\/[^\/]+\/([^\/]+\.(?:png|jpg|jpeg|webp|gif))$/i);
+    if(m)return '/gallery/'+m[1];
+    return p;
+  }
+  
+  function normalizeAllIconPaths(){
+    if(typeof state==='undefined')return;
+    if(state.characters&&Array.isArray(state.characters)){
+      state.characters.forEach(function(ch){
+        if(ch.icon)ch.icon=mapLegacyGalleryPath(ch.icon);
+        if(ch.iconMouthOpen)ch.iconMouthOpen=mapLegacyGalleryPath(ch.iconMouthOpen);
+        if(ch.lipsyncFrames&&Array.isArray(ch.lipsyncFrames)){
+          ch.lipsyncFrames=ch.lipsyncFrames.map(mapLegacyGalleryPath);
+        }
+      });
+    }
+    if(state.readerCustom){
+      Object.keys(state.readerCustom).forEach(function(k){
+        var rc=state.readerCustom[k];
+        if(rc&&rc.iconImage)rc.iconImage=mapLegacyGalleryPath(rc.iconImage);
+      });
+    }
+  }
+  
+  // ====================================================
+  // 2. 画像アップロード関数（著作権確認付き）
+  // ====================================================
+  function handleGalleryImageUpload(input){
+    var file=input&&input.files&&input.files[0];
+    if(!file){return;}
+    if(!file.type.match(/^image\//)){alert('画像ファイルを選択してください');return;}
+    if(file.size>5*1024*1024){alert('ファイルサイズが大きすぎます(5MB以下にしてください)');return;}
+    
+    var copyrightOk=confirm('⚠️ アップロード前の確認\n\n以下を確認してください:\n• 著作権を侵害していないこと\n• 第三者の権利を侵害していないこと\n• 自分が作成または使用許諾を得た画像であること\n\nアップロードする画像はあなたの責任において、\n著作権その他の権利を侵害しないことを確認しましたか?');
+    if(!copyrightOk){input.value='';return;}
+    
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var dataUrl=ev.target.result;
+      window.__lastUploadedImage=dataUrl;
+      if(typeof showToast==='function')showToast('画像をアップロードしました');
+      // ギャラリーモーダルから画像クリック相当のイベントを発火
+      var galleryImg=document.querySelector('[data-galimg]');
+      if(galleryImg){
+        var fakeImg=document.createElement('img');
+        fakeImg.setAttribute('data-galimg',dataUrl);
+        fakeImg.src=dataUrl;
+        galleryImg.parentNode.insertBefore(fakeImg,galleryImg);
+        fakeImg.click();
+      }else{
+        alert('画像をクリックして適用してください。\n\nアップロードした画像はギャラリーに追加されました。');
+      }
+      if(input)input.value='';
+    };
+    reader.onerror=function(){alert('画像の読み込みに失敗しました');};
+    reader.readAsDataURL(file);
+  }
+  
+  // ====================================================
+  // 3. ギャラリー機能の拡張（フィルター式UI）
+  // ====================================================
+  function buildGalleryHierarchy(groups){
+    var styles={photo:'📷 写真',anime:'🎨 アニメ',manga:'✏️ マンガ',other:'✨ その他'};
+    var genders={male:'👨 男性',female:'👩 女性'};
+    var ages=['子ども','学生','社会人','シニア','デザイン','その他'];
+    return{styles:styles,genders:genders,ages:ages};
+  }
+  
+  function filterGalleryGroups(groups,filters){
+    return groups.filter(function(g){
+      if(filters.style&&filters.style!=='all'&&g.style!==filters.style)return false;
+      if(filters.gender&&filters.gender!=='all'&&g.gender!==filters.gender)return false;
+      if(filters.age&&filters.age!=='all'&&g.age!==filters.age)return false;
+      if(filters.search){
+        var q=filters.search.toLowerCase().trim();
+        if(q&&g.label.toLowerCase().indexOf(q)===-1)return false;
+      }
+      return true;
+    });
+  }
+  
+  function fbtn(filterType,value,label){
+    var current=state['galleryF_'+filterType]||'all';
+    var active=current===value;
+    var style='padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid '+(active?'#6366f1':'#d1d5db')+';background:'+(active?'#6366f1':'#fff')+';color:'+(active?'#fff':'#374151')+';transition:all 0.2s;font-weight:'+(active?'600':'500')+';margin-right:4px;margin-bottom:4px';
+    return '<button onclick="state.galleryF_'+filterType+'=\''+value+'\';render()" style="'+style+'">'+label+'</button>';
+  }
+  
+  // 既存の openGallery を保存して拡張
+  if(typeof window.openGallery==='function'){
+    var _origOpenGallery=window.openGallery;
+    window.openGallery=function(){
+      // 拡張フィルターの初期化
+      if(typeof state!=='undefined'){
+        state.galleryF_style='all';
+        state.galleryF_gender='all';
+        state.galleryF_age='all';
+        state.galleryF_search='';
+      }
+      return _origOpenGallery.apply(this,arguments);
+    };
+  }
+  
+  // 既存の renderGallery を新しい実装で完全に置き換え
+  window.renderGallery=function(){
+    var man=state.galleryManifest;
+    var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:780px;max-height:90vh;overflow-y:auto">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2">';
+    h+='<h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3>';
+    h+='<button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button>';
+    h+='</div>';
+    
+    // アップロードバナー
+    h+='<div style="margin-bottom:12px;padding:10px 12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:8px;border:1px solid #fcd34d">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+    h+='<div style="font-size:12px;font-weight:600;color:#78350f">📤 自分のPCから画像をアップロード</div>';
+    h+='<label style="background:#f59e0b;color:#fff;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">📂 画像を選択<input type="file" accept="image/*" style="display:none" onchange="handleGalleryImageUpload(this)"></label>';
+    h+='</div>';
+    h+='<div style="font-size:10px;color:#92400e;margin-top:4px">※ 著作権を侵害しない画像のみ(5MB以下)</div>';
+    h+='</div>';
+    
+    if(!man){h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';}
+    else if(man.error){h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。</p>';}
+    else if(state.galleryGroup){
+      // 画像一覧
+      var grp=null;
+      for(var i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
+      var items=(grp&&grp.items)||[];
+      var PER=80;
+      var pages=Math.max(1,Math.ceil(items.length/PER));
+      var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
+      var slice=items.slice(pg*PER,pg*PER+PER);
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">';
+      h+='<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリーに戻る</button>';
+      h+='<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>';
+      h+='<span style="font-size:12px;color:var(--text-muted)">全'+items.length.toLocaleString()+'件</span>';
+      h+='</div>';
+      h+='<div class="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;max-height:48vh;overflow-y:auto;padding:4px">';
+      for(var k=0;k<slice.length;k++){
+        var it=slice[k];
+        h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" style="width:54px;height:54px;object-fit:cover;border-radius:50%;cursor:pointer;border:1px solid #e5e7eb" onerror="this.style.display=\'none\'">';
+      }
+      h+='</div>';
+      if(pages>1){
+        h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">';
+        h+='<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>';
+        h+='<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>';
+        h+='<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>';
+        h+='</div>';
+      }
+    }else{
+      // カテゴリー一覧（フィルタ式）
+      h+='<div style="margin-bottom:10px"><input type="text" id="gallerySearchInput" placeholder="🔍 カテゴリーを検索" value="'+(state.galleryF_search||'').replace(/"/g,'&quot;')+'" oninput="state.galleryF_search=this.value;render();setTimeout(function(){var i=document.getElementById(\'gallerySearchInput\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>';
+      
+      h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">スタイル:</span>';
+      h+=fbtn('style','all','すべて')+fbtn('style','photo','📷写真')+fbtn('style','anime','🎨アニメ')+fbtn('style','manga','✏️マンガ')+fbtn('style','other','✨その他');
+      h+='</div>';
+      
+      h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">性別:</span>';
+      h+=fbtn('gender','all','すべて')+fbtn('gender','male','👨男性')+fbtn('gender','female','👩女性');
+      h+='</div>';
+      
+      h+='<div style="margin-bottom:10px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">年齢:</span>';
+      h+=fbtn('age','all','すべて')+fbtn('age','子ども','👶子ども')+fbtn('age','学生','🎓学生')+fbtn('age','社会人','💼社会人')+fbtn('age','シニア','👴シニア')+fbtn('age','デザイン','🎭デザイン')+fbtn('age','その他','✨その他');
+      h+='</div>';
+      
+      var filters={style:state.galleryF_style,gender:state.galleryF_gender,age:state.galleryF_age,search:state.galleryF_search};
+      var filtered=filterGalleryGroups(man.groups,filters);
+      var totalShown=filtered.reduce(function(sum,g){return sum+(g.items?g.items.length:0);},0);
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:#f9fafb;border-radius:6px;font-size:12px;color:var(--text-muted)">';
+      h+='<span><strong>'+filtered.length+'</strong> カテゴリー / <strong>'+totalShown.toLocaleString()+'</strong> 件</span>';
+      if(state.galleryF_style!=='all'||state.galleryF_gender!=='all'||state.galleryF_age!=='all'||state.galleryF_search){
+        h+='<button onclick="state.galleryF_style=\'all\';state.galleryF_gender=\'all\';state.galleryF_age=\'all\';state.galleryF_search=\'\';render()" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;font-weight:500">リセット</button>';
+      }
+      h+='</div>';
+      
+      if(filtered.length===0){
+        h+='<p style="text-align:center;color:var(--text-muted);padding:40px 0">😔 該当するカテゴリーがありません</p>';
+      }else{
+        h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;max-height:46vh;overflow-y:auto;padding:4px">';
+        for(var n=0;n<filtered.length;n++){
+          var grp2=filtered[n];
+          var rep=(grp2.items&&grp2.items.length)?grp2.items[0].p:'';
+          h+='<button onclick="state.galleryGroup=\''+grp2.id+'\';state.galleryPage=0;render()" style="display:flex;flex-direction:column;align-items:center;padding:10px 6px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.2s;gap:6px" onmouseover="this.style.borderColor=\'#6366f1\'" onmouseout="this.style.borderColor=\'#e5e7eb\'">';
+          h+=rep?'<img src="'+rep+'" loading="lazy" style="width:54px;height:54px;object-fit:cover;border-radius:50%" onerror="this.style.visibility=\'hidden\'">':'<div style="width:54px;height:54px;border-radius:50%;background:#f3f4f6"></div>';
+          h+='<span style="font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:#1f2937">'+grp2.label+'</span>';
+          h+='<span style="font-size:10px;color:#6b7280">'+(grp2.items?grp2.items.length.toLocaleString():0)+'件</span>';
+          h+='</button>';
+        }
+        h+='</div>';
+      }
+    }
+    h+='</div></div>';
+    return h;
+  };
+  
+  // グローバル公開
+  window.mapLegacyGalleryPath=mapLegacyGalleryPath;
+  window.normalizeAllIconPaths=normalizeAllIconPaths;
+  window.handleGalleryImageUpload=handleGalleryImageUpload;
+  window.filterGalleryGroups=filterGalleryGroups;
+  
+  // 起動時に旧パスを正規化
+  function tryNormalize(retries){
+    if(retries<=0)return;
+    if(typeof state==='undefined'){
+      setTimeout(function(){tryNormalize(retries-1);},300);
       return;
     }
-    try{
-      window.normalizeAllIconPaths();
-      console.log('[Phase 1.4] レガシーパスを正規化しました');
-    }catch(e){console.warn('[Phase 1.4] パス正規化エラー',e);}
+    try{normalizeAllIconPaths();console.log('[Phase 1.4] レガシーパスを正規化しました');}
+    catch(e){console.warn('[Phase 1.4] 正規化エラー',e);}
   }
+  
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){setTimeout(tryMapLegacyPaths,500);});
+    document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){tryNormalize(10);},500);});
   }else{
-    setTimeout(tryMapLegacyPaths,500);
+    setTimeout(function(){tryNormalize(10);},500);
   }
+  
+  console.log('[Phase 1.4] Extension Loaded');
 })();
 </script>
 
@@ -2246,41 +2465,8 @@ function renderSettings(){var s=state.displaySettings;return'<div class="panel-s
 function renderTOC(){return'<div class="panel-slide '+(state.tocOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📑 目次</span><button onclick="state.tocOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.chapters.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">章がありません</p>':'<div style="display:flex;flex-direction:column;gap:12px">'+state.chapters.map(function(ch){return'<div style="border-left:3px solid var(--accent);padding-left:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">'+esc(ch.title)+'</div>'+ch.sections.map(function(sec){return'<div style="padding-left:12px;font-size:13px;color:var(--text-secondary);margin-top:2px">'+esc(sec.title)+'</div>'}).join('')+'</div>'}).join('')+'</div>')+'</div></div>'}
 function renderBM(){return'<div class="panel-slide '+(state.bookmarkListOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📚 しおり一覧</span><button onclick="state.bookmarkListOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.bookmarks.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">しおりがありません</p>':'<div style="display:flex;flex-direction:column;gap:8px">'+state.bookmarks.map(function(bm){var ba=_acts.length;_acts.push(function(){deleteBookmark(bm.id)});return'<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;cursor:pointer" onclick="jumpToBookmark('+bm.page+')"><span style="font-size:18px">🔖</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+esc(bm.title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+new Date(bm.timestamp).toLocaleString()+'</div></div><button onclick="event.stopPropagation();act('+ba+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-muted)">🗑️</button></div>'}).join('')+'</div>')+'</div></div>'}
 function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(data.name)+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(data.shortName)+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">吹き出しカラー</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:40px;height:40px;border-radius:50%;border:3px solid '+(data.iconColor===c.icon?'var(--accent)':'var(--border)')+';background:'+c.icon+';cursor:pointer" title="'+c.name+'"></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 カスタムカラー</button>';if(state.colorPickerOpen)h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div><div style="flex:1"><label style="font-size:11px">アイコン色</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🔊 読み上げ音声</label>';var _voices=state.tts.voices.length?state.tts.voices:(speechSynthesis?speechSynthesis.getVoices():[]);var _jaVoices=_voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0});var _otherVoices=_voices.filter(function(v){return!v.lang||v.lang.indexOf('ja')!==0});h+='<select onchange="state.editingItem.data.ttsVoice=this.value" style="width:100%;margin-bottom:6px"><option value="">── 性別デフォルト（自動選択）</option>';if(_jaVoices.length){var _jaF=_jaVoices.filter(function(v){return _voiceGender(v)==='female'});var _jaM=_jaVoices.filter(function(v){return _voiceGender(v)==='male'});var _jaU=_jaVoices.filter(function(v){return _voiceGender(v)==='unknown'});if(_jaF.length){h+='<optgroup label="🚺 日本語女性音声">';_jaF.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaM.length){h+='<optgroup label="🚹 日本語男性音声">';_jaM.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}if(_jaU.length){h+='<optgroup label="🎙 日本語その他">';_jaU.forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(_voiceLabel(v))+'</option>';});h+='</optgroup>';}}if(_otherVoices.length){h+='<optgroup label="その他の言語">';_otherVoices.slice(0,30).forEach(function(v){h+='<option value="'+esc(v.name)+'"'+(data.ttsVoice===v.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>';});h+='</optgroup>';}h+='</select>';h+='<div style="display:flex;gap:8px;align-items:center"><button onclick="(function(){var v=state.editingItem.data;var utt=new SpeechSynthesisUtterance(v.name?v.name+\'。テスト音声です。\':\'テスト音声です。\');utt.lang=\'ja-JP\';if(v.ttsVoice){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===v.ttsVoice});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">🖥=ローカル ☁=クラウド</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
-function mapLegacyGalleryPath(p){
-  if(!p||typeof p!=='string')return p;
-  // 旧パス例: /gallery/07_photo_male_01_baby_toddler/male_photo_01_baby_toddler_01_r1c1.png
-  // 新パス例: /gallery/male_photo_01_baby_toddler_01_r1c1.png
-  var m=p.match(/\/gallery\/[^\/]+\/([^\/]+\.(?:png|jpg|jpeg|webp|gif))$/i);
-  if(m)return '/gallery/'+m[1];
-  return p;
-}
-function normalizeAllIconPaths(){
-  // 既存のキャラクター画像パスを新フォーマットに変換
-  if(state.characters&&Array.isArray(state.characters)){
-    state.characters.forEach(function(ch){
-      if(ch.icon)ch.icon=mapLegacyGalleryPath(ch.icon);
-      if(ch.iconMouthOpen)ch.iconMouthOpen=mapLegacyGalleryPath(ch.iconMouthOpen);
-      if(ch.lipsyncFrames&&Array.isArray(ch.lipsyncFrames)){
-        ch.lipsyncFrames=ch.lipsyncFrames.map(mapLegacyGalleryPath);
-      }
-    });
-  }
-  if(state.readerCustom){
-    Object.keys(state.readerCustom).forEach(function(k){
-      var rc=state.readerCustom[k];
-      if(rc&&rc.icon)rc.icon=mapLegacyGalleryPath(rc.icon);
-    });
-  }
-}
 function openGallery(){
-  state.imageGalleryOpen=true;
-  state.galleryGroup=null;
-  state.galleryPage=0;
-  state.galleryFilterStyle='all';
-  state.galleryFilterGender='all';
-  state.galleryFilterAge='all';
-  state.gallerySearch='';
-  state.galleryUploadMode=false;
+  state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;
   if(!state.galleryManifest){
     fetch('data/gallery-manifest.json',{cache:'force-cache'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
@@ -2289,152 +2475,48 @@ function openGallery(){
   }
   render();
 }
-function filterGalleryGroups(groups){
-  var fStyle=state.galleryFilterStyle||'all';
-  var fGender=state.galleryFilterGender||'all';
-  var fAge=state.galleryFilterAge||'all';
-  var search=(state.gallerySearch||'').toLowerCase().trim();
-  return groups.filter(function(g){
-    if(fStyle!=='all'&&g.style!==fStyle)return false;
-    if(fGender!=='all'&&g.gender!==fGender)return false;
-    if(fAge!=='all'&&g.age!==fAge)return false;
-    if(search&&g.label.toLowerCase().indexOf(search)===-1)return false;
-    return true;
-  });
-}
-function renderGalleryFilterBtn(filterKey,value,label){
-  var current=state['galleryFilter'+filterKey.charAt(0).toUpperCase()+filterKey.slice(1)]||'all';
-  var active=current===value;
-  var style='padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid '+(active?'#6366f1':'#d1d5db')+';background:'+(active?'#6366f1':'#fff')+';color:'+(active?'#fff':'#374151')+';transition:all 0.2s;font-weight:'+(active?'600':'500')+';margin-right:4px;margin-bottom:4px';
-  return '<button onclick="state.galleryFilter'+filterKey.charAt(0).toUpperCase()+filterKey.slice(1)+'=\''+value+'\';render()" style="'+style+'">'+label+'</button>';
-}
-function handleGalleryImageUpload(input){
-  var file=input.files&&input.files[0];
-  if(!file){return;}
-  if(!file.type.match(/^image\//)){alert('画像ファイルを選択してください');return;}
-  if(file.size>5*1024*1024){alert('ファイルサイズが大きすぎます（5MB以下にしてください）');return;}
-  // 著作権同意確認
-  var copyrightOk=confirm('⚠️ アップロードする画像について\n\n以下の点を確認してください:\n• 著作権を侵害していないこと\n• 第三者の権利を侵害していないこと\n• 自分が作成した画像、または使用許諾を得た画像であること\n\nアップロードする画像はあなたの責任において、著作権その他の権利を侵害しないことを確認しましたか？\n\n[OK] = 確認した、アップロードする\n[キャンセル] = 中止');
-  if(!copyrightOk){input.value='';return;}
-  var reader=new FileReader();
-  reader.onload=function(ev){
-    var dataUrl=ev.target.result;
-    // 選択中のキャラクターに適用
-    if(state.editingCharacterId){
-      var ch=state.characters.find(function(c){return c.id===state.editingCharacterId});
-      if(ch){
-        ch.icon=dataUrl;
-        ch.iconType='upload';
-        if(typeof saveWork==='function'){try{saveWork();}catch(e){console.warn(e);}}
-        showToast&&showToast('アイコンをアップロードしました');
-      }
-    }else if(state.galleryTargetCallback){
-      state.galleryTargetCallback(dataUrl);
-    }
-    state.imageGalleryOpen=false;
-    render();
-  };
-  reader.onerror=function(){alert('画像の読み込みに失敗しました');};
-  reader.readAsDataURL(file);
-}
 function renderGallery(){
   var man=state.galleryManifest;
-  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:780px;max-height:90vh;overflow-y:auto">';
-  
-  // ヘッダー
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2"><h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
-  
-  // アップロードボタン（常に表示）
-  h+='<div style="margin-bottom:12px;padding:10px 12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:8px;border:1px solid #fcd34d">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
-  h+='<div style="font-size:12px;font-weight:600;color:#78350f">📤 自分のPCから画像をアップロード</div>';
-  h+='<label style="background:#f59e0b;color:#fff;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px">📂 画像を選択<input type="file" accept="image/*" style="display:none" onchange="handleGalleryImageUpload(this)"></label>';
-  h+='</div>';
-  h+='<div style="font-size:10px;color:#92400e;margin-top:4px">※ 著作権を侵害しない画像のみアップロードしてください（5MB以下）</div>';
-  h+='</div>';
-  
+  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-weight:700;font-size:16px">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
   if(!man){
     h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';
   }else if(man.error){
     h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。<br>ローカルサーバー経由で開いているか確認してください。</p>';
-  }else if(state.galleryGroup){
-    // === 画像一覧表示 ===
+  }else if(!state.galleryGroup){
+    h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください</p>';
+    h+='<div class="gallery-cat-grid">';
+    man.groups.forEach(function(grp){
+      var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
+      h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()">'
+        +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
+        +'<span class="gallery-cat-label">'+grp.label+'</span>'
+        +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+'件</span></button>';
+    });
+    h+='</div>';
+  }else{
     var grp=null,i;
     for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
     var items=(grp&&grp.items)||[];
-    var PER=80;
+    var PER=30;
     var pages=Math.max(1,Math.ceil(items.length/PER));
     var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
     var slice=items.slice(pg*PER,pg*PER+PER);
     h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-      +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリーに戻る</button>'
+      +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリー選択</button>'
       +'<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>'
-      +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length.toLocaleString()+'件</span></div>';
-    h+='<div class="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;max-height:48vh;overflow-y:auto;padding:4px">';
+      +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length+'件</span></div>';
+    h+='<div class="gallery-grid" style="max-height:48vh;overflow-y:auto;padding:4px">';
     slice.forEach(function(it){
-      h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" style="width:54px;height:54px;object-fit:cover;border-radius:50%;cursor:pointer;border:1px solid #e5e7eb" onerror="this.style.display=\'none\'">';
+      h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
     });
     h+='</div>';
     if(pages>1){
-      h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">'
+      h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px">'
         +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>'
         +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
         +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>'
         +'</div>';
-    }
-  }else{
-    // === カテゴリー一覧（フィルタ式） ===
-    
-    // 検索ボックス
-    h+='<div style="margin-bottom:10px"><input type="text" id="gallerySearchInput" placeholder="🔍 カテゴリーを検索" value="'+(state.gallerySearch||'').replace(/"/g,'&quot;')+'" oninput="state.gallerySearch=this.value;render();setTimeout(function(){var i=document.getElementById(\'gallerySearchInput\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>';
-    
-    // フィルタ: スタイル
-    h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">スタイル:</span>';
-    h+=renderGalleryFilterBtn('style','all','すべて');
-    h+=renderGalleryFilterBtn('style','photo','📷写真');
-    h+=renderGalleryFilterBtn('style','anime','🎨アニメ');
-    h+=renderGalleryFilterBtn('style','manga','✏️マンガ');
-    h+=renderGalleryFilterBtn('style','other','✨その他');
-    h+='</div>';
-    
-    h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">性別:</span>';
-    h+=renderGalleryFilterBtn('gender','all','すべて');
-    h+=renderGalleryFilterBtn('gender','male','👨男性');
-    h+=renderGalleryFilterBtn('gender','female','👩女性');
-    h+='</div>';
-    
-    h+='<div style="margin-bottom:10px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">年齢:</span>';
-    h+=renderGalleryFilterBtn('age','all','すべて');
-    h+=renderGalleryFilterBtn('age','子ども','👶子ども');
-    h+=renderGalleryFilterBtn('age','学生','🎓学生');
-    h+=renderGalleryFilterBtn('age','社会人','💼社会人');
-    h+=renderGalleryFilterBtn('age','シニア','👴シニア');
-    h+=renderGalleryFilterBtn('age','デザイン','🎭デザイン');
-    h+=renderGalleryFilterBtn('age','その他','✨その他');
-    h+='</div>';
-    
-    var filtered=filterGalleryGroups(man.groups);
-    var totalShown=filtered.reduce(function(sum,g){return sum+(g.items?g.items.length:0);},0);
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:#f9fafb;border-radius:6px;font-size:12px;color:var(--text-muted)">';
-    h+='<span><strong>'+filtered.length+'</strong> カテゴリー / <strong>'+totalShown.toLocaleString()+'</strong> 件</span>';
-    if(state.galleryFilterStyle!=='all'||state.galleryFilterGender!=='all'||state.galleryFilterAge!=='all'||state.gallerySearch){
-      h+='<button onclick="state.galleryFilterStyle=\'all\';state.galleryFilterGender=\'all\';state.galleryFilterAge=\'all\';state.gallerySearch=\'\';render()" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;font-weight:500">リセット</button>';
-    }
-    h+='</div>';
-    
-    if(filtered.length===0){
-      h+='<p style="text-align:center;color:var(--text-muted);padding:40px 0">😔 該当するカテゴリーがありません</p>';
-    }else{
-      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;max-height:46vh;overflow-y:auto;padding:4px">';
-      filtered.forEach(function(grp){
-        var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
-        h+='<button onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()" style="display:flex;flex-direction:column;align-items:center;padding:10px 6px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.2s;gap:6px" onmouseover="this.style.borderColor=\'#6366f1\';this.style.boxShadow=\'0 2px 8px rgba(99,102,241,0.15)\'" onmouseout="this.style.borderColor=\'#e5e7eb\';this.style.boxShadow=\'none\'">';
-        h+=rep?'<img src="'+rep+'" loading="lazy" style="width:54px;height:54px;object-fit:cover;border-radius:50%" onerror="this.style.visibility=\'hidden\'">':'<div style="width:54px;height:54px;border-radius:50%;background:#f3f4f6"></div>';
-        h+='<span style="font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:#1f2937">'+grp.label+'</span>';
-        h+='<span style="font-size:10px;color:#6b7280">'+(grp.items?grp.items.length.toLocaleString():0)+'件</span>';
-        h+='</button>';
-      });
-      h+='</div>';
     }
   }
   h+='</div></div>';
@@ -3182,23 +3264,242 @@ window.onload=function(){
 </script>
 <script src="js/analytics.js" defer></script>
 
-<script id="phase1.4-legacy-path-mapper">
+<!-- ==================================================== -->
+<!-- Phase 1.4 Gallery Extension Script                  -->
+<!-- 既存コードに一切触らず、関数を上書きする安全な実装  -->
+<!-- ==================================================== -->
+<script id="phase14-gallery-extension">
 (function(){
-  function tryMapLegacyPaths(){
-    if(typeof window.state==='undefined'||typeof window.normalizeAllIconPaths!=='function'){
-      setTimeout(tryMapLegacyPaths,200);
+  'use strict';
+  
+  console.log('[Phase 1.4] Gallery Extension Loading...');
+  
+  // ====================================================
+  // 1. 旧パスマッピング関数
+  // ====================================================
+  function mapLegacyGalleryPath(p){
+    if(!p||typeof p!=='string')return p;
+    // /gallery/SUBFOLDER/xxx.png → /gallery/xxx.png
+    var m=p.match(/\/gallery\/[^\/]+\/([^\/]+\.(?:png|jpg|jpeg|webp|gif))$/i);
+    if(m)return '/gallery/'+m[1];
+    return p;
+  }
+  
+  function normalizeAllIconPaths(){
+    if(typeof state==='undefined')return;
+    if(state.characters&&Array.isArray(state.characters)){
+      state.characters.forEach(function(ch){
+        if(ch.icon)ch.icon=mapLegacyGalleryPath(ch.icon);
+        if(ch.iconMouthOpen)ch.iconMouthOpen=mapLegacyGalleryPath(ch.iconMouthOpen);
+        if(ch.lipsyncFrames&&Array.isArray(ch.lipsyncFrames)){
+          ch.lipsyncFrames=ch.lipsyncFrames.map(mapLegacyGalleryPath);
+        }
+      });
+    }
+    if(state.readerCustom){
+      Object.keys(state.readerCustom).forEach(function(k){
+        var rc=state.readerCustom[k];
+        if(rc&&rc.iconImage)rc.iconImage=mapLegacyGalleryPath(rc.iconImage);
+      });
+    }
+  }
+  
+  // ====================================================
+  // 2. 画像アップロード関数（著作権確認付き）
+  // ====================================================
+  function handleGalleryImageUpload(input){
+    var file=input&&input.files&&input.files[0];
+    if(!file){return;}
+    if(!file.type.match(/^image\//)){alert('画像ファイルを選択してください');return;}
+    if(file.size>5*1024*1024){alert('ファイルサイズが大きすぎます(5MB以下にしてください)');return;}
+    
+    var copyrightOk=confirm('⚠️ アップロード前の確認\n\n以下を確認してください:\n• 著作権を侵害していないこと\n• 第三者の権利を侵害していないこと\n• 自分が作成または使用許諾を得た画像であること\n\nアップロードする画像はあなたの責任において、\n著作権その他の権利を侵害しないことを確認しましたか?');
+    if(!copyrightOk){input.value='';return;}
+    
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var dataUrl=ev.target.result;
+      window.__lastUploadedImage=dataUrl;
+      if(typeof showToast==='function')showToast('画像をアップロードしました');
+      // ギャラリーモーダルから画像クリック相当のイベントを発火
+      var galleryImg=document.querySelector('[data-galimg]');
+      if(galleryImg){
+        var fakeImg=document.createElement('img');
+        fakeImg.setAttribute('data-galimg',dataUrl);
+        fakeImg.src=dataUrl;
+        galleryImg.parentNode.insertBefore(fakeImg,galleryImg);
+        fakeImg.click();
+      }else{
+        alert('画像をクリックして適用してください。\n\nアップロードした画像はギャラリーに追加されました。');
+      }
+      if(input)input.value='';
+    };
+    reader.onerror=function(){alert('画像の読み込みに失敗しました');};
+    reader.readAsDataURL(file);
+  }
+  
+  // ====================================================
+  // 3. ギャラリー機能の拡張（フィルター式UI）
+  // ====================================================
+  function buildGalleryHierarchy(groups){
+    var styles={photo:'📷 写真',anime:'🎨 アニメ',manga:'✏️ マンガ',other:'✨ その他'};
+    var genders={male:'👨 男性',female:'👩 女性'};
+    var ages=['子ども','学生','社会人','シニア','デザイン','その他'];
+    return{styles:styles,genders:genders,ages:ages};
+  }
+  
+  function filterGalleryGroups(groups,filters){
+    return groups.filter(function(g){
+      if(filters.style&&filters.style!=='all'&&g.style!==filters.style)return false;
+      if(filters.gender&&filters.gender!=='all'&&g.gender!==filters.gender)return false;
+      if(filters.age&&filters.age!=='all'&&g.age!==filters.age)return false;
+      if(filters.search){
+        var q=filters.search.toLowerCase().trim();
+        if(q&&g.label.toLowerCase().indexOf(q)===-1)return false;
+      }
+      return true;
+    });
+  }
+  
+  function fbtn(filterType,value,label){
+    var current=state['galleryF_'+filterType]||'all';
+    var active=current===value;
+    var style='padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid '+(active?'#6366f1':'#d1d5db')+';background:'+(active?'#6366f1':'#fff')+';color:'+(active?'#fff':'#374151')+';transition:all 0.2s;font-weight:'+(active?'600':'500')+';margin-right:4px;margin-bottom:4px';
+    return '<button onclick="state.galleryF_'+filterType+'=\''+value+'\';render()" style="'+style+'">'+label+'</button>';
+  }
+  
+  // 既存の openGallery を保存して拡張
+  if(typeof window.openGallery==='function'){
+    var _origOpenGallery=window.openGallery;
+    window.openGallery=function(){
+      // 拡張フィルターの初期化
+      if(typeof state!=='undefined'){
+        state.galleryF_style='all';
+        state.galleryF_gender='all';
+        state.galleryF_age='all';
+        state.galleryF_search='';
+      }
+      return _origOpenGallery.apply(this,arguments);
+    };
+  }
+  
+  // 既存の renderGallery を新しい実装で完全に置き換え
+  window.renderGallery=function(){
+    var man=state.galleryManifest;
+    var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:780px;max-height:90vh;overflow-y:auto">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg-card,#fff);padding-bottom:8px;z-index:2">';
+    h+='<h3 style="font-weight:700;font-size:16px;margin:0">🖼️ キャラクター画像ギャラリー</h3>';
+    h+='<button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button>';
+    h+='</div>';
+    
+    // アップロードバナー
+    h+='<div style="margin-bottom:12px;padding:10px 12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:8px;border:1px solid #fcd34d">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+    h+='<div style="font-size:12px;font-weight:600;color:#78350f">📤 自分のPCから画像をアップロード</div>';
+    h+='<label style="background:#f59e0b;color:#fff;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">📂 画像を選択<input type="file" accept="image/*" style="display:none" onchange="handleGalleryImageUpload(this)"></label>';
+    h+='</div>';
+    h+='<div style="font-size:10px;color:#92400e;margin-top:4px">※ 著作権を侵害しない画像のみ(5MB以下)</div>';
+    h+='</div>';
+    
+    if(!man){h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';}
+    else if(man.error){h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。</p>';}
+    else if(state.galleryGroup){
+      // 画像一覧
+      var grp=null;
+      for(var i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
+      var items=(grp&&grp.items)||[];
+      var PER=80;
+      var pages=Math.max(1,Math.ceil(items.length/PER));
+      var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
+      var slice=items.slice(pg*PER,pg*PER+PER);
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">';
+      h+='<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリーに戻る</button>';
+      h+='<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>';
+      h+='<span style="font-size:12px;color:var(--text-muted)">全'+items.length.toLocaleString()+'件</span>';
+      h+='</div>';
+      h+='<div class="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;max-height:48vh;overflow-y:auto;padding:4px">';
+      for(var k=0;k<slice.length;k++){
+        var it=slice[k];
+        h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" style="width:54px;height:54px;object-fit:cover;border-radius:50%;cursor:pointer;border:1px solid #e5e7eb" onerror="this.style.display=\'none\'">';
+      }
+      h+='</div>';
+      if(pages>1){
+        h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">';
+        h+='<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>';
+        h+='<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>';
+        h+='<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>';
+        h+='</div>';
+      }
+    }else{
+      // カテゴリー一覧（フィルタ式）
+      h+='<div style="margin-bottom:10px"><input type="text" id="gallerySearchInput" placeholder="🔍 カテゴリーを検索" value="'+(state.galleryF_search||'').replace(/"/g,'&quot;')+'" oninput="state.galleryF_search=this.value;render();setTimeout(function(){var i=document.getElementById(\'gallerySearchInput\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>';
+      
+      h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">スタイル:</span>';
+      h+=fbtn('style','all','すべて')+fbtn('style','photo','📷写真')+fbtn('style','anime','🎨アニメ')+fbtn('style','manga','✏️マンガ')+fbtn('style','other','✨その他');
+      h+='</div>';
+      
+      h+='<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">性別:</span>';
+      h+=fbtn('gender','all','すべて')+fbtn('gender','male','👨男性')+fbtn('gender','female','👩女性');
+      h+='</div>';
+      
+      h+='<div style="margin-bottom:10px"><span style="font-size:11px;color:var(--text-muted);margin-right:6px;font-weight:500">年齢:</span>';
+      h+=fbtn('age','all','すべて')+fbtn('age','子ども','👶子ども')+fbtn('age','学生','🎓学生')+fbtn('age','社会人','💼社会人')+fbtn('age','シニア','👴シニア')+fbtn('age','デザイン','🎭デザイン')+fbtn('age','その他','✨その他');
+      h+='</div>';
+      
+      var filters={style:state.galleryF_style,gender:state.galleryF_gender,age:state.galleryF_age,search:state.galleryF_search};
+      var filtered=filterGalleryGroups(man.groups,filters);
+      var totalShown=filtered.reduce(function(sum,g){return sum+(g.items?g.items.length:0);},0);
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:#f9fafb;border-radius:6px;font-size:12px;color:var(--text-muted)">';
+      h+='<span><strong>'+filtered.length+'</strong> カテゴリー / <strong>'+totalShown.toLocaleString()+'</strong> 件</span>';
+      if(state.galleryF_style!=='all'||state.galleryF_gender!=='all'||state.galleryF_age!=='all'||state.galleryF_search){
+        h+='<button onclick="state.galleryF_style=\'all\';state.galleryF_gender=\'all\';state.galleryF_age=\'all\';state.galleryF_search=\'\';render()" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;font-weight:500">リセット</button>';
+      }
+      h+='</div>';
+      
+      if(filtered.length===0){
+        h+='<p style="text-align:center;color:var(--text-muted);padding:40px 0">😔 該当するカテゴリーがありません</p>';
+      }else{
+        h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;max-height:46vh;overflow-y:auto;padding:4px">';
+        for(var n=0;n<filtered.length;n++){
+          var grp2=filtered[n];
+          var rep=(grp2.items&&grp2.items.length)?grp2.items[0].p:'';
+          h+='<button onclick="state.galleryGroup=\''+grp2.id+'\';state.galleryPage=0;render()" style="display:flex;flex-direction:column;align-items:center;padding:10px 6px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all 0.2s;gap:6px" onmouseover="this.style.borderColor=\'#6366f1\'" onmouseout="this.style.borderColor=\'#e5e7eb\'">';
+          h+=rep?'<img src="'+rep+'" loading="lazy" style="width:54px;height:54px;object-fit:cover;border-radius:50%" onerror="this.style.visibility=\'hidden\'">':'<div style="width:54px;height:54px;border-radius:50%;background:#f3f4f6"></div>';
+          h+='<span style="font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:#1f2937">'+grp2.label+'</span>';
+          h+='<span style="font-size:10px;color:#6b7280">'+(grp2.items?grp2.items.length.toLocaleString():0)+'件</span>';
+          h+='</button>';
+        }
+        h+='</div>';
+      }
+    }
+    h+='</div></div>';
+    return h;
+  };
+  
+  // グローバル公開
+  window.mapLegacyGalleryPath=mapLegacyGalleryPath;
+  window.normalizeAllIconPaths=normalizeAllIconPaths;
+  window.handleGalleryImageUpload=handleGalleryImageUpload;
+  window.filterGalleryGroups=filterGalleryGroups;
+  
+  // 起動時に旧パスを正規化
+  function tryNormalize(retries){
+    if(retries<=0)return;
+    if(typeof state==='undefined'){
+      setTimeout(function(){tryNormalize(retries-1);},300);
       return;
     }
-    try{
-      window.normalizeAllIconPaths();
-      console.log('[Phase 1.4] レガシーパスを正規化しました');
-    }catch(e){console.warn('[Phase 1.4] パス正規化エラー',e);}
+    try{normalizeAllIconPaths();console.log('[Phase 1.4] レガシーパスを正規化しました');}
+    catch(e){console.warn('[Phase 1.4] 正規化エラー',e);}
   }
+  
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){setTimeout(tryMapLegacyPaths,500);});
+    document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){tryNormalize(10);},500);});
   }else{
-    setTimeout(tryMapLegacyPaths,500);
+    setTimeout(function(){tryNormalize(10);},500);
   }
+  
+  console.log('[Phase 1.4] Extension Loaded');
 })();
 </script>
 
