@@ -1,19 +1,15 @@
 /* ====================================================
- * AniNovel Character Icon Filter (v2.0.0)
+ * AniNovel Character Icon Filter (v3.0.0)
  * 
- * 4グループシンプル構造対応版:
- *  - 男性写真 / 男性イラスト / 女性写真 / 女性イラスト
- *  - キャラの性別で 2 グループに自動絞り込み
- *  - ID と data 属性ベースで確実なフィルタ
+ * 修正点 v3.0.0:
+ *  - state.characterId に依存しない設計
+ *  - DOM ベースで編集中キャラクターを特定
+ *  - キャラカスタマイズモーダル内の性別ラジオを読み取り
+ *  - 複数のフォールバック手法
  * 
  * 配置先: /js/character-icon-filter.js
  * 読み込み: viewer.html の </body> 直前に
  *   <script src="js/character-icon-filter.js"></script>
- * 
- * 安全設計:
- *  - 既存関数を一切上書きしない
- *  - DOM 表示後にボタンの display を切り替えるだけ
- *  - 問題があれば script タグを削除すれば元通り
  * ==================================================== */
 
 (function(){
@@ -22,74 +18,126 @@
   var DEBUG = true;
   function log(){
     if(DEBUG && console && console.log){
-      console.log.apply(console, ['[IconFilter v2]'].concat([].slice.call(arguments)));
+      console.log.apply(console, ['[IconFilter v3]'].concat([].slice.call(arguments)));
     }
   }
   
   // ========================================
-  // 現在編集中のキャラクター性別を取得
+  // キャラカスタマイズモーダルを取得
+  // ========================================
+  function findCharCustomizeModal(){
+    var modals = document.querySelectorAll('.modal-overlay');
+    for(var i = 0; i < modals.length; i++){
+      var content = modals[i].textContent || '';
+      // キャラカスタマイズ または キャラクター + 性別 を含むモーダル
+      if(content.indexOf('キャラカスタマイズ') !== -1){
+        return modals[i];
+      }
+      if(content.indexOf('キャラクター') !== -1 && content.indexOf('性別') !== -1){
+        return modals[i];
+      }
+    }
+    return null;
+  }
+  
+  // ========================================
+  // 性別を取得（複数手法でフォールバック）
   // ========================================
   function getCurrentCharGender(){
     if(typeof window.state === 'undefined' || !window.state) return null;
-    
     var st = window.state;
-    var characters = st.characters;
-    if(!characters || !Array.isArray(characters)) return null;
     
-    // 候補となるキャラクター ID 変数
-    var candidates = [
-      'characterId',
-      'readerCustomCharId',
-      'editingCharacterId',
-      'editCharId',
-      'selectedCharId'
-    ];
-    
+    // ==== 方法1: state の各種候補変数 ====
+    var stateKeys = ['characterId', 'readerCustomCharId', 'editingCharacterId',
+                     'editCharId', 'selectedCharId', 'currentCharId'];
     var cid = null;
     var matchedKey = null;
-    for(var i = 0; i < candidates.length; i++){
-      if(st[candidates[i]]){
-        cid = st[candidates[i]];
-        matchedKey = candidates[i];
+    for(var i = 0; i < stateKeys.length; i++){
+      if(st[stateKeys[i]]){
+        cid = st[stateKeys[i]];
+        matchedKey = stateKeys[i];
         break;
       }
     }
     
-    if(!cid){
-      log('No character ID found in state. Available state keys:', Object.keys(st).filter(function(k){return k.indexOf('har')!==-1||k.indexOf('Char')!==-1;}));
-      return null;
+    if(cid && st.characters && Array.isArray(st.characters)){
+      var ch = st.characters.find(function(c){return c && c.id === cid;});
+      if(ch){
+        log('Method 1 (state.' + matchedKey + '): ', ch.name, '/', ch.gender);
+        if(ch.gender === 'neutral' || ch.gender === '中性') return null;
+        return ch.gender;
+      }
     }
     
-    log('Character ID source:', matchedKey, '=', cid);
-    
-    var ch = characters.find(function(c){return c && c.id === cid;});
-    if(!ch){
-      log('Character not found:', cid);
-      return null;
+    // ==== 方法2: キャラクターカスタマイズモーダルから判定 ====
+    var charModal = findCharCustomizeModal();
+    if(charModal){
+      log('Char modal found, trying DOM methods');
+      
+      // 2A. 性別ラジオボタン（checked）
+      var radios = charModal.querySelectorAll('input[type="radio"]:checked');
+      for(var i = 0; i < radios.length; i++){
+        var r = radios[i];
+        var v = String(r.value || '').toLowerCase().trim();
+        log('Radio found:', r.name, '=', r.value);
+        if(v === 'male' || v === 'm') return 'male';
+        if(v === 'female' || v === 'f') return 'female';
+        if(v === '男性' || v === '男' || v === '男子') return 'male';
+        if(v === '女性' || v === '女' || v === '女子') return 'female';
+      }
+      
+      // 2B. select 要素
+      var selects = charModal.querySelectorAll('select');
+      for(var i = 0; i < selects.length; i++){
+        var s = selects[i];
+        var v = String(s.value || '').toLowerCase().trim();
+        log('Select found:', s.name, '=', s.value);
+        if(v === 'male' || v === 'female') return v;
+        if(v === '男性' || v === '男') return 'male';
+        if(v === '女性' || v === '女') return 'female';
+      }
+      
+      // 2C. モーダル内のキャラクター名から逆引き
+      if(st.characters && Array.isArray(st.characters)){
+        var modalText = charModal.textContent || '';
+        for(var i = 0; i < st.characters.length; i++){
+          var ch = st.characters[i];
+          if(ch && ch.name && modalText.indexOf(ch.name) !== -1){
+            log('Method 2C (name lookup):', ch.name, '/', ch.gender);
+            if(ch.gender === 'neutral' || ch.gender === '中性') return null;
+            return ch.gender;
+          }
+        }
+      }
     }
     
-    var gender = ch.gender;
-    log('Character:', ch.name, '| gender:', gender);
-    
-    // 'neutral' (語り手等) は フィルタしない
-    if(gender === 'neutral' || gender === '中性'){
-      log('Neutral - no filter');
-      return null;
+    // ==== 方法3: ボタンのテキスト解析 (フォールバック) ====
+    // モーダル内に "男性" "女性" のテキストがあれば、それで判定
+    if(charModal){
+      var text = charModal.textContent || '';
+      // 「性別 男性」「性別 女性」「男性 ✓」「女性 ✓」などのパターン
+      if(/性別[^性]{0,30}男性/.test(text) || /男性[\s]*●/.test(text) || /■\s*男性/.test(text)){
+        return 'male';
+      }
+      if(/性別[^性]{0,30}女性/.test(text) || /女性[\s]*●/.test(text) || /■\s*女性/.test(text)){
+        return 'female';
+      }
     }
     
-    return gender;  // 'male' or 'female'
+    log('Could not detect gender from any method');
+    return null;
   }
   
   // ========================================
-  // ボタンに紐付くグループ ID を判定
+  // ボタンのグループ性別を判定
   // ========================================
   function getButtonGroupGender(btn){
-    // 1. ボタンの onclick から推測 (state.galleryGroup = 'male_xxx' などのパターン)
+    // 1. ボタンの onclick から推測
     var onclick = btn.getAttribute('onclick') || '';
-    if(onclick.indexOf('male_') !== -1 && onclick.indexOf('female_') === -1) return 'male';
-    if(onclick.indexOf('female_') !== -1) return 'female';
+    if(/male_/.test(onclick) && !/female_/.test(onclick)) return 'male';
+    if(/female_/.test(onclick)) return 'female';
     
-    // 2. ボタンのテキストから判定 (フォールバック)
+    // 2. ボタンのテキストから判定
     var text = (btn.textContent || '').toLowerCase();
     var hasFemale = text.indexOf('女性') !== -1 || text.indexOf('女子') !== -1;
     var hasMale = text.indexOf('男性') !== -1 || text.indexOf('男子') !== -1;
@@ -100,12 +148,12 @@
   }
   
   // ========================================
-  // ギャラリーモーダル内のカテゴリーをフィルタ
+  // フィルター適用
   // ========================================
   function applyGenderFilter(){
     var targetGender = getCurrentCharGender();
     if(!targetGender){
-      log('No target gender, no filter applied');
+      log('No target gender - no filter applied (showing all)');
       return;
     }
     
@@ -147,7 +195,7 @@
       if(btnGender && btnGender !== targetGender){
         btn.style.display = 'none';
         hiddenCount++;
-      } else if(btnGender === targetGender) {
+      } else if(btnGender === targetGender){
         if(btn.style.display === 'none') btn.style.display = '';
         shownCount++;
       }
@@ -168,7 +216,7 @@
   }
   
   // ========================================
-  // MutationObserver で監視
+  // MutationObserver でモーダル監視
   // ========================================
   function setupObserver(){
     var observer = new MutationObserver(function(mutations){
@@ -206,7 +254,7 @@
   function init(){
     if(document.body){
       setupObserver();
-      log('v2.0.0 loaded - 4-group structure');
+      log('v3.0.0 loaded - DOM-based gender detection');
     } else {
       setTimeout(init, 100);
     }
@@ -223,20 +271,20 @@
     applyFilter: applyGenderFilter,
     getCurrentGender: getCurrentCharGender,
     showDebugInfo: function(){
-      console.log('=== AniNovel Icon Filter Debug v2 ===');
-      console.log('state available:', typeof window.state !== 'undefined');
-      if(window.state){
-        var st = window.state;
-        console.log('state.characterId:', st.characterId);
-        console.log('state.readerCustomCharId:', st.readerCustomCharId);
-        console.log('state.characters:', (st.characters || []).map(function(c){
-          return {id:c.id, name:c.name, gender:c.gender};
-        }));
+      console.log('=== AniNovel Icon Filter Debug v3 ===');
+      console.log('state.characters:', (window.state && window.state.characters) ? window.state.characters.map(function(c){return {id:c.id, name:c.name, gender:c.gender};}) : 'N/A');
+      var modal = findCharCustomizeModal();
+      console.log('Char modal found:', !!modal);
+      if(modal){
+        var radios = modal.querySelectorAll('input[type="radio"]:checked');
+        console.log('Checked radios:', Array.from(radios).map(function(r){return {name:r.name, value:r.value};}));
+        var selects = modal.querySelectorAll('select');
+        console.log('Selects:', Array.from(selects).map(function(s){return {name:s.name, value:s.value};}));
       }
       console.log('Detected gender:', getCurrentCharGender());
     },
     setDebug: function(v){DEBUG = !!v; log('Debug:', DEBUG);}
   };
   
-  if(console && console.log) console.log('[IconFilter] Loaded v2.0.0');
+  if(console && console.log) console.log('[IconFilter] Loaded v3.0.0');
 })();
