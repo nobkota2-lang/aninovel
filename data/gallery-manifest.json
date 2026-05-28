@@ -1,21 +1,9 @@
 {
-  "version": 6,
-  "note": "アニノベル ギャラリー (性別×スタイル×年齢層10段階)",
-  "ageLabels": {
-    "0": "赤ちゃん",
-    "1": "幼児",
-    "2": "子供",
-    "3": "小学生",
-    "4": "中学生",
-    "5": "高校生",
-    "6": "青年",
-    "7": "中年",
-    "8": "壮年",
-    "9": "老人"
-  },
+  "version": 7,
+  "note": "アニノベル ギャラリー (性別×スタイル×10分類: 年齢8段階+人種2)",
   "groups": [
     {
-      "id": "male_photo_age0",
+      "id": "male_photo_b0",
       "label": "📷 男性写真 赤ちゃん",
       "style": "photo",
       "gender": "male",
@@ -85,11 +73,11 @@
       ]
     },
     {
-      "id": "male_photo_age1",
-      "label": "📷 男性写真 幼児",
+      "id": "male_photo_b1",
+      "label": "📷 男性写真 子供",
       "style": "photo",
       "gender": "male",
-      "age": "幼児",
+      "age": "子供",
       "ageBlock": 1,
       "items": [
         {
@@ -155,11 +143,11 @@
       ]
     },
     {
-      "id": "male_photo_age2",
-      "label": "📷 男性写真 子供",
+      "id": "male_photo_b2",
+      "label": "📷 男性写真 中学生",
       "style": "photo",
       "gender": "male",
-      "age": "子供",
+      "age": "中学生",
       "ageBlock": 2,
       "items": [
         {
@@ -225,11 +213,11 @@
       ]
     },
     {
-      "id": "male_photo_age3",
-      "label": "📷 男性写真 小学生",
+      "id": "male_photo_b3",
+      "label": "📷 男性写真 高校生",
       "style": "photo",
       "gender": "male",
-      "age": "小学生",
+      "age": "高校生",
       "ageBlock": 3,
       "items": [
         {
@@ -295,11 +283,11 @@
       ]
     },
     {
-      "id": "male_photo_age4",
-      "label": "📷 男性写真 中学生",
+      "id": "male_photo_b4",
+      "label": "📷 男性写真 大学生",
       "style": "photo",
       "gender": "male",
-      "age": "中学生",
+      "age": "大学生",
       "ageBlock": 4,
       "items": [
         {
@@ -365,11 +353,11 @@
       ]
     },
     {
-      "id": "male_photo_age5",
-      "label": "📷 男性写真 高校生",
+      "id": "male_photo_b5",
+      "label": "📷 男性写真 成人",
       "style": "photo",
       "gender": "male",
-      "age": "高校生",
+      "age": "成人",
       "ageBlock": 5,
       "items": [
         {
@@ -435,11 +423,11 @@
       ]
     },
     {
-      "id": "male_photo_age6",
-      "label": "📷 男性写真 青年",
+      "id": "male_photo_b6",
+      "label": "📷 男性写真 中年",
       "style": "photo",
       "gender": "male",
-      "age": "青年",
+      "age": "中年",
       "ageBlock": 6,
       "items": [
         {
@@ -505,11 +493,11 @@
       ]
     },
     {
-      "id": "male_photo_age7",
-      "label": "📷 男性写真 中年",
+      "id": "male_photo_b7",
+      "label": "📷 男性写真 老人",
       "style": "photo",
       "gender": "male",
-      "age": "中年",
+      "age": "老人",
       "ageBlock": 7,
       "items": [
         {
@@ -575,11 +563,11 @@
       ]
     },
     {
-      "id": "male_photo_age8",
-      "label": "📷 男性写真 壮年",
+      "id": "male_photo_b8",
+      "label": "📷 男性写真 西洋人",
       "style": "photo",
       "gender": "male",
-      "age": "壮年",
+      "age": "西洋人",
       "ageBlock": 8,
       "items": [
         {
@@ -645,11 +633,11 @@
       ]
     },
     {
-      "id": "male_photo_age9",
-      "label": "📷 男性写真 老人",
+      "id": "male_photo_b9",
+      "label": "📷 男性写真 東洋人・黒人",
       "style": "photo",
       "gender": "male",
-      "age": "老人",
+      "age": "東洋人・黒人",
       "ageBlock": 9,
       "items": [
         {
@@ -715,7 +703,7 @@
       ]
     },
     {
-      "id": "male_illustration_age0",
+      "id": "male_illustration_b0",
       "label": "🎨 男性イラスト 赤ちゃん",
       "style": "illustration",
       "gender": "male",
@@ -965,11 +953,11 @@
       ]
     },
     {
-      "id": "male_illustration_age1",
-      "label": "🎨 男性イラスト 幼児",
+      "id": "male_illustration_b1",
+      "label": "🎨 男性イラスト 子供",
       "style": "illustration",
       "gender": "male",
-      "age": "幼児",
+      "age": "子供",
       "ageBlock": 1,
       "items": [
         {
@@ -1215,11 +1203,11 @@
       ]
     },
     {
-      "id": "male_illustration_age2",
-      "label": "🎨 男性イラスト 子供",
+      "id": "male_illustration_b2",
+      "label": "🎨 男性イラスト 中学生",
       "style": "illustration",
       "gender": "male",
-      "age": "子供",
+      "age": "中学生",
       "ageBlock": 2,
       "items": [
         {
@@ -1465,11 +1453,11 @@
       ]
     },
     {
-      "id": "male_illustration_age3",
-      "label": "🎨 男性イラスト 小学生",
+      "id": "male_illustration_b3",
+      "label": "🎨 男性イラスト 高校生",
       "style": "illustration",
       "gender": "male",
-      "age": "小学生",
+      "age": "高校生",
       "ageBlock": 3,
       "items": [
         {
@@ -1715,11 +1703,11 @@
       ]
     },
     {
-      "id": "male_illustration_age4",
-      "label": "🎨 男性イラスト 中学生",
+      "id": "male_illustration_b4",
+      "label": "🎨 男性イラスト 大学生",
       "style": "illustration",
       "gender": "male",
-      "age": "中学生",
+      "age": "大学生",
       "ageBlock": 4,
       "items": [
         {
@@ -1965,11 +1953,11 @@
       ]
     },
     {
-      "id": "male_illustration_age5",
-      "label": "🎨 男性イラスト 高校生",
+      "id": "male_illustration_b5",
+      "label": "🎨 男性イラスト 成人",
       "style": "illustration",
       "gender": "male",
-      "age": "高校生",
+      "age": "成人",
       "ageBlock": 5,
       "items": [
         {
@@ -2215,11 +2203,11 @@
       ]
     },
     {
-      "id": "male_illustration_age6",
-      "label": "🎨 男性イラスト 青年",
+      "id": "male_illustration_b6",
+      "label": "🎨 男性イラスト 中年",
       "style": "illustration",
       "gender": "male",
-      "age": "青年",
+      "age": "中年",
       "ageBlock": 6,
       "items": [
         {
@@ -2465,11 +2453,11 @@
       ]
     },
     {
-      "id": "male_illustration_age7",
-      "label": "🎨 男性イラスト 中年",
+      "id": "male_illustration_b7",
+      "label": "🎨 男性イラスト 老人",
       "style": "illustration",
       "gender": "male",
-      "age": "中年",
+      "age": "老人",
       "ageBlock": 7,
       "items": [
         {
@@ -2715,11 +2703,11 @@
       ]
     },
     {
-      "id": "male_illustration_age8",
-      "label": "🎨 男性イラスト 壮年",
+      "id": "male_illustration_b8",
+      "label": "🎨 男性イラスト 西洋人",
       "style": "illustration",
       "gender": "male",
-      "age": "壮年",
+      "age": "西洋人",
       "ageBlock": 8,
       "items": [
         {
@@ -2965,11 +2953,11 @@
       ]
     },
     {
-      "id": "male_illustration_age9",
-      "label": "🎨 男性イラスト 老人",
+      "id": "male_illustration_b9",
+      "label": "🎨 男性イラスト 東洋人・黒人",
       "style": "illustration",
       "gender": "male",
-      "age": "老人",
+      "age": "東洋人・黒人",
       "ageBlock": 9,
       "items": [
         {
@@ -3215,7 +3203,7 @@
       ]
     },
     {
-      "id": "female_photo_age0",
+      "id": "female_photo_b0",
       "label": "📷 女性写真 赤ちゃん",
       "style": "photo",
       "gender": "female",
@@ -3285,11 +3273,11 @@
       ]
     },
     {
-      "id": "female_photo_age1",
-      "label": "📷 女性写真 幼児",
+      "id": "female_photo_b1",
+      "label": "📷 女性写真 子供",
       "style": "photo",
       "gender": "female",
-      "age": "幼児",
+      "age": "子供",
       "ageBlock": 1,
       "items": [
         {
@@ -3355,11 +3343,11 @@
       ]
     },
     {
-      "id": "female_photo_age2",
-      "label": "📷 女性写真 子供",
+      "id": "female_photo_b2",
+      "label": "📷 女性写真 中学生",
       "style": "photo",
       "gender": "female",
-      "age": "子供",
+      "age": "中学生",
       "ageBlock": 2,
       "items": [
         {
@@ -3425,11 +3413,11 @@
       ]
     },
     {
-      "id": "female_photo_age3",
-      "label": "📷 女性写真 小学生",
+      "id": "female_photo_b3",
+      "label": "📷 女性写真 高校生",
       "style": "photo",
       "gender": "female",
-      "age": "小学生",
+      "age": "高校生",
       "ageBlock": 3,
       "items": [
         {
@@ -3495,11 +3483,11 @@
       ]
     },
     {
-      "id": "female_photo_age4",
-      "label": "📷 女性写真 中学生",
+      "id": "female_photo_b4",
+      "label": "📷 女性写真 大学生",
       "style": "photo",
       "gender": "female",
-      "age": "中学生",
+      "age": "大学生",
       "ageBlock": 4,
       "items": [
         {
@@ -3565,11 +3553,11 @@
       ]
     },
     {
-      "id": "female_photo_age5",
-      "label": "📷 女性写真 高校生",
+      "id": "female_photo_b5",
+      "label": "📷 女性写真 成人",
       "style": "photo",
       "gender": "female",
-      "age": "高校生",
+      "age": "成人",
       "ageBlock": 5,
       "items": [
         {
@@ -3635,11 +3623,11 @@
       ]
     },
     {
-      "id": "female_photo_age6",
-      "label": "📷 女性写真 青年",
+      "id": "female_photo_b6",
+      "label": "📷 女性写真 中年",
       "style": "photo",
       "gender": "female",
-      "age": "青年",
+      "age": "中年",
       "ageBlock": 6,
       "items": [
         {
@@ -3705,11 +3693,11 @@
       ]
     },
     {
-      "id": "female_photo_age7",
-      "label": "📷 女性写真 中年",
+      "id": "female_photo_b7",
+      "label": "📷 女性写真 老人",
       "style": "photo",
       "gender": "female",
-      "age": "中年",
+      "age": "老人",
       "ageBlock": 7,
       "items": [
         {
@@ -3775,11 +3763,11 @@
       ]
     },
     {
-      "id": "female_photo_age8",
-      "label": "📷 女性写真 壮年",
+      "id": "female_photo_b8",
+      "label": "📷 女性写真 西洋人",
       "style": "photo",
       "gender": "female",
-      "age": "壮年",
+      "age": "西洋人",
       "ageBlock": 8,
       "items": [
         {
@@ -3845,11 +3833,11 @@
       ]
     },
     {
-      "id": "female_photo_age9",
-      "label": "📷 女性写真 老人",
+      "id": "female_photo_b9",
+      "label": "📷 女性写真 東洋人・黒人",
       "style": "photo",
       "gender": "female",
-      "age": "老人",
+      "age": "東洋人・黒人",
       "ageBlock": 9,
       "items": [
         {
@@ -3915,7 +3903,7 @@
       ]
     },
     {
-      "id": "female_illustration_age0",
+      "id": "female_illustration_b0",
       "label": "🎨 女性イラスト 赤ちゃん",
       "style": "illustration",
       "gender": "female",
@@ -4165,11 +4153,11 @@
       ]
     },
     {
-      "id": "female_illustration_age1",
-      "label": "🎨 女性イラスト 幼児",
+      "id": "female_illustration_b1",
+      "label": "🎨 女性イラスト 子供",
       "style": "illustration",
       "gender": "female",
-      "age": "幼児",
+      "age": "子供",
       "ageBlock": 1,
       "items": [
         {
@@ -4415,11 +4403,11 @@
       ]
     },
     {
-      "id": "female_illustration_age2",
-      "label": "🎨 女性イラスト 子供",
+      "id": "female_illustration_b2",
+      "label": "🎨 女性イラスト 中学生",
       "style": "illustration",
       "gender": "female",
-      "age": "子供",
+      "age": "中学生",
       "ageBlock": 2,
       "items": [
         {
@@ -4665,11 +4653,11 @@
       ]
     },
     {
-      "id": "female_illustration_age3",
-      "label": "🎨 女性イラスト 小学生",
+      "id": "female_illustration_b3",
+      "label": "🎨 女性イラスト 高校生",
       "style": "illustration",
       "gender": "female",
-      "age": "小学生",
+      "age": "高校生",
       "ageBlock": 3,
       "items": [
         {
@@ -4915,11 +4903,11 @@
       ]
     },
     {
-      "id": "female_illustration_age4",
-      "label": "🎨 女性イラスト 中学生",
+      "id": "female_illustration_b4",
+      "label": "🎨 女性イラスト 大学生",
       "style": "illustration",
       "gender": "female",
-      "age": "中学生",
+      "age": "大学生",
       "ageBlock": 4,
       "items": [
         {
@@ -5165,11 +5153,11 @@
       ]
     },
     {
-      "id": "female_illustration_age5",
-      "label": "🎨 女性イラスト 高校生",
+      "id": "female_illustration_b5",
+      "label": "🎨 女性イラスト 成人",
       "style": "illustration",
       "gender": "female",
-      "age": "高校生",
+      "age": "成人",
       "ageBlock": 5,
       "items": [
         {
@@ -5415,11 +5403,11 @@
       ]
     },
     {
-      "id": "female_illustration_age6",
-      "label": "🎨 女性イラスト 青年",
+      "id": "female_illustration_b6",
+      "label": "🎨 女性イラスト 中年",
       "style": "illustration",
       "gender": "female",
-      "age": "青年",
+      "age": "中年",
       "ageBlock": 6,
       "items": [
         {
@@ -5665,11 +5653,11 @@
       ]
     },
     {
-      "id": "female_illustration_age7",
-      "label": "🎨 女性イラスト 中年",
+      "id": "female_illustration_b7",
+      "label": "🎨 女性イラスト 老人",
       "style": "illustration",
       "gender": "female",
-      "age": "中年",
+      "age": "老人",
       "ageBlock": 7,
       "items": [
         {
@@ -5915,11 +5903,11 @@
       ]
     },
     {
-      "id": "female_illustration_age8",
-      "label": "🎨 女性イラスト 壮年",
+      "id": "female_illustration_b8",
+      "label": "🎨 女性イラスト 西洋人",
       "style": "illustration",
       "gender": "female",
-      "age": "壮年",
+      "age": "西洋人",
       "ageBlock": 8,
       "items": [
         {
@@ -6165,11 +6153,11 @@
       ]
     },
     {
-      "id": "female_illustration_age9",
-      "label": "🎨 女性イラスト 老人",
+      "id": "female_illustration_b9",
+      "label": "🎨 女性イラスト 東洋人・黒人",
       "style": "illustration",
       "gender": "female",
-      "age": "老人",
+      "age": "東洋人・黒人",
       "ageBlock": 9,
       "items": [
         {
