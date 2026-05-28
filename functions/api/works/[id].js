@@ -1,33 +1,32 @@
 /**
- * アニノベル 投稿作品API  /api/works/:id
+ * アニノベル 投稿作品API  /api/works/:id  (バージョン管理対応版)
  * --------------------------------------------------
  * 投稿(pub_*)作品をサーバー側(Cloudflare KV)に保存・取得・削除する。
- * PUT/DELETE時にはサーバーカタログ(__catalog__)も更新する。
+ * バージョン履歴を最大20件まで保持。
  *
- * 配置: functions/api/works/[id].js   (リポジトリ直下の functions/ 内)
+ * 配置: functions/api/works/[id].js
  *
  * 必要なバインディング:
- *   KV namespace を変数名 "WORKS_KV" でこの Pages プロジェクトにバインドする。
- *   ダッシュボード: Pages > Settings > Functions > KV namespace bindings
- *     Variable name: WORKS_KV  /  KV namespace: aninovel-works
+ *   KV namespace を変数名 "WORKS" でバインド (wrangler.toml と一致)
  *
  * エンドポイント:
- *   GET    /api/works/pub_xxxxx   … 作品JSONを取得
- *   PUT    /api/works/pub_xxxxx   … 作品JSON+カタログ情報を保存(投稿時)
- *     PUTボディ: { "data": <作品ペイロード>, "meta": <カタログエントリ> }
- *   DELETE /api/works/pub_xxxxx   … 作品を削除し、カタログからも除外(取り下げ時)
- *
- * 注: CORS / OPTIONS / レート制限 は functions/_middleware.js が処理する。
+ *   GET    /api/works/pub_xxxxx              … 作品JSON取得
+ *   GET    /api/works/pub_xxxxx?versions=1   … バージョン履歴一覧取得
+ *   GET    /api/works/pub_xxxxx?version=3    … 特定バージョン取得
+ *   PUT    /api/works/pub_xxxxx              … 保存(新バージョン作成)
+ *     PUTボディ: { "data": <作品>, "meta": <カタログ> }
+ *   DELETE /api/works/pub_xxxxx              … 削除
  */
 
-// 投稿作品IDの形式 (pub_ + 英数字/アンダースコア)
 const ID_RE = /^pub_[A-Za-z0-9_]{1,80}$/;
-
-// 作品JSONの上限サイズ (KVの値上限は25MB。キャラ画像埋め込みを考慮し10MB)
 const MAX_BYTES = 10 * 1024 * 1024;
-
-// サーバーカタログを格納するKVキー
 const CATALOG_KEY = '__catalog__';
+const MAX_VERSIONS = 20;  // 保持するバージョン履歴の最大数
+
+// バインディング名を両対応 (WORKS 優先、なければ WORKS_KV)
+function getKV(env) {
+  return env.WORKS || env.WORKS_KV || null;
+}
 
 function json(obj, status) {
   return new Response(JSON.stringify(obj), {
@@ -39,7 +38,6 @@ function json(obj, status) {
   });
 }
 
-// 現在のサーバーカタログ(配列)を安全に読み出す
 async function readCatalog(kv) {
   try {
     const cur = await kv.get(CATALOG_KEY);
@@ -51,16 +49,55 @@ async function readCatalog(kv) {
   }
 }
 
-// GET /api/works/:id — 作品を取得
+// バージョン履歴を読む
+async function readVersionList(kv, id) {
+  try {
+    const cur = await kv.get('versions:' + id);
+    if (!cur) return [];
+    const arr = JSON.parse(cur);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// GET /api/works/:id
 export async function onRequestGet(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id' }, 400);
   }
-  if (!context.env.WORKS_KV) {
-    return json({ error: 'KV namespace "WORKS_KV" が未バインドです' }, 500);
+  const kv = getKV(context.env);
+  if (!kv) {
+    return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
   }
-  const stored = await context.env.WORKS_KV.get('work:' + id);
+
+  const url = new URL(context.request.url);
+
+  // ?versions=1 → バージョン履歴一覧
+  if (url.searchParams.get('versions')) {
+    const list = await readVersionList(kv, id);
+    // データ本体は含めず、メタ情報のみ返す（軽量化）
+    const summary = list.map(function (v) {
+      return { version: v.version, savedAt: v.savedAt, note: v.note || '' };
+    });
+    return json({ id: id, versions: summary });
+  }
+
+  // ?version=N → 特定バージョンを取得
+  const vParam = url.searchParams.get('version');
+  if (vParam) {
+    const vNum = parseInt(vParam, 10);
+    const list = await readVersionList(kv, id);
+    const found = list.find(function (v) { return v.version === vNum; });
+    if (!found) {
+      return json({ error: 'version not found' }, 404);
+    }
+    return json({ id: id, version: vNum, data: found.data, savedAt: found.savedAt });
+  }
+
+  // 通常: 最新版を取得
+  const stored = await kv.get('work:' + id);
   if (stored === null) {
     return json({ error: 'not found' }, 404);
   }
@@ -73,14 +110,15 @@ export async function onRequestGet(context) {
   });
 }
 
-// PUT /api/works/:id — 作品を保存 + カタログ更新 (投稿時)
+// PUT /api/works/:id — 保存 + バージョン履歴作成
 export async function onRequestPut(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id' }, 400);
   }
-  if (!context.env.WORKS_KV) {
-    return json({ error: 'KV namespace "WORKS_KV" が未バインドです' }, 500);
+  const kv = getKV(context.env);
+  if (!kv) {
+    return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
   }
 
   let raw;
@@ -90,14 +128,10 @@ export async function onRequestPut(context) {
     return json({ error: 'リクエストボディの読み取りに失敗しました' }, 400);
   }
 
-  // サイズ制限
   if (new TextEncoder().encode(raw).length > MAX_BYTES) {
-    return json({
-      error: '作品データが大きすぎます (上限10MB)。音声は投稿に含まれません。',
-    }, 413);
+    return json({ error: '作品データが大きすぎます (上限10MB)' }, 413);
   }
 
-  // JSON妥当性チェック
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -108,19 +142,44 @@ export async function onRequestPut(context) {
     return json({ error: '作品データの形式が不正です' }, 400);
   }
 
-  // 新形式 {data, meta} / 旧形式(作品ペイロード直接) の両対応
   const data = (parsed.data && parsed.data.content) ? parsed.data : parsed;
   const meta = (parsed.meta && typeof parsed.meta === 'object') ? parsed.meta : null;
+  const note = (parsed.note && typeof parsed.note === 'string') ? parsed.note : '';
   if (!data || !Array.isArray(data.content)) {
-    return json({ error: '作品データの形式が不正です' }, 400);
+    return json({ error: '作品データの形式が不正です (content配列が必要)' }, 400);
   }
 
-  // 1) 作品本体を保存
-  await context.env.WORKS_KV.put('work:' + id, JSON.stringify(data));
+  // 1) 現在の最新版をバージョン履歴に退避（存在する場合）
+  const versionList = await readVersionList(kv, id);
+  const prevStored = await kv.get('work:' + id);
+  if (prevStored !== null) {
+    try {
+      const prevData = JSON.parse(prevStored);
+      const nextVer = versionList.length > 0
+        ? Math.max.apply(null, versionList.map(function (v) { return v.version; })) + 1
+        : 1;
+      versionList.push({
+        version: nextVer,
+        savedAt: new Date().toISOString(),
+        note: note,
+        data: prevData,
+      });
+      // 最大件数を超えたら古いものを削除
+      while (versionList.length > MAX_VERSIONS) {
+        versionList.shift();
+      }
+      await kv.put('versions:' + id, JSON.stringify(versionList));
+    } catch (e) {
+      // 履歴保存失敗は本体保存を妨げない
+    }
+  }
 
-  // 2) サーバーカタログを更新 (read-modify-write)
+  // 2) 作品本体を保存
+  await kv.put('work:' + id, JSON.stringify(data));
+
+  // 3) サーバーカタログを更新
   if (meta) {
-    const catalog = await readCatalog(context.env.WORKS_KV);
+    const catalog = await readCatalog(kv);
     const entry = Object.assign({}, meta, {
       id: id,
       updatedAt: new Date().toISOString(),
@@ -128,31 +187,36 @@ export async function onRequestPut(context) {
     const idx = catalog.findIndex(function (w) { return w && w.id === id; });
     if (idx >= 0) catalog[idx] = entry;
     else catalog.push(entry);
-    await context.env.WORKS_KV.put(CATALOG_KEY, JSON.stringify(catalog));
+    await kv.put(CATALOG_KEY, JSON.stringify(catalog));
   }
 
-  return json({ ok: true, id: id });
+  const currentVersions = await readVersionList(kv, id);
+  return json({
+    ok: true,
+    id: id,
+    savedAt: new Date().toISOString(),
+    versionCount: currentVersions.length,
+  });
 }
 
-// DELETE /api/works/:id — 作品をサーバーから削除 + カタログから除外 (取り下げ時)
+// DELETE /api/works/:id
 export async function onRequestDelete(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id' }, 400);
   }
-  if (!context.env.WORKS_KV) {
-    return json({ error: 'KV namespace "WORKS_KV" が未バインドです' }, 500);
+  const kv = getKV(context.env);
+  if (!kv) {
+    return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
   }
 
-  // 1) 作品本体を削除 (存在しなくてもエラーにならない)
-  await context.env.WORKS_KV.delete('work:' + id);
+  await kv.delete('work:' + id);
 
-  // 2) サーバーカタログから除外 (read-modify-write)
-  const catalog = await readCatalog(context.env.WORKS_KV);
+  const catalog = await readCatalog(kv);
   const next = catalog.filter(function (w) { return !w || w.id !== id; });
   const removed = catalog.length - next.length;
   if (removed > 0) {
-    await context.env.WORKS_KV.put(CATALOG_KEY, JSON.stringify(next));
+    await kv.put(CATALOG_KEY, JSON.stringify(next));
   }
 
   return json({ ok: true, id: id, removed: removed });
