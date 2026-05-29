@@ -1,10 +1,10 @@
 /* ====================================================
- * AniNovel Server Save (v1.1.0)
+ * AniNovel Server Save (v1.2.0)
  * 
- * v1.1: 内蔵の「保存」ボタンをフックしてサーバー保存に振替
- * - pub_ 作品で「保存」を押すと自動でサーバー保存
- * - 「💾 サーバー保存」フローティングボタンも併設
- * - 「📜 履歴」でバージョン復元
+ * v1.2 変更点:
+ * - MutationObserver でボタン出現を即検出（タイミング問題を解消）
+ * - 内蔵保存処理を実行してからサーバー保存（state反映を維持）
+ * - エラー抑制で「保存先が見つかりません」を出さない
  * ==================================================== */
 
 (function(){
@@ -23,10 +23,8 @@
     return null;
   }
   
-  // 作品 payload を構築（複数のデータソースに対応）
   function getWorkPayload(){
     var st = window.state;
-    // 1. state から構築
     if(st && Array.isArray(st.content)){
       return {
         novel: st.novel,
@@ -37,7 +35,6 @@
         version: '2.2'
       };
     }
-    // 2. localStorage の published_works から（フォールバック）
     try {
       var workId = getCurrentWorkId();
       var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
@@ -48,7 +45,6 @@
     return null;
   }
   
-  // カタログ meta を取得
   function getCatalogMeta(){
     try {
       var workId = getCurrentWorkId();
@@ -60,13 +56,44 @@
     return null;
   }
   
+  // localStorage の published_works に作品データを補完
+  // (内蔵saveData() が「保存先(pub_)が見つかりません」を出さないように)
+  function ensurePublishedWorksEntry(){
+    try {
+      var workId = getCurrentWorkId();
+      if(!workId || workId.indexOf('pub_') !== 0) return;
+      
+      var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
+      if(pw[workId]) return; // 既にあれば何もしない
+      
+      // state からエントリを作って補完
+      var payload = getWorkPayload();
+      if(!payload) return;
+      
+      pw[workId] = {
+        catalogEntry: {
+          id: workId,
+          title: payload.novel ? payload.novel.title : '',
+          author: payload.novel ? payload.novel.author : '',
+        },
+        data: payload,
+        publishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem('aninovel_published_works', JSON.stringify(pw));
+      log('published_works エントリ補完:', workId);
+    } catch(e){
+      log('エントリ補完エラー:', e);
+    }
+  }
+  
   // ========================================
-  // サーバーに保存
+  // サーバー保存
   // ========================================
   async function saveToServer(silent){
     var workId = getCurrentWorkId();
     if(!workId || workId.indexOf('pub_') !== 0){
-      if(!silent) alert('この作品はサーバー保存の対象外です（公開作品 pub_ のみ）。\nID: ' + workId);
+      if(!silent) alert('公開作品(pub_)のみサーバー保存可能です。\nID: ' + workId);
       return false;
     }
     
@@ -78,7 +105,7 @@
     
     var note = '';
     if(!silent){
-      note = prompt('保存メモ（任意・履歴に表示）:', '');
+      note = prompt('保存メモ（任意）:', '');
       if(note === null) return false;
     }
     
@@ -100,9 +127,9 @@
       if(res.ok && result.ok){
         log('Saved:', result);
         if(!silent){
-          alert('✅ サーバーに保存しました！\nバージョン履歴: ' + (result.versionCount || 0) + ' 件\n他の端末・ブラウザからも反映されます。');
+          alert('✅ サーバーに保存しました！\nバージョン履歴: ' + (result.versionCount || 0) + ' 件');
         } else {
-          showToast('✅ サーバーに保存しました');
+          showToast('✅ サーバー保存完了');
         }
         return true;
       } else {
@@ -118,11 +145,10 @@
     }
   }
   
-  // 簡易トースト
-  function showToast(msg){
+  function showToast(msg, bgColor){
     var t = document.createElement('div');
     t.textContent = msg;
-    t.style.cssText = 'position:fixed;bottom:130px;right:16px;background:#10b981;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:10000;box-shadow:0 2px 12px rgba(0,0,0,0.2)';
+    t.style.cssText = 'position:fixed;bottom:130px;right:16px;background:' + (bgColor || '#10b981') + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:10000;box-shadow:0 2px 12px rgba(0,0,0,0.2)';
     document.body.appendChild(t);
     setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity 0.5s'; setTimeout(function(){t.remove();}, 500); }, 2500);
   }
@@ -133,7 +159,7 @@
   async function showVersionHistory(){
     var workId = getCurrentWorkId();
     if(!workId || workId.indexOf('pub_') !== 0){
-      alert('公開作品(pub_)のみバージョン履歴があります。');
+      alert('公開作品(pub_)のみ履歴があります。');
       return;
     }
     try {
@@ -157,7 +183,7 @@
     box.style.cssText = 'background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow-y:auto;padding:20px';
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;font-weight:700">📜 バージョン履歴</h3><button id="srvVerClose" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button></div>';
     if(versions.length === 0){
-      html += '<p style="color:#666;text-align:center;padding:30px 0">まだ履歴がありません。<br>「保存」すると履歴が作られます。</p>';
+      html += '<p style="color:#666;text-align:center;padding:30px 0">まだ履歴がありません。</p>';
     } else {
       html += '<p style="font-size:12px;color:#666;margin-bottom:12px">過去の保存に復元（最大20件）</p><div style="display:flex;flex-direction:column;gap:8px">';
       versions.forEach(function(v){
@@ -180,7 +206,7 @@
   }
   
   async function restoreVersion(workId, version){
-    if(!confirm('バージョン ' + version + ' に復元しますか？\n※現在の内容は履歴に残ります。\n※復元後リロードします。')) return;
+    if(!confirm('バージョン ' + version + ' に復元しますか？\n復元後リロードします。')) return;
     try {
       var res = await fetch('/api/works/' + encodeURIComponent(workId) + '?version=' + version);
       var result = await res.json();
@@ -196,78 +222,147 @@
   }
   
   // ========================================
-  // 内蔵「保存」ボタンをフック
+  // 内蔵「保存」ボタンをフック（v1.2: 内蔵処理も実行）
   // ========================================
   function hookNativeSaveButtons(){
     var workId = getCurrentWorkId();
-    if(!workId || workId.indexOf('pub_') !== 0) return;
+    if(!workId || workId.indexOf('pub_') !== 0) return 0;
     
+    // 補完: published_works に作品エントリがなければ作る（内蔵保存エラー対策）
+    ensurePublishedWorksEntry();
+    
+    var hookedCount = 0;
     var buttons = document.querySelectorAll('button');
     buttons.forEach(function(btn){
       if(btn.dataset.srvHooked) return;
       var onclick = btn.getAttribute('onclick') || '';
       var text = (btn.textContent || '').trim();
       
-      // saveData/saveMyWork を呼ぶ、またはテキストが「保存」のボタン
-      var isSave = (onclick.indexOf('saveData') !== -1 || onclick.indexOf('saveMyWork') !== -1 || text === '保存' || text === '💾保存' || text === '💾 保存');
-      var notOther = (text.indexOf('サーバー') === -1 && text.indexOf('公開') === -1 && text.indexOf('自動') === -1);
+      var isSave = (onclick.indexOf('saveData') !== -1 || 
+                    onclick.indexOf('saveMyWork') !== -1 || 
+                    text === '保存' || text === '💾保存' || text === '💾 保存');
+      var notOther = (text.indexOf('サーバー') === -1 && 
+                      text.indexOf('公開') === -1 && 
+                      text.indexOf('自動') === -1);
       
       if(isSave && notOther){
         btn.dataset.srvHooked = '1';
-        // onclick 属性を無効化してサーバー保存に置き換え
+        var origOnclick = onclick;
         btn.removeAttribute('onclick');
         btn.onclick = function(e){
           e.preventDefault();
-          log('Native save button clicked → server save');
-          saveToServer(false);
+          log('Native save clicked, text="' + text + '"');
+          
+          // 内蔵処理を実行（state反映 + localStorage保存）。エラーは抑制
+          if(origOnclick){
+            try {
+              var fn = new Function(origOnclick);
+              fn.call(btn);
+              log('Native save executed');
+            } catch(err) {
+              log('Native save error suppressed:', err.message);
+            }
+          }
+          
+          // 少し待ってからサーバー保存（state反映を待つ）
+          setTimeout(function(){
+            saveToServer(true); // silent モード（toast表示のみ）
+          }, 150);
           return false;
         };
-        log('Hooked native save button:', text);
+        log('Hooked:', text);
+        hookedCount++;
       }
     });
+    return hookedCount;
   }
   
   // ========================================
-  // フローティングボタン設置
+  // フローティングボタン
   // ========================================
-  function setupButtons(){
+  function setupFloatingButtons(){
     var workId = getCurrentWorkId();
-    if(!workId || workId.indexOf('pub_') !== 0) return;
-    
-    if(!document.getElementById('srvSaveContainer')){
-      var container = document.createElement('div');
-      container.id = 'srvSaveContainer';
-      container.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:8px';
-      
-      var saveBtn = document.createElement('button');
-      saveBtn.id = 'srvSaveBtn';
-      saveBtn.textContent = '💾 サーバー保存';
-      saveBtn.style.cssText = 'background:#6366f1;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
-      saveBtn.onclick = function(){ saveToServer(false); };
-      
-      var histBtn = document.createElement('button');
-      histBtn.id = 'srvHistBtn';
-      histBtn.textContent = '📜 履歴';
-      histBtn.style.cssText = 'background:#fff;color:#6366f1;border:1px solid #6366f1;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
-      histBtn.onclick = showVersionHistory;
-      
-      container.appendChild(saveBtn);
-      container.appendChild(histBtn);
-      document.body.appendChild(container);
-      log('Floating buttons installed for:', workId);
+    if(!workId || workId.indexOf('pub_') !== 0){
+      var existing = document.getElementById('srvSaveContainer');
+      if(existing) existing.remove();
+      return;
     }
     
-    // 内蔵保存ボタンもフック
-    hookNativeSaveButtons();
+    if(document.getElementById('srvSaveContainer')) return;
+    
+    var container = document.createElement('div');
+    container.id = 'srvSaveContainer';
+    container.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:8px';
+    
+    var saveBtn = document.createElement('button');
+    saveBtn.id = 'srvSaveBtn';
+    saveBtn.textContent = '💾 サーバー保存';
+    saveBtn.style.cssText = 'background:#6366f1;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
+    saveBtn.onclick = function(){ saveToServer(false); };
+    
+    var histBtn = document.createElement('button');
+    histBtn.id = 'srvHistBtn';
+    histBtn.textContent = '📜 履歴';
+    histBtn.style.cssText = 'background:#fff;color:#6366f1;border:1px solid #6366f1;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
+    histBtn.onclick = showVersionHistory;
+    
+    container.appendChild(saveBtn);
+    container.appendChild(histBtn);
+    document.body.appendChild(container);
+    log('Floating buttons installed:', workId);
+  }
+  
+  // ========================================
+  // MutationObserver でリアルタイム検出
+  // ========================================
+  var setupTimer = null;
+  function debouncedSetup(){
+    if(setupTimer) return;
+    setupTimer = setTimeout(function(){
+      setupTimer = null;
+      setupFloatingButtons();
+      hookNativeSaveButtons();
+    }, 100);
+  }
+  
+  function startObserver(){
+    if(window._srvObserverStarted) return;
+    window._srvObserverStarted = true;
+    
+    var observer = new MutationObserver(function(mutations){
+      // ボタン関連の変化があった時だけフック実行
+      var relevant = false;
+      for(var i=0; i<mutations.length; i++){
+        var m = mutations[i];
+        if(m.addedNodes && m.addedNodes.length){
+          for(var j=0; j<m.addedNodes.length; j++){
+            var n = m.addedNodes[j];
+            if(n.nodeType === 1){
+              if(n.tagName === 'BUTTON' || (n.querySelector && n.querySelector('button'))){
+                relevant = true;
+                break;
+              }
+            }
+          }
+        }
+        if(relevant) break;
+      }
+      if(relevant) debouncedSetup();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    log('MutationObserver started');
   }
   
   function init(){
-    if(document.body){
-      setupButtons();
-      setInterval(setupButtons, 2000); // render() でボタンが再生成されるので定期再フック
-    } else {
-      setTimeout(init, 100);
-    }
+    if(!document.body){ setTimeout(init, 100); return; }
+    
+    setupFloatingButtons();
+    hookNativeSaveButtons();
+    startObserver();
+    setInterval(function(){
+      setupFloatingButtons();
+      hookNativeSaveButtons();
+    }, 2000); // フォールバック
   }
   
   if(document.readyState === 'loading'){
@@ -278,10 +373,12 @@
   
   window.AniNovelServerSave = {
     save: function(){ return saveToServer(false); },
+    saveQuiet: function(){ return saveToServer(true); },
     showHistory: showVersionHistory,
     getWorkId: getCurrentWorkId,
-    getPayload: getWorkPayload
+    getPayload: getWorkPayload,
+    hookButtons: hookNativeSaveButtons
   };
   
-  log('Loaded v1.1.0');
+  log('Loaded v1.2.0');
 })();
