@@ -1,5 +1,5 @@
 /* ====================================================
- * AniNovel Server Save (v1.9.0)
+ * AniNovel Server Save (v1.10.0)
  * 
  * v1.9 修正:
  * - 作者モード：「🎨 ギャラリーから選ぶ」を表示しない（既存「ギャラリー」があるため）
@@ -285,8 +285,10 @@
         }, true); // capture
       });
     }
+    // ★ 先に DOM に追加してから renderPage を呼ぶ（getElementById のため）
+    ov.appendChild(box);
+    document.body.appendChild(ov);
     renderPage();
-    ov.appendChild(box); document.body.appendChild(ov);
   }
   
   // ========================================
@@ -495,7 +497,7 @@
     getWorkId:getCurrentWorkId, getUserId:getCurrentUserId, isAuthor:isAuthorMode,
     forceRender:function(){ if(window.render){ try{ window.render(); console.log('rendered'); }catch(e){ console.log(e); } } }
   };
-  log('Loaded v1.9.0');
+  log('Loaded v1.10.0');
 })();
 
-// deploy: 20260529221927
+// deploy: 20260529223437
