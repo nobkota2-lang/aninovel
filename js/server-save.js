@@ -1,5 +1,5 @@
 /* ====================================================
- * AniNovel Server Save (v1.10.0)
+ * AniNovel Server Save (v1.11.0)
  * 
  * v1.9 修正:
  * - 作者モード：「🎨 ギャラリーから選ぶ」を表示しない（既存「ギャラリー」があるため）
@@ -37,6 +37,28 @@
   // ========================================
   function getWorkPayload(){ var st=window.state; if(st&&Array.isArray(st.content)) return { novel:st.novel, chapters:st.chapters, characters:st.characters, content:st.content, displaySettings:st.displaySettings, version:'2.2' }; return null; }
   function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pw=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}'); if(pw[w]) return pw[w].catalogEntry||null; } catch(e){} return null; }
+  
+  // ★ 内蔵自動保存「保存先(pub_)が見つかりません」を防ぐ
+  // 起動時 & 定期実行で localStorage に pub_xxx エントリを補完
+  function ensurePublishedWorksEntry(){
+    var workId = getCurrentWorkId();
+    if(!workId || workId.indexOf('pub_') !== 0) return;
+    try {
+      var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
+      if(pw[workId]) return; // 既にあれば何もしない
+      var payload = getWorkPayload();
+      if(!payload) return; // state がまだ初期化されていない
+      pw[workId] = {
+        catalogEntry: { id: workId, title: payload.novel ? payload.novel.title : '', author: payload.novel ? payload.novel.author : '' },
+        data: payload,
+        publishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        _autoFilled: true
+      };
+      localStorage.setItem('aninovel_published_works', JSON.stringify(pw));
+      log('Auto-filled published_works entry for:', workId);
+    } catch(e){ log('ensure error:', e); }
+  }
   
   async function saveToServer(silent){
     if(!isAuthorMode()){ if(!silent) alert('公開保存は作者モードのみ'); return false; }
@@ -460,6 +482,7 @@
     ['srvSaveContainer','srvReaderContainer','srvAuthorFloating'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
   }
   function setupAll(){
+    ensurePublishedWorksEntry();  // ★ 内蔵自動保存エラー防止
     removeOldFloating();
     if(isAuthorMode()){
       var r=document.getElementById('srvReaderInline'); if(r) r.remove();
@@ -497,7 +520,7 @@
     getWorkId:getCurrentWorkId, getUserId:getCurrentUserId, isAuthor:isAuthorMode,
     forceRender:function(){ if(window.render){ try{ window.render(); console.log('rendered'); }catch(e){ console.log(e); } } }
   };
-  log('Loaded v1.10.0');
+  log('Loaded v1.11.0');
 })();
 
-// deploy: 20260529223437
+// deploy: 20260529224555
