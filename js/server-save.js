@@ -1,11 +1,10 @@
 /* ====================================================
- * AniNovel Server Save (v1.11.0)
+ * AniNovel Server Save (v1.12.0)
  * 
- * v1.9 修正:
- * - 作者モード：「🎨 ギャラリーから選ぶ」を表示しない（既存「ギャラリー」があるため）
- * - 読者モード：ギャラリー画像クリックを確実に反映（capture + log）
- * - 「作者推奨に戻す」フックを強化（広範囲なマッチ）
- * - PC保存・読込ボタンを削除（クラウド保存のみ、ログイン時）
+ * v1.12 大改修:
+ * - 独自ギャラリーモーダル廃止
+ * - viewer.html 内蔵の openGallery() を流用（作者モードと同じUI）
+ * - editingItem を一時設定して性別フィルタを効かせ、選択結果を readerCustom に転送
  * ==================================================== */
 
 (function(){
@@ -38,16 +37,15 @@
   function getWorkPayload(){ var st=window.state; if(st&&Array.isArray(st.content)) return { novel:st.novel, chapters:st.chapters, characters:st.characters, content:st.content, displaySettings:st.displaySettings, version:'2.2' }; return null; }
   function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pw=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}'); if(pw[w]) return pw[w].catalogEntry||null; } catch(e){} return null; }
   
-  // ★ 内蔵自動保存「保存先(pub_)が見つかりません」を防ぐ
-  // 起動時 & 定期実行で localStorage に pub_xxx エントリを補完
+  // 自動保存エラー防止
   function ensurePublishedWorksEntry(){
     var workId = getCurrentWorkId();
     if(!workId || workId.indexOf('pub_') !== 0) return;
     try {
       var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
-      if(pw[workId]) return; // 既にあれば何もしない
+      if(pw[workId]) return;
       var payload = getWorkPayload();
-      if(!payload) return; // state がまだ初期化されていない
+      if(!payload) return;
       pw[workId] = {
         catalogEntry: { id: workId, title: payload.novel ? payload.novel.title : '', author: payload.novel ? payload.novel.author : '' },
         data: payload,
@@ -132,7 +130,7 @@
   }
   
   // ========================================
-  // 読者設定 クラウド保存（PC保存は削除）
+  // 読者設定 クラウド保存
   // ========================================
   function collectReaderSettings(){
     var st=window.state||{};
@@ -182,140 +180,111 @@
     } catch(e){ log('AutoLoad err:',e); }
   }
   
-  // 読者ボタン（クラウドのみ、ログイン時のみ）
   function setupReaderButtons(){
     if(isAuthorMode()) return;
     if(document.getElementById('srvReaderInline')) return;
     var tb=document.querySelector('.toolbar'); if(!tb) return;
     var uid=getCurrentUserId();
-    if(!uid) return; // 未ログインは何も表示しない
-    
+    if(!uid) return;
     var c=document.createElement('div'); c.id='srvReaderInline';
     c.style.cssText='display:inline-flex;gap:4px;align-items:center;margin-left:8px;flex-wrap:wrap';
-    function mk(t,ti,cb){
-      var b=document.createElement('button'); b.textContent=t; b.title=ti; b.className='btn';
+    function mk(t,ti,cb){ var b=document.createElement('button'); b.textContent=t; b.title=ti; b.className='btn';
       b.style.cssText='background:#fff;color:#0ea5e9;border:1px solid #0ea5e9;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600';
-      b.onclick=cb; return b;
-    }
-    c.appendChild(mk('☁ 設定保存','クラウドに保存（端末間同期・履歴付）',function(){ saveReaderSettingsCloud(false); }));
-    c.appendChild(mk('☁ 読込','クラウドから読込',loadReaderSettingsCloud));
+      b.onclick=cb; return b; }
+    c.appendChild(mk('☁ 設定保存','クラウドに保存',function(){ saveReaderSettingsCloud(false); }));
+    c.appendChild(mk('☁ 読込','クラウドから',loadReaderSettingsCloud));
     c.appendChild(mk('📜','設定の履歴',showReaderHistory));
     tb.appendChild(c);
   }
   
   // ========================================
-  // 独自ギャラリーモーダル
+  // ★★ 読者モードで viewer.html 内蔵ギャラリーを流用 ★★
   // ========================================
-  var _galleryManifest = null;
-  async function loadGalleryManifest(){
-    if(_galleryManifest) return _galleryManifest;
-    if(window.state && window.state.galleryManifest){ _galleryManifest=window.state.galleryManifest; return _galleryManifest; }
-    try { var r=await fetch('/data/gallery-manifest.json'); _galleryManifest = await r.json(); if(window.state) window.state.galleryManifest = _galleryManifest; return _galleryManifest; }
-    catch(e){ alert('manifest取得失敗: '+e.message); return null; }
-  }
   
-  async function openCustomGallery(charId, onSelect){
-    var manifest = await loadGalleryManifest();
-    if(!manifest){ alert('ギャラリー manifest 取得失敗'); return; }
-    log('Opening gallery for charId:', charId);
+  // viewer.html の openGallery() を呼ぶ前に editingItem を一時設定し、
+  // 選択結果（iconImage の変化）を監視して readerCustom に転送する
+  function openGalleryForReader(){
+    var charId = window.state.readerCustomCharId;
+    if(!charId){ alert('キャラ未選択'); return; }
     
-    var ch = window.state && window.state.characters && window.state.characters.find(function(c){ return c.id === charId; });
-    var gender = ch ? ch.gender : null;
-    var groups = manifest.groups.slice();
-    if(gender === 'male' || gender === 'female'){
-      groups = groups.filter(function(g){ return g.gender === gender || !g.gender; });
-    }
-    log('Filtered groups:', groups.length, 'gender:', gender);
-    renderGalleryCategoryView(groups, charId, onSelect);
-  }
-  
-  function renderGalleryCategoryView(groups, charId, onSelect){
-    var old=document.getElementById('srvCustGallery'); if(old) old.remove();
-    var ov=document.createElement('div'); ov.id='srvCustGallery';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10002;display:flex;align-items:center;justify-content:center;padding:20px';
-    ov.addEventListener('click', function(e){ if(e.target===ov) ov.remove(); });
-    var box=document.createElement('div');
-    box.style.cssText='background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;padding:20px';
-    var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="margin:0;font-size:16px;font-weight:700">🎨 ギャラリーから選ぶ</h3><button id="srvGCClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666">✕</button></div>';
-    html+='<p style="font-size:12px;color:#666;margin:0 0 12px 0">カテゴリーを選んでください</p>';
-    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">';
-    groups.forEach(function(g, i){
-      var sample = (g.items && g.items[0]) ? g.items[0].p : '';
-      html+='<div data-idx="'+i+'" class="srvGCBtn" style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;cursor:pointer;text-align:center;background:#fafafa">';
-      if(sample) html+='<img src="'+sample+'" style="width:64px;height:64px;object-fit:cover;border-radius:50%;background:#eee" loading="lazy">';
-      html+='<div style="font-size:11px;margin-top:4px;font-weight:600">'+escapeHtml(g.label||'')+'</div>';
-      html+='<div style="font-size:10px;color:#666">'+((g.items||[]).length)+'件</div>';
-      html+='</div>';
-    });
-    html+='</div>';
-    box.innerHTML=html; ov.appendChild(box); document.body.appendChild(ov);
-    document.getElementById('srvGCClose').addEventListener('click', function(e){ e.stopPropagation(); ov.remove(); });
-    box.querySelectorAll('.srvGCBtn').forEach(function(el){
-      el.addEventListener('click', function(e){
-        e.stopPropagation();
-        var idx=parseInt(el.getAttribute('data-idx'),10);
-        renderGalleryImageView(groups, idx, charId, onSelect);
-      });
-    });
-  }
-  
-  function renderGalleryImageView(groups, idx, charId, onSelect){
-    var old=document.getElementById('srvCustGallery'); if(old) old.remove();
-    var grp=groups[idx]; if(!grp || !grp.items) return;
-    var ov=document.createElement('div'); ov.id='srvCustGallery';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10002;display:flex;align-items:center;justify-content:center;padding:20px';
-    ov.addEventListener('click', function(e){ if(e.target===ov) ov.remove(); });
-    var box=document.createElement('div');
-    box.style.cssText='background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;padding:20px';
-    var perPage=30; var page=0; var total=grp.items.length; var pages=Math.ceil(total/perPage);
+    var ch = (window.state.characters || []).find(function(c){ return c.id === charId; });
+    if(!ch){ alert('キャラが見つかりません'); return; }
     
-    function renderPage(){
-      var start=page*perPage, end=Math.min(start+perPage, total);
-      var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><button id="srvGCBack" style="background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">← カテゴリ</button> <span style="margin-left:8px;font-weight:600">'+escapeHtml(grp.label||'')+'</span></div><button id="srvGCClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666">✕</button></div>';
-      html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-bottom:12px">';
-      for(var i=start; i<end; i++){
-        var it=grp.items[i];
-        html+='<img class="srvGCImg" data-src="'+it.p+'" src="'+it.p+'" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;background:#eee" loading="lazy">';
+    // 一時的に editingItem を設定（ギャラリーの性別フィルタが効くように）
+    var origEditingItem = window.state.editingItem;
+    var origEditModalOpen = window.state.editModalOpen;
+    var origReaderCustomOpen = window.state.readerCustomOpen;
+    
+    // 読者カスタムモーダルは一旦閉じる（重なって見えにくくならないように）
+    window.state.readerCustomOpen = false;
+    
+    window.state.editingItem = {
+      type: 'character',
+      data: {
+        id: charId,
+        gender: ch.gender,
+        iconImage: ''  // 初期化（変更検出のため）
       }
-      html+='</div>';
-      if(pages>1){
-        html+='<div style="display:flex;justify-content:center;gap:8px;align-items:center"><button id="srvGCPrev" '+(page<=0?'disabled':'')+' style="background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px'+(page<=0?';opacity:0.5':'')+'">← 前</button><span style="font-size:12px">'+(page+1)+' / '+pages+'</span><button id="srvGCNext" '+(page>=pages-1?'disabled':'')+' style="background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px'+(page>=pages-1?';opacity:0.5':'')+'">次 →</button></div>';
-      }
-      box.innerHTML=html;
+    };
+    // editModalOpen は触らない（編集モーダルは開かない）
+    
+    log('Opening native gallery for reader, charId:', charId, 'gender:', ch.gender);
+    
+    // 選択結果を監視
+    var startTime = Date.now();
+    var watchInterval = setInterval(function(){
+      var stillOpen = window.state.imageGalleryOpen;
+      var newImage = window.state.editingItem && window.state.editingItem.data && window.state.editingItem.data.iconImage;
       
-      // capture phase で確実にイベントを受け取る
-      document.getElementById('srvGCClose').addEventListener('click', function(e){ e.stopPropagation(); ov.remove(); });
-      document.getElementById('srvGCBack').addEventListener('click', function(e){ e.stopPropagation(); ov.remove(); renderGalleryCategoryView(groups, charId, onSelect); });
-      var pv=document.getElementById('srvGCPrev'); if(pv) pv.addEventListener('click', function(e){ e.stopPropagation(); if(page>0){ page--; renderPage(); } });
-      var nx=document.getElementById('srvGCNext'); if(nx) nx.addEventListener('click', function(e){ e.stopPropagation(); if(page<pages-1){ page++; renderPage(); } });
-      
-      box.querySelectorAll('.srvGCImg').forEach(function(img){
-        img.addEventListener('click', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          var src=img.getAttribute('data-src');
-          log('Image clicked:', src, 'charId:', charId);
-          ov.remove();
-          try {
-            onSelect(src);
-            log('onSelect called successfully');
-          } catch(err){
-            console.error('[ServerSave] onSelect error:', err);
-            alert('反映エラー: ' + err.message);
+      // 画像が選択された OR ギャラリーが閉じられた
+      if(!stillOpen || (newImage && newImage !== '')){
+        clearInterval(watchInterval);
+        
+        if(newImage && newImage !== ''){
+          // 画像が選択された → readerCustom に反映
+          log('Image selected:', newImage);
+          if(!window.state.readerCustom) window.state.readerCustom = {};
+          if(!window.state.readerCustom[charId]) window.state.readerCustom[charId] = {};
+          window.state.readerCustom[charId].iconImage = newImage;
+          
+          if(typeof window.saveReaderCustom === 'function'){
+            try { 
+              window.saveReaderCustom(window._workParam || getCurrentWorkId()); 
+              log('saveReaderCustom called');
+            } catch(e){ log('saveReaderCustom err:', e); }
           }
-        }, true); // capture
-      });
+          showToast('✅ アイコン設定');
+        }
+        
+        // 元の状態を復元
+        window.state.editingItem = origEditingItem;
+        window.state.editModalOpen = origEditModalOpen;
+        window.state.readerCustomOpen = origReaderCustomOpen;
+        window.state.imageGalleryOpen = false;
+        
+        if(typeof window.render === 'function') window.render();
+      }
+      
+      // 30秒タイムアウト
+      if(Date.now() - startTime > 30000){
+        clearInterval(watchInterval);
+        window.state.editingItem = origEditingItem;
+        window.state.editModalOpen = origEditModalOpen;
+        window.state.readerCustomOpen = origReaderCustomOpen;
+        log('Gallery watch timeout');
+      }
+    }, 200);
+    
+    // viewer.html 内蔵のギャラリーを開く
+    if(typeof window.openGallery === 'function'){
+      window.openGallery();
+    } else {
+      window.state.imageGalleryOpen = true;
+      if(typeof window.render === 'function') window.render();
     }
-    // ★ 先に DOM に追加してから renderPage を呼ぶ（getElementById のため）
-    ov.appendChild(box);
-    document.body.appendChild(ov);
-    renderPage();
   }
   
-  // ========================================
-  // ギャラリーボタン挿入（読者モードのみ、作者は viewer.html の既存を使う）
-  // ========================================
+  // ボタン挿入（読者モードのみ）
   function setupGalleryButtons(){
     document.querySelectorAll('input[type="file"][accept*="image"]').forEach(function(input){
       var label=input.closest('label'); if(!label) return;
@@ -323,10 +292,7 @@
       var onchange=input.getAttribute('onchange')||'';
       var isReader=onchange.indexOf('readerCustom')!==-1;
       var isAuthor=onchange.indexOf('state.editingItem')!==-1;
-      
-      // ★ 作者モードは既存の「ギャラリー」ボタンがあるので追加しない
-      if(isAuthor) return;
-      
+      if(isAuthor) return; // 作者モードは viewer.html の既存ボタンを使う
       if(!isReader) return;
       
       var btn=document.createElement('button');
@@ -337,24 +303,7 @@
       btn.textContent='🎨 ギャラリーから選ぶ';
       btn.onclick=function(e){
         e.preventDefault();
-        var charId = window.state.readerCustomCharId;
-        if(!charId){ alert('キャラ未選択'); return false; }
-        var onSelect=function(src){
-          log('Applying icon to reader custom:', charId, src);
-          if(!window.state.readerCustom) window.state.readerCustom={};
-          if(!window.state.readerCustom[charId]) window.state.readerCustom[charId]={};
-          window.state.readerCustom[charId].iconImage=src;
-          // 永続化
-          if(typeof window.saveReaderCustom==='function'){
-            try { window.saveReaderCustom(window._workParam||getCurrentWorkId()); log('saveReaderCustom called'); }
-            catch(err){ log('saveReaderCustom err:', err); }
-          } else {
-            log('saveReaderCustom not defined');
-          }
-          if(typeof window.render==='function') window.render();
-          showToast('✅ アイコン設定');
-        };
-        openCustomGallery(charId, onSelect);
+        openGalleryForReader();
         return false;
       };
       label.parentNode.insertBefore(btn, label.nextSibling);
@@ -362,7 +311,7 @@
   }
   
   // ========================================
-  // 著作権警告（作者モードのみ）
+  // 著作権警告
   // ========================================
   function setupCopyrightWarning(){
     document.querySelectorAll('input[type="file"][accept*="image"]').forEach(function(input){
@@ -381,31 +330,22 @@
   }
   
   // ========================================
-  // 「作者推奨に戻す」ボタンフック（強化版）
+  // 「作者推奨に戻す」ボタンフック
   // ========================================
   function hookResetButton(){
     document.querySelectorAll('button').forEach(function(btn){
       if(btn.dataset.srvResetHooked) return;
       var oc=btn.getAttribute('onclick')||'';
       var t=(btn.textContent||'').trim();
-      var matched = (
-        oc.indexOf('resetToAuthorDefaults')!==-1 ||
-        t === '作者推奨に戻す' ||
-        t === '🔄 作者推奨に戻す' ||
-        (t.indexOf('作者推奨')!==-1 && t.indexOf('戻')!==-1) ||
-        (t.indexOf('推奨')!==-1 && t.indexOf('戻')!==-1)
-      );
+      var matched = ( oc.indexOf('resetToAuthorDefaults')!==-1 || t === '作者推奨に戻す' || t === '🔄 作者推奨に戻す' || (t.indexOf('作者推奨')!==-1 && t.indexOf('戻')!==-1) || (t.indexOf('推奨')!==-1 && t.indexOf('戻')!==-1));
       if(matched){
         btn.dataset.srvResetHooked='1';
         btn.removeAttribute('onclick');
-        // 既存のリスナーを上書き
         var newBtn = btn.cloneNode(true);
         newBtn.dataset.srvResetHooked='1';
         btn.parentNode.replaceChild(newBtn, btn);
         newBtn.addEventListener('click', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
+          e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
           forceResetReaderCustom();
           return false;
         }, true);
@@ -413,48 +353,29 @@
       }
     });
   }
-  
   function forceResetReaderCustom(){
     var workId=window._workParam||getCurrentWorkId();
     if(!confirm('読者カスタマイズを完全にクリアし、作者推奨の設定に戻しますか？')) return;
     try {
-      if(window.state){
-        window.state.readerCustom=null;
-        window.state.readerCustomOpen=false;
-      }
-      // 全プロファイルの readerCustom をクリア
+      if(window.state){ window.state.readerCustom=null; window.state.readerCustomOpen=false; }
       try {
         var profiles=JSON.parse(localStorage.getItem('aninovel_reader_profiles')||'{}');
         if(profiles[workId]){
           Object.keys(profiles[workId]).forEach(function(pn){
-            if(profiles[workId][pn] && profiles[workId][pn].readerCustom){
-              profiles[workId][pn].readerCustom=null;
-            }
-            // current profile の中の readerCustom も
-            if(profiles[workId][pn] && typeof profiles[workId][pn] === 'object'){
-              delete profiles[workId][pn].readerCustom;
-            }
+            if(profiles[workId][pn] && profiles[workId][pn].readerCustom) profiles[workId][pn].readerCustom=null;
+            if(profiles[workId][pn] && typeof profiles[workId][pn]==='object') delete profiles[workId][pn].readerCustom;
           });
           localStorage.setItem('aninovel_reader_profiles', JSON.stringify(profiles));
         }
       } catch(e){ log('LS reset:',e); }
-      // aninovel_data の中の readerCustom もクリア
-      try {
-        var d = JSON.parse(localStorage.getItem('aninovel_data')||'{}');
-        if(d && d.readerCustom){ delete d.readerCustom; localStorage.setItem('aninovel_data', JSON.stringify(d)); }
-      } catch(e){}
-      // viewer.html の関数も呼ぶ
-      if(typeof window.saveReaderCustom==='function'){
-        try { window.saveReaderCustom(workId); } catch(e){}
-      }
+      try { var d=JSON.parse(localStorage.getItem('aninovel_data')||'{}'); if(d && d.readerCustom){ delete d.readerCustom; localStorage.setItem('aninovel_data', JSON.stringify(d)); } } catch(e){}
+      if(typeof window.saveReaderCustom==='function'){ try { window.saveReaderCustom(workId); } catch(e){} }
       if(typeof window.render==='function') window.render();
       showToast('✅ 作者推奨の設定に戻しました');
     } catch(e){ alert('❌ '+e.message); }
   }
   
-  // ========================================
-  // 読者モードで「登場人物リスト」(👥) を非表示
-  // ========================================
+  // 読者モードで👥非表示
   function hideCharacterListButtonInReader(){
     if(isAuthorMode()) return;
     document.querySelectorAll('button').forEach(function(btn){
@@ -479,10 +400,10 @@
   // 起動
   // ========================================
   function removeOldFloating(){
-    ['srvSaveContainer','srvReaderContainer','srvAuthorFloating'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
+    ['srvSaveContainer','srvReaderContainer','srvAuthorFloating','srvCustGallery'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
   }
   function setupAll(){
-    ensurePublishedWorksEntry();  // ★ 内蔵自動保存エラー防止
+    ensurePublishedWorksEntry();
     removeOldFloating();
     if(isAuthorMode()){
       var r=document.getElementById('srvReaderInline'); if(r) r.remove();
@@ -516,11 +437,11 @@
     save:function(){ return saveToServer(false); }, showHistory:showWorkHistory,
     saveCloud:function(){ return saveReaderSettingsCloud(false); }, loadCloud:loadReaderSettingsCloud, showCloudHistory:showReaderHistory,
     forceReset:forceResetReaderCustom,
-    openGallery:function(charId, onSelect){ openCustomGallery(charId||window.state.readerCustomCharId, onSelect||function(s){ console.log('selected:',s); }); },
+    openGallery:openGalleryForReader,
     getWorkId:getCurrentWorkId, getUserId:getCurrentUserId, isAuthor:isAuthorMode,
     forceRender:function(){ if(window.render){ try{ window.render(); console.log('rendered'); }catch(e){ console.log(e); } } }
   };
-  log('Loaded v1.11.0');
+  log('Loaded v1.12.0');
 })();
 
-// deploy: 20260529224555
+// deploy: 20260530074131
