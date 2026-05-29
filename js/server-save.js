@@ -1,10 +1,11 @@
 /* ====================================================
- * AniNovel Server Save (v1.2.0)
+ * AniNovel Server Save (v1.3.0)
  * 
- * v1.2 変更点:
- * - MutationObserver でボタン出現を即検出（タイミング問題を解消）
- * - 内蔵保存処理を実行してからサーバー保存（state反映を維持）
- * - エラー抑制で「保存先が見つかりません」を出さない
+ * v1.3 変更点:
+ * - 作者モードのみサーバー保存（state.isAuthorMode で判定）
+ * - 「📜 履歴」ボタンを内蔵「保存」ボタンの隣にインライン配置
+ * - フローティングボタン廃止
+ * - 読者モード：右下に「💾 設定をPCに保存」「📁 設定を読込」（ローカルJSON）
  * ==================================================== */
 
 (function(){
@@ -21,6 +22,10 @@
       return window.state.currentWorkId || window.state.workId || window.state.publishedId || null;
     }
     return null;
+  }
+  
+  function isAuthorMode(){
+    return !!(window.state && window.state.isAuthorMode);
   }
   
   function getWorkPayload(){
@@ -49,54 +54,43 @@
     try {
       var workId = getCurrentWorkId();
       var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
-      if(pw[workId]){
-        return pw[workId].catalogEntry || null;
-      }
+      if(pw[workId]) return pw[workId].catalogEntry || null;
     } catch(e){}
     return null;
   }
   
-  // localStorage の published_works に作品データを補完
-  // (内蔵saveData() が「保存先(pub_)が見つかりません」を出さないように)
   function ensurePublishedWorksEntry(){
     try {
       var workId = getCurrentWorkId();
       if(!workId || workId.indexOf('pub_') !== 0) return;
-      
       var pw = JSON.parse(localStorage.getItem('aninovel_published_works') || '{}');
-      if(pw[workId]) return; // 既にあれば何もしない
-      
-      // state からエントリを作って補完
+      if(pw[workId]) return;
       var payload = getWorkPayload();
       if(!payload) return;
-      
       pw[workId] = {
-        catalogEntry: {
-          id: workId,
-          title: payload.novel ? payload.novel.title : '',
-          author: payload.novel ? payload.novel.author : '',
-        },
+        catalogEntry: { id: workId, title: payload.novel ? payload.novel.title : '', author: payload.novel ? payload.novel.author : '' },
         data: payload,
         publishedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       localStorage.setItem('aninovel_published_works', JSON.stringify(pw));
-      log('published_works エントリ補完:', workId);
-    } catch(e){
-      log('エントリ補完エラー:', e);
-    }
+      log('Filled published_works entry:', workId);
+    } catch(e){ log('Fill error:', e); }
   }
   
   // ========================================
-  // サーバー保存
+  // サーバー保存（作者モードのみ）
   // ========================================
   async function saveToServer(silent){
-    var workId = getCurrentWorkId();
-    if(!workId || workId.indexOf('pub_') !== 0){
-      if(!silent) alert('公開作品(pub_)のみサーバー保存可能です。\nID: ' + workId);
+    if(!isAuthorMode()){
+      if(!silent) alert('サーバー保存は作者モードでのみ可能です。');
       return false;
     }
-    
+    var workId = getCurrentWorkId();
+    if(!workId || workId.indexOf('pub_') !== 0){
+      if(!silent) alert('公開作品(pub_)のみサーバー保存可能です。');
+      return false;
+    }
     var payload = getWorkPayload();
     if(!payload || !Array.isArray(payload.content)){
       if(!silent) alert('作品データを取得できませんでした。');
@@ -108,9 +102,6 @@
       note = prompt('保存メモ（任意）:', '');
       if(note === null) return false;
     }
-    
-    var btn = document.getElementById('srvSaveBtn');
-    if(btn){ btn.textContent = '💾 保存中...'; btn.disabled = true; }
     
     try {
       var meta = getCatalogMeta();
@@ -126,29 +117,23 @@
       
       if(res.ok && result.ok){
         log('Saved:', result);
-        if(!silent){
-          alert('✅ サーバーに保存しました！\nバージョン履歴: ' + (result.versionCount || 0) + ' 件');
-        } else {
-          showToast('✅ サーバー保存完了');
-        }
+        if(!silent) alert('✅ サーバーに保存しました！\nバージョン履歴: ' + (result.versionCount || 0) + ' 件');
+        else showToast('✅ サーバー保存完了');
         return true;
       } else {
         if(!silent) alert('❌ 保存失敗: ' + (result.error || ('HTTP ' + res.status)));
         return false;
       }
     } catch(e) {
-      log('Save error:', e);
       if(!silent) alert('❌ 通信エラー: ' + e.message);
       return false;
-    } finally {
-      if(btn){ btn.textContent = '💾 サーバー保存'; btn.disabled = false; }
     }
   }
   
-  function showToast(msg, bgColor){
+  function showToast(msg, color){
     var t = document.createElement('div');
     t.textContent = msg;
-    t.style.cssText = 'position:fixed;bottom:130px;right:16px;background:' + (bgColor || '#10b981') + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:10000;box-shadow:0 2px 12px rgba(0,0,0,0.2)';
+    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:' + (color || '#10b981') + ';color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.2)';
     document.body.appendChild(t);
     setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity 0.5s'; setTimeout(function(){t.remove();}, 500); }, 2500);
   }
@@ -167,9 +152,7 @@
       var result = await res.json();
       var versions = (result.versions || []).slice().reverse();
       renderVersionModal(workId, versions);
-    } catch(e) {
-      alert('履歴取得失敗: ' + e.message);
-    }
+    } catch(e) { alert('履歴取得失敗: ' + e.message); }
   }
   
   function renderVersionModal(workId, versions){
@@ -222,16 +205,15 @@
   }
   
   // ========================================
-  // 内蔵「保存」ボタンをフック（v1.2: 内蔵処理も実行）
+  // 内蔵保存ボタンをフック（作者モードのみ）
   // ========================================
   function hookNativeSaveButtons(){
+    if(!isAuthorMode()) return; // 読者モードでは何もしない
     var workId = getCurrentWorkId();
-    if(!workId || workId.indexOf('pub_') !== 0) return 0;
+    if(!workId || workId.indexOf('pub_') !== 0) return;
     
-    // 補完: published_works に作品エントリがなければ作る（内蔵保存エラー対策）
     ensurePublishedWorksEntry();
     
-    var hookedCount = 0;
     var buttons = document.querySelectorAll('button');
     buttons.forEach(function(btn){
       if(btn.dataset.srvHooked) return;
@@ -251,118 +233,188 @@
         btn.removeAttribute('onclick');
         btn.onclick = function(e){
           e.preventDefault();
-          log('Native save clicked, text="' + text + '"');
-          
-          // 内蔵処理を実行（state反映 + localStorage保存）。エラーは抑制
           if(origOnclick){
-            try {
-              var fn = new Function(origOnclick);
-              fn.call(btn);
-              log('Native save executed');
-            } catch(err) {
-              log('Native save error suppressed:', err.message);
-            }
+            try { (new Function(origOnclick)).call(btn); } catch(err){ log('Native suppressed:', err.message); }
           }
-          
-          // 少し待ってからサーバー保存（state反映を待つ）
-          setTimeout(function(){
-            saveToServer(true); // silent モード（toast表示のみ）
-          }, 150);
+          setTimeout(function(){ saveToServer(true); }, 150);
           return false;
         };
-        log('Hooked:', text);
-        hookedCount++;
+        // 履歴ボタンを隣に挿入
+        insertHistoryButton(btn);
+        log('Hooked save+inserted history:', text);
       }
     });
-    return hookedCount;
   }
   
-  // ========================================
-  // フローティングボタン
-  // ========================================
-  function setupFloatingButtons(){
-    var workId = getCurrentWorkId();
-    if(!workId || workId.indexOf('pub_') !== 0){
-      var existing = document.getElementById('srvSaveContainer');
-      if(existing) existing.remove();
-      return;
-    }
-    
-    if(document.getElementById('srvSaveContainer')) return;
-    
-    var container = document.createElement('div');
-    container.id = 'srvSaveContainer';
-    container.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:8px';
-    
-    var saveBtn = document.createElement('button');
-    saveBtn.id = 'srvSaveBtn';
-    saveBtn.textContent = '💾 サーバー保存';
-    saveBtn.style.cssText = 'background:#6366f1;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
-    saveBtn.onclick = function(){ saveToServer(false); };
+  // 内蔵保存ボタンの隣に「📜」をインライン挿入
+  function insertHistoryButton(saveBtn){
+    if(!saveBtn || !saveBtn.parentNode) return;
+    // 既にこの保存ボタンの隣に履歴がある？
+    if(saveBtn.nextElementSibling && saveBtn.nextElementSibling.dataset.srvHist === '1') return;
     
     var histBtn = document.createElement('button');
-    histBtn.id = 'srvHistBtn';
-    histBtn.textContent = '📜 履歴';
-    histBtn.style.cssText = 'background:#fff;color:#6366f1;border:1px solid #6366f1;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
-    histBtn.onclick = showVersionHistory;
-    
-    container.appendChild(saveBtn);
-    container.appendChild(histBtn);
-    document.body.appendChild(container);
-    log('Floating buttons installed:', workId);
+    histBtn.dataset.srvHist = '1';
+    histBtn.textContent = '📜';
+    histBtn.title = 'バージョン履歴';
+    // 保存ボタンのスタイルを継承（class）+ 履歴ボタン用調整
+    histBtn.className = saveBtn.className || '';
+    histBtn.style.cssText = (saveBtn.getAttribute('style') || '') + ';margin-left:6px;min-width:auto;padding:6px 10px';
+    histBtn.onclick = function(e){
+      e.preventDefault();
+      showVersionHistory();
+      return false;
+    };
+    saveBtn.parentNode.insertBefore(histBtn, saveBtn.nextSibling);
   }
   
   // ========================================
-  // MutationObserver でリアルタイム検出
+  // 読者モード：ローカルPC保存・読込
+  // ========================================
+  function getReaderSettings(){
+    var st = window.state || {};
+    return {
+      readerCustom: st.readerCustom,
+      readerCustomCharId: st.readerCustomCharId,
+      readerProfileCurrent: st.readerProfileCurrent,
+      readerProfileList: st.readerProfileList,
+      darkMode: st.darkMode,
+      displaySettings: st.displaySettings,
+      bookmarks: st.bookmarks,
+      workId: getCurrentWorkId(),
+      savedAt: new Date().toISOString(),
+      _appVersion: 'aninovel-reader-1.0'
+    };
+  }
+  
+  function saveReaderSettingsLocal(){
+    var settings = getReaderSettings();
+    var blob = new Blob([JSON.stringify(settings, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var workId = getCurrentWorkId() || 'unknown';
+    var dtStr = new Date().toISOString().slice(0,10).replace(/-/g, '');
+    a.download = 'aninovel-settings-' + workId + '-' + dtStr + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 100);
+    showToast('💾 PCにダウンロードしました');
+  }
+  
+  function loadReaderSettingsLocal(){
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.style.display = 'none';
+    input.onchange = function(e){
+      var file = e.target.files && e.target.files[0];
+      if(!file){ input.remove(); return; }
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        try {
+          var settings = JSON.parse(ev.target.result);
+          if(!settings || !settings._appVersion){
+            if(!confirm('このファイルは AniNovel の設定ファイルではない可能性があります。それでも読み込みますか？')) return;
+          }
+          // state に適用
+          var st = window.state;
+          if(st){
+            ['readerCustom', 'readerCustomCharId', 'readerProfileCurrent', 'readerProfileList',
+             'darkMode', 'displaySettings', 'bookmarks'].forEach(function(k){
+              if(settings[k] !== undefined) st[k] = settings[k];
+            });
+          }
+          // localStorage にも反映（読者プロファイル）
+          try {
+            if(settings.readerProfileList){
+              localStorage.setItem('aninovel_reader_profiles', JSON.stringify(settings.readerProfileList));
+            }
+          } catch(e){}
+          alert('✅ 設定を読み込みました。\nページをリロードして反映します。');
+          location.reload();
+        } catch(err){
+          alert('❌ 読み込み失敗: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      setTimeout(function(){ input.remove(); }, 1000);
+    };
+    document.body.appendChild(input);
+    input.click();
+  }
+  
+  // ========================================
+  // ボタン配置
+  // ========================================
+  function setupButtons(){
+    // モードに応じて切り替え
+    var authorContainer = document.getElementById('srvAuthorFloating'); // v1.2の残骸があれば
+    var readerContainer = document.getElementById('srvReaderContainer');
+    var oldFloating = document.getElementById('srvSaveContainer');
+    
+    if(isAuthorMode()){
+      // 作者モード：読者用ボタンを消す
+      if(readerContainer) readerContainer.remove();
+      if(oldFloating) oldFloating.remove();
+      // 内蔵保存をフック（履歴ボタンも隣に挿入される）
+      hookNativeSaveButtons();
+    } else {
+      // 読者モード：作者用ボタンを消す
+      if(authorContainer) authorContainer.remove();
+      if(oldFloating) oldFloating.remove();
+      // 既にフックされた保存ボタンは元に戻す？（複雑なので維持）
+      // 読者モード用ボタンを設置
+      setupReaderButtons();
+    }
+  }
+  
+  function setupReaderButtons(){
+    if(document.getElementById('srvReaderContainer')) return;
+    
+    var container = document.createElement('div');
+    container.id = 'srvReaderContainer';
+    container.style.cssText = 'position:fixed;bottom:20px;right:16px;z-index:9998;display:flex;flex-direction:column;gap:6px';
+    
+    var saveBtn = document.createElement('button');
+    saveBtn.textContent = '💾 設定をPCに保存';
+    saveBtn.title = '読者の個人設定（ブックマーク・表示・キャラ設定など）を JSON でダウンロード';
+    saveBtn.style.cssText = 'background:#fff;color:#6366f1;border:1px solid #6366f1;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.12)';
+    saveBtn.onclick = saveReaderSettingsLocal;
+    
+    var loadBtn = document.createElement('button');
+    loadBtn.textContent = '📁 設定を読込';
+    loadBtn.title = 'PC から設定 JSON を読み込み';
+    loadBtn.style.cssText = saveBtn.style.cssText;
+    loadBtn.onclick = loadReaderSettingsLocal;
+    
+    container.appendChild(saveBtn);
+    container.appendChild(loadBtn);
+    document.body.appendChild(container);
+    log('Reader buttons installed');
+  }
+  
+  // ========================================
+  // 起動 + MutationObserver
   // ========================================
   var setupTimer = null;
   function debouncedSetup(){
     if(setupTimer) return;
-    setupTimer = setTimeout(function(){
-      setupTimer = null;
-      setupFloatingButtons();
-      hookNativeSaveButtons();
-    }, 100);
+    setupTimer = setTimeout(function(){ setupTimer = null; setupButtons(); }, 100);
   }
   
   function startObserver(){
     if(window._srvObserverStarted) return;
     window._srvObserverStarted = true;
-    
-    var observer = new MutationObserver(function(mutations){
-      // ボタン関連の変化があった時だけフック実行
-      var relevant = false;
-      for(var i=0; i<mutations.length; i++){
-        var m = mutations[i];
-        if(m.addedNodes && m.addedNodes.length){
-          for(var j=0; j<m.addedNodes.length; j++){
-            var n = m.addedNodes[j];
-            if(n.nodeType === 1){
-              if(n.tagName === 'BUTTON' || (n.querySelector && n.querySelector('button'))){
-                relevant = true;
-                break;
-              }
-            }
-          }
-        }
-        if(relevant) break;
-      }
-      if(relevant) debouncedSetup();
-    });
+    var observer = new MutationObserver(function(){ debouncedSetup(); });
     observer.observe(document.body, { childList: true, subtree: true });
     log('MutationObserver started');
   }
   
   function init(){
     if(!document.body){ setTimeout(init, 100); return; }
-    
-    setupFloatingButtons();
-    hookNativeSaveButtons();
+    setupButtons();
     startObserver();
-    setInterval(function(){
-      setupFloatingButtons();
-      hookNativeSaveButtons();
-    }, 2000); // フォールバック
+    setInterval(setupButtons, 2000); // モード切替検出用フォールバック
   }
   
   if(document.readyState === 'loading'){
@@ -375,10 +427,12 @@
     save: function(){ return saveToServer(false); },
     saveQuiet: function(){ return saveToServer(true); },
     showHistory: showVersionHistory,
+    saveLocal: saveReaderSettingsLocal,
+    loadLocal: loadReaderSettingsLocal,
     getWorkId: getCurrentWorkId,
-    getPayload: getWorkPayload,
-    hookButtons: hookNativeSaveButtons
+    isAuthor: isAuthorMode,
+    getPayload: getWorkPayload
   };
   
-  log('Loaded v1.2.0');
+  log('Loaded v1.3.0');
 })();
