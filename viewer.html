@@ -2237,6 +2237,17 @@ function openGallery(){
 }
 function renderGallery(){
   var man=state.galleryManifest;
+  // ★ 性別フィルタ（編集中キャラの性別に応じて）
+  var _gen=null;
+  if(state.readerCustomOpen&&state.readerCustomCharId){
+    var _ch=state.characters.find(function(c){return c.id===state.readerCustomCharId});
+    if(_ch)_gen=_ch.gender;
+  }else if(state.editingItem&&state.editingItem.data){
+    _gen=state.editingItem.data.gender;
+  }
+  if(man&&man.groups&&(_gen==='male'||_gen==='female')){
+    man={groups:man.groups.filter(function(g){return g.gender===_gen||!g.gender;})};
+  }
   var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-weight:700;font-size:16px">🖼️ キャラクター画像ギャラリー</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
   if(!man){
@@ -2396,6 +2407,7 @@ function renderReaderCustomModal(){
   h+='<div style="display:flex;flex-direction:column;gap:16px">';
   // Icon image
   h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn btn-ghost" style="cursor:pointer">📷 画像を選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){if(!state.readerCustom)state.readerCustom={};if(!state.readerCustom[state.readerCustomCharId])state.readerCustom[state.readerCustomCharId]={};state.readerCustom[state.readerCustomCharId].iconImage=e.target.result;saveReaderCustom(_workParam);render()};r.readAsDataURL(f)}"></label>';
+  h+='<button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>';
   if(rc.iconImage)h+='<button onclick="delete state.readerCustom[state.readerCustomCharId].iconImage;saveReaderCustom(_workParam);render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️ 画像を削除</button>';
   h+='</div></div>';
   // Bubble color presets
@@ -2421,6 +2433,7 @@ function renderReaderCustomModal(){
   // Reset button
   h+='<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px">このキャラだけ作者推奨に戻す</button><button onclick="resetToAuthorDefaults();state.readerCustomOpen=false" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px;color:#DC2626">全キャラ作者推奨に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
   h+='</div></div></div>';
+  if(state.imageGalleryOpen)h+=renderGallery();
   return h;
 }
 // === 重複コンテンツ検出 ===
@@ -2797,7 +2810,7 @@ function execDrop(pos){
     _dType=null;_dPayload=null;
 }
 
-document.addEventListener('click',function(e){var g=e.target.closest&&e.target.closest('[data-galimg]');if(g&&state.editingItem){state.editingItem.data.iconImage=g.getAttribute('data-galimg');state.imageGalleryOpen=false;render()}});
+document.addEventListener('click',function(e){var g=e.target.closest&&e.target.closest('[data-galimg]');if(!g)return;var src=g.getAttribute('data-galimg');if(state.editingItem){state.editingItem.data.iconImage=src;state.imageGalleryOpen=false;render()}else if(state.readerCustomOpen&&state.readerCustomCharId){if(!state.readerCustom)state.readerCustom={};if(!state.readerCustom[state.readerCustomCharId])state.readerCustom[state.readerCustomCharId]={};state.readerCustom[state.readerCustomCharId].iconImage=src;saveReaderCustom(_workParam);state.imageGalleryOpen=false;render()}});
 document.addEventListener('dblclick',function(e){var el=e.target.closest&&e.target.closest('[data-dblchar]');if(el){e.stopPropagation();dblClickChar(el.getAttribute('data-dblchar'))}});
 
 
@@ -3024,6 +3037,5 @@ window.onload=function(){
 </script>
 <script src="js/analytics.js" defer></script>
 <script src="js/character-icon-filter.js"></script>
-<script src="js/server-save.js"></script>
 </body>
 </html>
