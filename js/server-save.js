@@ -1,5 +1,5 @@
 /* ====================================================
- * AniNovel Server Save (v1.14.0)
+ * AniNovel Server Save (v1.16.0)
  * 
  * v1.13 大改修:
  * - 独自ギャラリーモーダル復活、ただし DOM 直接構築（innerHTML 使わず）
@@ -231,17 +231,41 @@
   async function openReaderGallery(){
     log('openReaderGallery called');
     log('readerCustomCharId:', window.state ? window.state.readerCustomCharId : '(no state)');
-    log('readerCustomOpen:', window.state ? window.state.readerCustomOpen : '(no state)');
+    
+    // ★ まず即座に「読込中」モーダルを表示（クリック検知の視覚確認）
+    showLoadingModal();
+    
+    // readerCustomCharId が空でも、編集中のキャラを探す
     var charId = window.state.readerCustomCharId;
-    if(!charId){ alert('キャラ未選択 (readerCustomCharId が空)'); return; }
+    if(!charId){
+      // 編集モーダルの onchange から推測
+      var labels = document.querySelectorAll('label');
+      for(var i=0; i<labels.length; i++){
+        var inp = labels[i].querySelector('input[type="file"][accept*="image"]');
+        if(inp){
+          var oc = inp.getAttribute('onchange') || '';
+          var m = oc.match(/readerCustom\[['"]([^'"]+)['"]\]/);
+          if(m){ charId = m[1]; log('Recovered charId from DOM:', charId); break; }
+        }
+      }
+    }
+    
+    if(!charId){
+      closeLoadingModal();
+      alert('キャラ未選択。読者カスタムモーダルが開いているか確認してください。');
+      return;
+    }
+    
     var ch = (window.state.characters || []).find(function(c){ return c.id === charId; });
     log('Character found:', ch ? ch.name : '(not found)', 'gender:', ch ? ch.gender : '?');
     
     var manifest = await loadManifest();
-    if(!manifest){ log('loadManifest returned null'); return; }
+    if(!manifest){ closeLoadingModal(); log('loadManifest returned null'); return; }
     
-    // 性別フィルタ
-    var gender = ch ? ch.gender : null;
+    // ★ 性別は毎回最新の characters から取得（性別変更追従）
+    var freshCh = (window.state.characters || []).find(function(c){ return c.id === charId; });
+    var gender = freshCh ? freshCh.gender : (ch ? ch.gender : null);
+    
     var groups = manifest.groups.slice();
     if(gender === 'male' || gender === 'female'){
       groups = groups.filter(function(g){ return g.gender === gender || !g.gender; });
@@ -249,7 +273,25 @@
     
     log('Opening reader gallery, charId:', charId, 'gender:', gender, 'groups:', groups.length);
     
+    closeLoadingModal();
     showCategories(groups, charId);
+  }
+  
+  // ★ 読込中モーダル（クリック検知の視覚確認用）
+  function showLoadingModal(){
+    closeLoadingModal();
+    var ov = document.createElement('div');
+    ov.id = 'srvLoadingModal';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99998;display:flex;align-items:center;justify-content:center';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#fff;padding:20px 30px;border-radius:12px;font-size:14px;font-weight:600';
+    box.textContent = '🎨 ギャラリー読込中...';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+  function closeLoadingModal(){
+    var ov = document.getElementById('srvLoadingModal');
+    if(ov) ov.remove();
   }
   
   // カテゴリー画面
@@ -430,33 +472,10 @@
     showToast('✅ アイコン設定');
   }
   
-  // ボタン挿入
+  // ボタン挿入: v1.16 で削除（viewer.html の標準ギャラリーボタンを使う）
   function setupGalleryButtons(){
-    document.querySelectorAll('input[type="file"][accept*="image"]').forEach(function(input){
-      var label=input.closest('label'); if(!label) return;
-      if(label.parentNode.querySelector('[data-srv-gal="1"]')) return;
-      var onchange=input.getAttribute('onchange')||'';
-      var isReader=onchange.indexOf('readerCustom')!==-1;
-      var isAuthor=onchange.indexOf('state.editingItem')!==-1;
-      if(isAuthor) return;
-      if(!isReader) return;
-      
-      var btn=document.createElement('button');
-      btn.setAttribute('data-srv-gal','1');
-      btn.type='button';
-      btn.className='btn';
-      btn.style.cssText='background:#10b981;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;margin-left:6px';
-      btn.textContent='🎨 ギャラリーから選ぶ';
-      btn.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        log('Reader gallery button clicked');
-        openReaderGallery();
-        return false;
-      }, true); // capture phase
-      label.parentNode.insertBefore(btn, label.nextSibling);
-    });
+    // 既存の挿入済みボタンがあればクリーンアップ
+    document.querySelectorAll('[data-srv-gal="1"]').forEach(function(el){ el.remove(); });
   }
   
   function setupCopyrightWarning(){
@@ -573,7 +592,7 @@
     getWorkId:getCurrentWorkId, getUserId:getCurrentUserId, isAuthor:isAuthorMode,
     forceRender:function(){ if(window.render){ try{ window.render(); console.log('rendered'); }catch(e){ console.log(e); } } }
   };
-  log('Loaded v1.14.0');
+  log('Loaded v1.16.0');
 })();
 
-// deploy: 20260530075656
+// deploy: 20260530190920
