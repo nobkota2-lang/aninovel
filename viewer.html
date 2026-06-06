@@ -20,19 +20,25 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-04-26_observer_loop_fix_v23';
+      window.__ANINOVEL_BUILD__='2026-06-06_i18n_font_buttons_v24';
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
+        var _swRefreshing=false;
+        navigator.serviceWorker.addEventListener('controllerchange',function(){
+          if(_swRefreshing)return; _swRefreshing=true; location.reload();
+        });
         window.addEventListener('load',function(){
           navigator.serviceWorker.register('./sw.js').then(function(reg){
             console.info('[PWA] SW登録成功 scope=',reg.scope);
-            // 更新検知
+            try{reg.update();}catch(e){} // 起動毎に新版チェック
             reg.addEventListener('updatefound',function(){
               var w=reg.installing;if(!w)return;
               w.addEventListener('statechange',function(){
                 if(w.state==='installed'&&navigator.serviceWorker.controller){
-                  console.info('[PWA] 新バージョン検出。次回ロードで反映されます。');
+                  console.info('[PWA] 新バージョン検出。即時有効化を要求します。');
+                  // sw.jsがSKIP_WAITINGを処理すれば即時反映→controllerchangeで自動リロード
+                  if(reg.waiting){reg.waiting.postMessage({type:'SKIP_WAITING'});}
                 }
               });
             });

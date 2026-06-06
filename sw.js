@@ -1,139 +1,88 @@
-/* アニノベル Service Worker
- * 戦略:
- *   - HTML / CSS / JS:  network-first  (常に最新を取得、オフライン時のみキャッシュ)
- *   - 画像・フォント(svg/png/woff等): stale-while-revalidate
- *   - 音声(wav 等):     cache-first    (一度取得したら長期キャッシュ)
- *   - data/catalog.json 等の重要JSON: network-first (作品追加を素早く反映)
- *
- * !! 重要 !!
- *   コード(HTML/CSS/JS)を network-first にしたため、デプロイは即座に全端末へ反映される。
- *   万一に備え、デプロイのたびに CACHE_VERSION も変更すること
- *   (変更すると activate で旧キャッシュが全削除され、各ブラウザがクリーンになる)。
- */
-const CACHE_VERSION = 'aninovel-v23-2026-05-19';
-const STATIC_CACHE = `${CACHE_VERSION}-static`;
-const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
-const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
+// sw.js — AniNovel Service Worker
+// ------------------------------------------------------------
+// キャッシュ戦略:
+//   - HTML / JS / CSS（アプリ本体）  : network-first（常に最新、オフライン時のみキャッシュ）
+//   - 画像・フォント・アイコン        : cache-first（gallery/lipsync/icons 等の不変資産）
+//   - /api/* と外部オリジン           : 介入しない（常にネットワーク。翻訳API等）
+// 更新:
+//   - CACHE_VERSION を上げると旧キャッシュを全削除して作り直す（=確実に最新化）
+//   - viewer.html から {type:'SKIP_WAITING'} を受け取ると即時有効化 → 自動リロード
+// ------------------------------------------------------------
 
-// 初回アクセスでプリキャッシュする最小セット (オフライン基本動作の保証)
-const PRECACHE_URLS = [
-  './',
-  './index.html',
-  './viewer.html',
-  './manual.html',
-  './404.html',
-  './css/portal.css',
-  './js/services.js',
-  './js/portal.js',
-  './js/analytics.js',
-  './js/anti-piracy.js',
-  './manifest.json',
-  './og-image.svg',
-  './icons/icon-192.svg',
-  './icons/icon-512.svg',
-];
+const CACHE_VERSION = 'v24-2026-06-06';      // ← 更新のたびにこの値を上げる
+const CACHE_NAME = 'aninovel-' + CACHE_VERSION;
 
-self.addEventListener('install', (event) => {
+// オフライン用の最小プリキャッシュ（失敗しても install は止めない）
+const PRECACHE_URLS = ['./', './viewer.html', './manifest.json'];
+
+// network-first 対象（アプリ本体）
+const APP_SHELL_RE = /\.(?:html|js|css|mjs)$/i;
+// cache-first 対象（不変資産）
+const STATIC_ASSET_RE = /\.(?:png|jpe?g|gif|webp|svg|avif|woff2?|ttf|otf|eot|ico)$/i;
+
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS).catch((e) => console.warn('[SW] precache部分失敗', e)))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.allSettled(PRECACHE_URLS.map(u => cache.add(u)))
+    )
+  );
+  // 自動 skipWaiting はしない（明示メッセージ時のみ）。初回以降は viewer.html が要求。
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((names) => Promise.all(
-      names.map((n) => {
-        if (!n.startsWith(CACHE_VERSION)) {
-          console.info('[SW] 旧キャッシュ削除:', n);
-          return caches.delete(n);
-        }
-      })
-    )).then(() => self.clients.claim())
-  );
+// viewer.html から即時有効化の要求を受ける
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-function isAudio(url) { return /\.(wav|mp3|ogg|m4a)$/i.test(url.pathname); }
-// コード = 常に最新であるべきファイル (network-first)
-function isCode(url) { return /\.(css|js)$/i.test(url.pathname); }
-// アセット = 変化が少ない画像・フォント (stale-while-revalidate)
-function isAsset(url) {
-  return /\.(svg|png|jpg|jpeg|webp|woff2?|ttf|otf|ico)$/i.test(url.pathname);
-}
-function isHTML(url) {
-  return url.pathname.endsWith('/') || url.pathname.endsWith('.html');
-}
-function isCriticalJSON(url) {
-  return /\/data\/(catalog\.json|works\/.+\.json|audio\/.+\/manifest\.json)$/i.test(url.pathname);
-}
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;                 // POST(/api/translate等)は素通し
 
-async function networkFirst(request, cacheName) {
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;  // 外部(Google Fonts/CDN/API)は介入しない
+  if (url.pathname.startsWith('/api/')) return;      // 自前APIも常にネットワーク
+
+  // 不変資産は cache-first
+  if (STATIC_ASSET_RE.test(url.pathname)) {
+    event.respondWith(cacheFirst(req));
+    return;
+  }
+  // アプリ本体・ナビゲーションは network-first
+  event.respondWith(networkFirst(req));
+});
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
   try {
-    const fresh = await fetch(request);
-    if (fresh && fresh.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, fresh.clone()).catch(() => {});
+    const res = await fetch(req);
+    if (res && res.status === 200 && (res.type === 'basic' || res.type === 'default')) {
+      cache.put(req, res.clone());
     }
-    return fresh;
+    return res;
   } catch (e) {
-    const cached = await caches.match(request);
+    const cached = await cache.match(req);
     if (cached) return cached;
-    // HTMLリクエストはオフラインフォールバックを返す
-    if (isHTML(new URL(request.url))) {
-      return caches.match('./404.html') || new Response('offline', { status: 503 });
+    if (req.mode === 'navigate') {
+      const shell = (await cache.match('./viewer.html')) || (await cache.match('./'));
+      if (shell) return shell;
     }
     throw e;
   }
 }
 
-async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(req);
   if (cached) return cached;
-  const fresh = await fetch(request);
-  if (fresh && fresh.ok) {
-    const cache = await caches.open(cacheName);
-    cache.put(request, fresh.clone()).catch(() => {});
-  }
-  return fresh;
+  const res = await fetch(req);
+  if (res && res.status === 200) cache.put(req, res.clone());
+  return res;
 }
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const fetchPromise = fetch(request).then((res) => {
-    if (res && res.ok) cache.put(request, res.clone()).catch(() => {});
-    return res;
-  }).catch(() => cached);
-  return cached || fetchPromise;
-}
-
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  // 同一オリジンのみ扱う
-  if (url.origin !== location.origin) return;
-  // 解析・広告・外部API は SW でキャッシュしない
-  if (url.pathname.startsWith('/api/') || url.pathname.includes('analytics')) return;
-
-  if (isAudio(url)) {
-    // 音声は一度取得したら長期キャッシュ
-    event.respondWith(cacheFirst(req, AUDIO_CACHE));
-  } else if (isHTML(url) || isCode(url) || isCriticalJSON(url)) {
-    // HTML / CSS / JS / 重要JSON は常に最新を取得 (デプロイ即反映)
-    event.respondWith(networkFirst(req, RUNTIME_CACHE));
-  } else if (isAsset(url)) {
-    // 画像・フォントは stale-while-revalidate
-    event.respondWith(staleWhileRevalidate(req, STATIC_CACHE));
-  }
-  // それ以外 (クリーンURL /viewer 等) はデフォルトのネットワーク取得 = 常に最新
-});
-
-// ページからのメッセージで強制更新
-self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
-  if (event.data === 'CLEAR_CACHE') {
-    caches.keys().then((ns) => Promise.all(ns.map((n) => caches.delete(n))));
-  }
-});
