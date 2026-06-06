@@ -45,6 +45,9 @@ export async function onRequestPost({ request, env }) {
     const items = Array.isArray(body.items)
       ? body.items.filter(i => i && i.id && typeof i.text === 'string')
       : [];
+    const characters = Array.isArray(body.characters)
+      ? body.characters.filter(c => c && c.id && typeof c.name === 'string' && c.name.trim())
+      : [];
 
     if (items.length === 0 && !title) {
       return json({ error: 'no_content', message: 'items or title required' }, 400);
@@ -57,7 +60,7 @@ export async function onRequestPost({ request, env }) {
     const tgtLang = LANG[target] || target;
 
     // ---- 作品単位のキャッシュ（SHA-256）----
-    const canonical = JSON.stringify({ t: target, s: source, title, items: items.map(i => [i.id, i.text]) });
+    const canonical = JSON.stringify({ t: target, s: source, title, items: items.map(i => [i.id, i.text]), chars: characters.map(c => [c.id, c.name]) });
     const hash = (await sha256hex(canonical)).slice(0, 40);
     const cacheKey = `worktr:${target}:${hash}`;
 
@@ -90,6 +93,10 @@ export async function onRequestPost({ request, env }) {
     // タイトルも翻訳（著者名は固有名詞なので原文のまま保持）
     const titleTr = title ? await translateText(title) : '';
 
+    // 登場人物名も翻訳（固有名詞のため完全ではないが、英語表記の手がかりになる）
+    const charTr = await Promise.all(characters.map(c => translateText(c.name)));
+    const charactersOut = characters.map((c, i) => ({ id: c.id, name: (charTr[i] || c.name) }));
+
     // 本文を CONCURRENCY 件ずつ並列翻訳
     const results = new Array(items.length);
     for (let i = 0; i < items.length; i += CONCURRENCY) {
@@ -98,7 +105,7 @@ export async function onRequestPost({ request, env }) {
       tr.forEach((t, j) => { results[i + j] = { id: chunk[j].id, text: t }; });
     }
 
-    const out = { title: titleTr || title, author, items: results };
+    const out = { title: titleTr || title, author, items: results, characters: charactersOut };
     const payload = JSON.stringify(out);
 
     if (env.WORKS_KV) {
