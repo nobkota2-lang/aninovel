@@ -158,13 +158,15 @@
     if (el) {
       el.innerHTML = '';
       [
-        { num: totalWorks, label: '作品数' },
-        { num: totalAuthors.length, label: '作者数' },
-        { num: totalChars.toLocaleString(), label: '総文字数' }
+        { num: totalWorks, label: '作品数', key: 'stats.works' },
+        { num: totalAuthors.length, label: '作者数', key: 'stats.authors' },
+        { num: totalChars.toLocaleString(), label: '総文字数', key: 'stats.chars' }
       ].forEach(function(s) {
         var stat = h('div', { className: 'hero-stat' });
         stat.appendChild(h('span', { className: 'num' }, String(s.num)));
-        stat.appendChild(h('span', { className: 'label' }, s.label));
+        var _lbl = h('span', { className: 'label' }, (window.AninovelI18n ? AninovelI18n.t(s.key) : s.label));
+        _lbl.setAttribute('data-i18n', s.key);
+        stat.appendChild(_lbl);
         el.appendChild(stat);
       });
     }

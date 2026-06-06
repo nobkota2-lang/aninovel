@@ -8,7 +8,8 @@
 //
 // POST /api/translate
 //   body: { target:'en', source:'ja', title, author, items:[{id,text}] }
-//   resp: { title, author, items:[{id,text}], cache:'HIT'|'MISS' }
+//   resp: { title, author, items:[{id,text}], characters:[{id,name}], cache:'HIT'|'MISS' }
+//   ※ 登場人物名はローマ字化（音訳）。本文/タイトルは m2m100 翻訳。名前は llama-3.1-8b-instruct 音訳。
 //
 // 必要なバインディング (Cloudflare Pages > Settings > Functions):
 //   AI       ... Workers AI binding（変数名: AI）
@@ -93,9 +94,33 @@ export async function onRequestPost({ request, env }) {
     // タイトルも翻訳（著者名は固有名詞なので原文のまま保持）
     const titleTr = title ? await translateText(title) : '';
 
-    // 登場人物名も翻訳（固有名詞のため完全ではないが、英語表記の手がかりになる）
-    const charTr = await Promise.all(characters.map(c => translateText(c.name)));
-    const charactersOut = characters.map((c, i) => ({ id: c.id, name: (charTr[i] || c.name) }));
+    // 登場人物名は「翻訳」ではなく「ローマ字化（音訳）」する。
+    // m2m100 は意訳してしまう（例: 愛美→"Love is beautiful"）ので、
+    // 指示型LLMでヘボン式ローマ字に音訳する（例: 愛美→Aimi）。失敗時は原文を保持。
+    async function romanizeName(name) {
+      if (!name || !name.trim()) return name;
+      // 既にラテン文字主体ならそのまま
+      if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
+      try {
+        const r = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: 'You transliterate Japanese personal names into Hepburn romaji. Reply with ONLY the romaji name, capitalized, no quotes, no notes, no explanation. Example: 愛美 -> Aimi, 山田太郎 -> Taro Yamada.' },
+            { role: 'user', content: name },
+          ],
+          max_tokens: 24,
+        });
+        let out = (r && (r.response != null ? r.response : r.result)) || '';
+        out = String(out).trim().split('\n')[0].replace(/^["'`\s]+|["'`.。、\s]+$/g, '').trim();
+        if (out && /^[A-Za-z][A-Za-z .\-]{0,30}$/.test(out)) return out;
+        return name;
+      } catch (e) {
+        return name;
+      }
+    }
+    const charactersOut = [];
+    for (const c of characters) {
+      charactersOut.push({ id: c.id, name: await romanizeName(c.name) });
+    }
 
     // 本文を CONCURRENCY 件ずつ並列翻訳
     const results = new Array(items.length);
