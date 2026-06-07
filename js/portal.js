@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
-  try{window.__ANINOVEL_PORTAL_VER__='portal_trans_v1';}catch(e){}
+  try{window.__ANINOVEL_PORTAL_VER__='portal_trans_v2_banner';}catch(e){}
 
   // === 多言語: 作品コンテンツ翻訳 ===
   var _ptCache = {};
@@ -437,9 +437,9 @@
 
   // === ロール表示ヘルパー ===
   var ROLE_META = {
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', color: '#F59E0B' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     color: '#8B5CF6' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     color: '#3B82F6' }
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#F59E0B' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#8B5CF6' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#3B82F6' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
 
@@ -461,19 +461,19 @@
       var modeBadge = h('span', {
         className: 'role-mode-badge',
         style: 'background:' + rm.color + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap'
-      }, rm.icon + ' ' + rm.label + 'モード');
+      }, rm.icon + ' ' + (_plang()==='en'?((rm.labelEn||rm.label)+' mode'):(rm.label+'モード')));
       badge.appendChild(modeBadge);
       badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
 
       // モード切替ドロップダウン（複数ロール保有時）
       var roles = state.user.roles || [ar];
       if (roles.length > 1) {
-        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'モード切替', style: 'font-size:13px' }, '\u{1F504}');
+        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: (_plang()==='en'?'Switch mode':'モード切替'), style: 'font-size:13px' }, '\u{1F504}');
         switchBtn.onclick = function() { showRoleSwitchMenu(switchBtn); };
         badge.appendChild(switchBtn);
       } else {
         // 未登録ロールへの追加登録ボタン
-        var addLabel = ar === 'reader' ? '作者登録' : '読者登録';
+        var addLabel = _plang()==='en' ? (ar === 'reader' ? 'Author registration' : 'Reader registration') : (ar === 'reader' ? '作者登録' : '読者登録');
         var addBtn = h('button', { className: 'btn btn-ghost btn-sm', title: addLabel, style: 'font-size:12px' }, '\uFF0B ' + addLabel);
         addBtn.onclick = function() {
           showAuthModal('register');
@@ -530,7 +530,7 @@
         style: 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:' + (active ? 'var(--bg-secondary)' : 'none') + ';cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left'
       });
       item.appendChild(h('span', {}, m.icon));
-      item.appendChild(h('span', { style: 'flex:1' }, m.label + 'モード'));
+      item.appendChild(h('span', { style: 'flex:1' }, (_plang()==='en'?((m.labelEn||m.label)+' mode'):(m.label+'モード'))));
       if (active) item.appendChild(h('span', { style: 'color:var(--accent);font-size:12px' }, '\u2714'));
       item.onclick = function() {
         popup.remove();
@@ -538,7 +538,7 @@
           S.switchActiveRole(r).then(function(u) {
             state.user = u;
             updateAuthUI();
-            toast(m.icon + ' ' + m.label + 'モードに切り替えました');
+            toast(m.icon + ' ' + (_plang()==='en'?((m.labelEn||m.label)+' mode selected'):(m.label+'モードに切り替えました')));
           });
         }
       };
@@ -695,17 +695,24 @@
     if (state.user && state.user.loggedIn) {
       var ar = roleOf(state.user);
       var rm = ROLE_META[ar] || ROLE_META.reader;
-      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return (ROLE_META[r] || {}).label || r; }).join(' / ');
-      var tips = ar === 'owner'
-        ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
-        : ar === 'author'
-        ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
-        : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
+      var _enB = _plang()==='en';
+      var rolesLabel = (state.user.roles || [ar]).map(function(r) { var M=ROLE_META[r]||{}; return (_enB?(M.labelEn||M.label):M.label) || r; }).join(' / ');
+      var tips = _enB
+        ? (ar === 'owner'
+            ? '\uD83D\uDC51 Manage users and works in the Admin panel. ✏️ My Works and 📊 Dashboard are also available.'
+            : ar === 'author'
+            ? 'Open "My Works" from ✏️ at the top right to create or edit your works, and check the 📊 Dashboard.'
+            : 'You can use bookmarks, voting, and character customization. Check the 📊 Dashboard.')
+        : (ar === 'owner'
+            ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
+            : ar === 'author'
+            ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
+            : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。');
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
-      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + ' おかえりなさい、' + state.user.displayName + ' さん'));
-      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'));
+      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_enB ? (' Welcome back, ' + state.user.displayName + '!') : (' おかえりなさい、' + state.user.displayName + ' さん'))));
+      banner.appendChild(h('div', { className: 'welcome-role' }, _enB ? ('Current mode: ' + (rm.labelEn||rm.label) + ' (Roles: ' + rolesLabel + ')') : ('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）')));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
