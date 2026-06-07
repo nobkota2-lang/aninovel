@@ -20,7 +20,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v30_langsync_charedit_footer_recheck';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v31_login_modal_tooltip_fouc';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2702,6 +2702,14 @@ function _lh(lh){
   var n=parseFloat(lh); if(!n) n=1.7;
   return Math.min(n,1.65); // ラテン文字は2.0だと間延びするため上限を抑える
 }
+function _preloadWorkTrans(){
+  if(state.lang!=='en'||state.currentScreen!=='reader')return;
+  try{ var hash=state._curHash||_contentHash();
+    if(state.workTransHash===hash&&state.workTrans)return;
+    var cached=localStorage.getItem('aninovel_tr_en2_'+hash);
+    if(cached){var c=JSON.parse(cached);state.workTrans=c.items||{};state.workTransMeta={title:c.title,author:c.author};state.workTransHash=hash;state.charTrans=c.chars||{};state.charTransHash=hash;}
+  }catch(e){}
+}
 function maybeTranslateWork(){
   if(state.lang!=='en' || state.currentScreen!=='reader') return;
   var hash=state._curHash||_contentHash();
@@ -3241,7 +3249,7 @@ window.onload=function(){
             state.currentScreen='reader';
             // 投稿版でも作者(author/owner)としてログイン中なら作者モードを許可
             try{var _u=JSON.parse(localStorage.getItem('aninovel_user'));var _r=_u&&(_u.roles||[_u.role||'reader']);state.isAuthorMode=!!(_u&&_u.loggedIn&&_r&&(_r.indexOf('author')>=0||_r.indexOf('owner')>=0));}catch(e){state.isAuthorMode=false;}
-            render();
+            _preloadWorkTrans();render();
             _schedulePregen();
         }).catch(function(e){console.error(e);render()});
     } else {

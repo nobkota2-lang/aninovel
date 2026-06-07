@@ -99,7 +99,7 @@
 
   function detectLang(){
     var u=new URLSearchParams(location.search).get('lang');
-    if(u&&SUPPORTED.indexOf(u)>=0){try{localStorage.setItem(STORE_KEY,u);}catch(e){}return u;}
+    if(u&&SUPPORTED.indexOf(u)>=0){try{localStorage.setItem(STORE_KEY,u);localStorage.setItem('aninovel_lang',u);}catch(e){}return u;}
     try{var s=localStorage.getItem(STORE_KEY);if(s&&SUPPORTED.indexOf(s)>=0)return s;}catch(e){}
     var nl=(navigator.language||'ja').toLowerCase();
     for(var i=0;i<SUPPORTED.length;i++){if(nl.indexOf(SUPPORTED[i])===0)return SUPPORTED[i];}
@@ -113,6 +113,8 @@
     return d[key]||DICT[DEFAULT_LANG][key]||key;
   }
 
+  var JA2EN={'アカウント':'Account','ログイン':'Sign in','新規登録':'Sign up','メールアドレス':'Email','パスワード':'Password','パスワードを忘れた方はこちら':'Forgot your password?','アカウント種別':'Account type','表示名':'Display name','パスワード（6文字以上）':'Password (6+ characters)','氏名（本名）':'Full name','住所':'Address','電話番号':'Phone number','仮登録する':'Register','パスワード再設定':'Reset password','再設定メールを送信':'Send reset email','新しいパスワード（6文字以上）':'New password (6+ characters)','パスワード確認':'Confirm password','パスワードを再設定':'Reset password','作者登録':'Author registration','読者登録':'Reader registration','モード切替':'Switch mode','ダッシュボード':'Dashboard','マイ作品':'My works','管理パネル':'Admin panel','投稿を取り下げる':'Unpublish','読者に公開する':'Publish to readers','ログアウト':'Sign out','作品数':'Works','作者数':'Authors','総文字数':'Total characters','投票した作品はまだありません。':'No voted works yet.','しおりはまだありません。':'No bookmarks yet.','新しい作品':'New work','投票しました':'Voted','投票を取り消しました':'Vote removed','ログインしました':'Signed in','ログアウトしました':'Signed out','本登録が完了しました！':'Registration complete!','パスワードが一致しません':'Passwords do not match','取り下げました':'Unpublished','投稿しました！':'Published!','削除しました':'Deleted','作成しました':'Created','復活しました':'Restored','停止しました':'Stopped','再開しました':'Resumed','公開停止しました':'Unpublished','削除に失敗しました':'Failed to delete','作者ログインが必要です':'Author sign-in required','作者アカウントのみ利用できます':'Available to author accounts only','コンテンツがない作品は投稿できません':'Cannot publish a work with no content','作品タイトルを入力してください':'Please enter a work title','削除しました（サーバー未同期の可能性）':'Deleted (server may be out of sync)'};
+  function autoTranslateDOM(root){if(currentLang!=='en')return;root=root||document.body;if(!root)return;try{var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false);var nd,arr=[];while(nd=w.nextNode())arr.push(nd);for(var i=0;i<arr.length;i++){var t=arr[i].nodeValue;if(!t)continue;var k=t.trim();if(!k)continue;var hit=JA2EN[k];if(hit&&hit!==k)arr[i].nodeValue=t.replace(k,hit);}if(root.querySelectorAll){var els=root.querySelectorAll('[title],[placeholder]');for(var j=0;j<els.length;j++){['title','placeholder'].forEach(function(a){var v=els[j].getAttribute(a);if(v==null)return;var k2=v.trim();var h2=JA2EN[k2];if(h2&&h2!==k2)els[j].setAttribute(a,v.replace(k2,h2));});}}}catch(e){}}
   var _applying=false;
   function applyToDOM(){
     if(_applying)return; // MutationObserver無限ループ防止
@@ -128,7 +130,7 @@
       });
     }finally{
       // 自分が起こしたMutationが届く前に待ってから解除
-      setTimeout(function(){_applying=false;},0);
+      autoTranslateDOM(document.body);setTimeout(function(){_applying=false;},0);
     }
   }
 
@@ -145,7 +147,7 @@
     wrap.className='aninovel-lang-switcher';
     wrap.style.cssText='display:inline-flex;align-items:center;gap:4px;font-size:12px';
     wrap.innerHTML=SUPPORTED.map(function(l){
-      var label=l==='ja'?'日本語':l==='en'?'English':l;
+      var label=l==='ja'?(currentLang==='en'?'Japanese':'日本語'):l==='en'?'English':l;
       return '<button data-lang="'+l+'" style="padding:4px 10px;border:1px solid '+(l===currentLang?'#C0392B':'transparent')+';background:'+(l===currentLang?'#C0392B':'transparent')+';color:'+(l===currentLang?'#fff':'inherit')+';border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px">'+label+'</button>';
     }).join('');
     wrap.querySelectorAll('button').forEach(function(b){
@@ -166,7 +168,7 @@
       var hasI18n=muts.some(function(m){
         for(var i=0;i<m.addedNodes.length;i++){
           var n=m.addedNodes[i];
-          if(n.nodeType===1&&(n.matches&&(n.matches('[data-i18n]')||n.querySelector('[data-i18n]'))))return true;
+          if(currentLang==='en'&&n.nodeType===1)return true;if(n.nodeType===1&&(n.matches&&(n.matches('[data-i18n]')||n.querySelector('[data-i18n]'))))return true;
         }
         return false;
       });
@@ -184,5 +186,5 @@
     SUPPORTED:SUPPORTED,
     renderSwitcher:renderSwitcher
   };
-  console.info('[i18n] 言語=',currentLang);
+  window.__ANINOVEL_I18N_VER__='i18n_autotrans_v1';console.info('[i18n] 言語=',currentLang);
 })();
