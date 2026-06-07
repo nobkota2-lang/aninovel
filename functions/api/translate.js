@@ -63,7 +63,7 @@ export async function onRequestPost({ request, env }) {
     // ---- 作品単位のキャッシュ（SHA-256）----
     const canonical = JSON.stringify({ t: target, s: source, title, items: items.map(i => [i.id, i.text]), chars: characters.map(c => [c.id, c.name]) });
     const hash = (await sha256hex(canonical)).slice(0, 40);
-    const cacheKey = `worktr:${target}:${hash}`;
+    const cacheKey = `worktr2:${target}:${hash}`;
 
     if (env.WORKS_KV) {
       const cached = await env.WORKS_KV.get(cacheKey);
