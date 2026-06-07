@@ -544,7 +544,7 @@
         style: 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:' + (active ? 'var(--bg-secondary)' : 'none') + ';cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left'
       });
       item.appendChild(h('span', {}, m.icon));
-      item.appendChild(h('span', { style: 'flex:1' }, m.label + 'モード'));
+      item.appendChild(h('span', { style: 'flex:1' }, _en()?(_rl(m)+' Mode'):(m.label + 'モード')));
       if (active) item.appendChild(h('span', { style: 'color:var(--accent);font-size:12px' }, '\u2714'));
       item.onclick = function() {
         popup.remove();
@@ -552,7 +552,7 @@
           S.switchActiveRole(r).then(function(u) {
             state.user = u;
             updateAuthUI();
-            toast(m.icon + ' ' + m.label + 'モードに切り替えました');
+            toast(_en()?(m.icon+' Switched to '+_rl(m)+' Mode'):(m.icon + ' ' + m.label + 'モードに切り替えました'));
           });
         }
       };

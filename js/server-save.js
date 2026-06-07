@@ -9,6 +9,8 @@
 
 (function(){
   'use strict';
+  function _lang(){try{if(window.state&&window.state.lang)return window.state.lang;var l=localStorage.getItem('aninovel_lang');if(l)return l;}catch(e){}return 'ja';}
+  function _t(ja,en){return _lang()==='en'?en:ja;}
   var DEBUG = true;
   function log(){ if(DEBUG && console) console.log.apply(console, ['[ServerSave]'].concat([].slice.call(arguments))); }
   
@@ -52,10 +54,10 @@
   }
   
   async function saveToServer(silent){
-    if(!isAuthorMode()){ if(!silent) alert('公開保存は作者モードのみ'); return false; }
+    if(!isAuthorMode()){ if(!silent) alert(_t('公開保存は作者モードのみ','Publishing is available in Author mode only')); return false; }
     var w=getCurrentWorkId();
-    if(!w || w.indexOf('pub_')!==0){ if(!silent) alert('公開作品のみ可能'); return false; }
-    var p=getWorkPayload(); if(!p){ if(!silent) alert('データ取得失敗'); return false; }
+    if(!w || w.indexOf('pub_')!==0){ if(!silent) alert(_t('公開作品のみ可能','Published works only')); return false; }
+    var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
     var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
     if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
@@ -66,19 +68,19 @@
       if(r.ok && d.ok){ if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
       else { if(!silent) alert('❌ '+(d.error||r.status)); return false; }
     } catch(e){ if(!silent) alert('❌ '+e.message); return false; }
-    finally { if(btn){ btn.textContent=orig||'📤 公開保存'; btn.disabled=false; } }
+    finally { if(btn){ btn.textContent=orig||_t('📤 公開保存','📤 Publish'); btn.disabled=false; } }
   }
   
   async function showWorkHistory(){
-    var w=getCurrentWorkId(); if(!w||w.indexOf('pub_')!==0){ alert('公開作品のみ'); return; }
+    var w=getCurrentWorkId(); if(!w||w.indexOf('pub_')!==0){ alert(_t('公開作品のみ','Published works only')); return; }
     try { var r=await fetch('/api/works/'+encodeURIComponent(w)+'?versions=1'); var d=await r.json();
-      showHistoryModal('📜 作品バージョン履歴', (d.versions||[]).slice().reverse(), function(v){ restoreWorkVersion(w,v); }); } catch(e){ alert('失敗:'+e.message); }
+      showHistoryModal(_t('📜 作品バージョン履歴','📜 Version history'), (d.versions||[]).slice().reverse(), function(v){ restoreWorkVersion(w,v); }); } catch(e){ alert(_t('失敗:','Failed: ')+e.message); }
   }
   async function restoreWorkVersion(w, ver){
-    if(!confirm('v'+ver+'に復元?')) return;
-    try { var r=await fetch('/api/works/'+encodeURIComponent(w)+'?version='+ver); var d=await r.json(); if(!d.data){alert('失敗');return;}
+    if(!confirm(_t('v'+ver+'に復元?','Restore v'+ver+'?'))) return;
+    try { var r=await fetch('/api/works/'+encodeURIComponent(w)+'?version='+ver); var d=await r.json(); if(!d.data){alert(_t('失敗','Failed'));return;}
       var pr=await fetch('/api/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,note:'v'+ver+'復元'})});
-      var p=await pr.json(); if(pr.ok && p.ok){ alert('✅ 復元完了'); location.reload(); } } catch(e){ alert('err:'+e.message); }
+      var p=await pr.json(); if(pr.ok && p.ok){ alert(_t('✅ 復元完了','✅ Restored')); location.reload(); } } catch(e){ alert('err:'+e.message); }
   }
   
   function showHistoryModal(title, versions, onRestore){
@@ -95,7 +97,7 @@
     cls.onclick=function(){ ov.remove(); };
     hdr.appendChild(h3); hdr.appendChild(cls); b.appendChild(hdr);
     if(versions.length===0){
-      var em=document.createElement('p'); em.textContent='履歴なし'; em.style.cssText='color:#666;text-align:center;padding:30px 0';
+      var em=document.createElement('p'); em.textContent=_t('履歴なし','No history'); em.style.cssText='color:#666;text-align:center;padding:30px 0';
       b.appendChild(em);
     } else {
       var list=document.createElement('div'); list.style.cssText='display:flex;flex-direction:column;gap:8px';
@@ -106,7 +108,7 @@
         var v1=document.createElement('div'); v1.textContent='v'+v.version; v1.style.cssText='font-weight:600;font-size:13px'; info.appendChild(v1);
         var dt=document.createElement('div'); dt.textContent=new Date(v.savedAt).toLocaleString('ja-JP'); dt.style.cssText='font-size:11px;color:#666'; info.appendChild(dt);
         if(v.note){ var nt=document.createElement('div'); nt.textContent='📝 '+v.note; nt.style.cssText='font-size:11px;color:#888;margin-top:2px'; info.appendChild(nt); }
-        var btn=document.createElement('button'); btn.textContent='復元';
+        var btn=document.createElement('button'); btn.textContent=_t('復元','Restore');
         btn.style.cssText='background:#6366f1;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer';
         (function(ver){ btn.onclick=function(){ ov.remove(); onRestore(ver); }; })(v.version);
         row.appendChild(info); row.appendChild(btn); list.appendChild(row);
@@ -129,7 +131,7 @@
     if(!isAuthorMode()) return;
     if(document.querySelector('[data-srv-publish]')) return;
     var sb=findNativeSaveButton(); if(!sb||!sb.parentNode) return;
-    var pb=document.createElement('button'); pb.setAttribute('data-srv-publish','1'); pb.textContent='📤 公開保存';
+    var pb=document.createElement('button'); pb.setAttribute('data-srv-publish','1'); pb.textContent=_t('📤 公開保存','📤 Publish');
     pb.className=sb.className||'btn';
     pb.style.cssText='background:#6366f1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px;border:none;cursor:pointer;font-weight:600;margin-left:4px';
     pb.onclick=function(e){ e.preventDefault(); saveToServer(false); return false; };
@@ -158,25 +160,25 @@
     return false;
   }
   async function saveReaderSettingsCloud(silent){
-    var uid=getCurrentUserId(); if(!uid){ if(!silent) alert('ログイン要'); return false; }
+    var uid=getCurrentUserId(); if(!uid){ if(!silent) alert(_t('ログイン要','Sign-in required')); return false; }
     var s=collectReaderSettings(); var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
     try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:s,note:note||'読者設定'})});
-      var d=await r.json(); if(r.ok && d.ok){ if(!silent) alert('☁ 保存完了'); else showToast('☁ 保存完了','#0ea5e9'); return true; } return false;
+      var d=await r.json(); if(r.ok && d.ok){ if(!silent) alert(_t('☁ 保存完了','☁ Saved')); else showToast(_t('☁ 保存完了','☁ Saved'),'#0ea5e9'); return true; } return false;
     } catch(e){ return false; }
   }
   async function loadReaderSettingsCloud(){
-    var uid=getCurrentUserId(); if(!uid){ alert('ログイン要'); return false; }
-    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings'); if(r.status===404){ alert('クラウドに設定なし'); return false; }
-      var s=await r.json(); applyReaderSettings(s); showToast('☁ 設定読込','#0ea5e9'); return true;
+    var uid=getCurrentUserId(); if(!uid){ alert(_t('ログイン要','Sign-in required')); return false; }
+    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings'); if(r.status===404){ alert(_t('クラウドに設定なし','No settings in cloud')); return false; }
+      var s=await r.json(); applyReaderSettings(s); showToast(_t('☁ 設定読込','☁ Load settings'),'#0ea5e9'); return true;
     } catch(e){ return false; }
   }
   async function showReaderHistory(){
-    var uid=getCurrentUserId(); if(!uid){ alert('ログイン要'); return; }
+    var uid=getCurrentUserId(); if(!uid){ alert(_t('ログイン要','Sign-in required')); return; }
     try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings?versions=1'); var d=await r.json();
-      showHistoryModal('📜 読者設定の履歴', (d.versions||[]).slice().reverse(), async function(v){
-        if(!confirm('v'+v+'に復元?')) return;
+      showHistoryModal(_t('📜 読者設定の履歴','📜 Reader settings history'), (d.versions||[]).slice().reverse(), async function(v){
+        if(!confirm(_t('v'+v+'に復元?','Restore v'+v+'?'))) return;
         var r2=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings?version='+v);
-        var dd=await r2.json(); if(!dd.data){alert('失敗'); return;}
+        var dd=await r2.json(); if(!dd.data){alert(_t('失敗','Failed')); return;}
         applyReaderSettings(dd.data); showToast('✅ 復元','#0ea5e9');
       });
     } catch(e){}
@@ -185,7 +187,7 @@
     if(window._srvAutoLoaded) return; window._srvAutoLoaded=true;
     if(isAuthorMode()) return; var uid=getCurrentUserId(); if(!uid) return;
     try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings');
-      if(r.status===404) return; var s=await r.json(); applyReaderSettings(s); showToast('☁ クラウドから読込','#0ea5e9');
+      if(r.status===404) return; var s=await r.json(); applyReaderSettings(s); showToast(_t('☁ クラウドから読込','☁ Load from cloud'),'#0ea5e9');
     } catch(e){}
   }
   
@@ -200,7 +202,7 @@
       b.style.cssText='background:#fff;color:#0ea5e9;border:1px solid #0ea5e9;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600';
       b.onclick=cb; return b; }
     c.appendChild(mk('☁ 設定保存','クラウドに保存',function(){ saveReaderSettingsCloud(false); }));
-    c.appendChild(mk('☁ 読込','クラウドから',loadReaderSettingsCloud));
+    c.appendChild(mk(_t('☁ 読込','☁ Load'),'クラウドから',loadReaderSettingsCloud));
     c.appendChild(mk('📜','設定の履歴',showReaderHistory));
     tb.appendChild(c);
   }
@@ -252,7 +254,7 @@
     
     if(!charId){
       closeLoadingModal();
-      alert('キャラ未選択。読者カスタムモーダルが開いているか確認してください。');
+      alert(_t('キャラ未選択。読者カスタムモーダルが開いているか確認してください。','No character selected. Make sure the reader customization modal is open.'));
       return;
     }
     
@@ -316,7 +318,7 @@
     hdr.appendChild(h3); hdr.appendChild(closeBtn);
     box.appendChild(hdr);
     
-    var desc = document.createElement('p'); desc.textContent = 'カテゴリーを選んでください'; desc.style.cssText = 'font-size:12px;color:#666;margin:0 0 12px 0';
+    var desc = document.createElement('p'); desc.textContent = _t('カテゴリーを選んでください','Please select a category'); desc.style.cssText = 'font-size:12px;color:#666;margin:0 0 12px 0';
     box.appendChild(desc);
     
     // グリッド
@@ -433,7 +435,7 @@
       
       if(pages > 1){
         var prevBtn = document.createElement('button');
-        prevBtn.textContent = '← 前';
+        prevBtn.textContent = _t('← 前','← Prev');
         prevBtn.disabled = (page <= 0);
         prevBtn.style.cssText = 'background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px' + (page <= 0 ? ';opacity:0.5' : '');
         prevBtn.addEventListener('click', function(){ if(page > 0){ page--; renderPage(); } });
@@ -445,7 +447,7 @@
         pager.appendChild(pageInfo);
         
         var nextBtn = document.createElement('button');
-        nextBtn.textContent = '次 →';
+        nextBtn.textContent = _t('次 →','Next →');
         nextBtn.disabled = (page >= pages - 1);
         nextBtn.style.cssText = 'background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px' + (page >= pages - 1 ? ';opacity:0.5' : '');
         nextBtn.addEventListener('click', function(){ if(page < pages - 1){ page++; renderPage(); } });
@@ -469,7 +471,7 @@
       try { window.saveReaderCustom(window._workParam || getCurrentWorkId()); log('saveReaderCustom called'); } catch(e){ log('saveReaderCustom err:', e); }
     }
     if(typeof window.render === 'function') window.render();
-    showToast('✅ アイコン設定');
+    showToast(_t('✅ アイコン設定','✅ Icon applied'));
   }
   
   // ボタン挿入: v1.16 で削除（viewer.html の標準ギャラリーボタンを使う）
@@ -515,7 +517,7 @@
   }
   function forceResetReaderCustom(){
     var workId=window._workParam||getCurrentWorkId();
-    if(!confirm('読者カスタマイズを完全にクリアし、作者推奨の設定に戻しますか？')) return;
+    if(!confirm(_t('読者カスタマイズを完全にクリアし、作者推奨の設定に戻しますか？','Completely clear reader customization and reset to author defaults?'))) return;
     try {
       if(window.state){ window.state.readerCustom=null; window.state.readerCustomOpen=false; }
       try { var profiles=JSON.parse(localStorage.getItem('aninovel_reader_profiles')||'{}'); if(profiles[workId]){
@@ -526,7 +528,7 @@
       try { var d=JSON.parse(localStorage.getItem('aninovel_data')||'{}'); if(d && d.readerCustom){ delete d.readerCustom; localStorage.setItem('aninovel_data', JSON.stringify(d)); } } catch(e){}
       if(typeof window.saveReaderCustom==='function'){ try { window.saveReaderCustom(workId); } catch(e){} }
       if(typeof window.render==='function') window.render();
-      showToast('✅ 作者推奨に戻しました');
+      showToast(_t('✅ 作者推奨に戻しました','✅ Reset to author defaults'));
     } catch(e){ alert('❌ '+e.message); }
   }
   

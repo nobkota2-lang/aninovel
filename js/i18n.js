@@ -146,6 +146,7 @@
     '登録済みのメールアドレスを入力してください。パスワード再設定用のメールを送信します。':'Enter your registered email address. We will send a password reset email.',
     'Phase 1 デモ: 実際のメール送信は行われません。下のボタンで本登録をシミュレートします。':'Phase 1 demo: no real email is sent. Use the button below to simulate sign-up.',
     'オーナー':'Owner','作者':'Author','読者':'Reader',
+    'パスワード':'Password','パスワードを忘れた方はこちら':'Forgot your password?','パスワードを忘れた方':'Forgot password','アカウント種別':'Account type','読者（メールアドレスのみ）':'Reader (email only)','作者（個人情報の登録が必要）':'Author (personal info required)','パスワード確認':'Confirm password','パスワードを再設定':'Reset password','パスワードが一致しません':'Passwords do not match','パスワードを設定します。':'Set your password.','パスワード再設定用のメールを送信します。':'We will send a password reset email.','パスワード再設定':'Reset password','モード切替':'Switch mode','読者に公開する':'Publish to readers','投稿を取り下げる':'Withdraw submission','オーナーモード':'Owner Mode','作者モード':'Author Mode','読者モード':'Reader Mode','ダッシュボード':'Dashboard','管理パネル':'Admin panel','アカウント':'Account','新規作成':'New',
     '\u270F\uFE0F 編集':'\u270F\uFE0F Edit','\uD83D\uDCE4 投稿':'\uD83D\uDCE4 Publish','\uD83D\uDCE5 取下':'\uD83D\uDCE5 Withdraw','\u2714 投稿済':'\u2714 Published','投稿しました！':'Published!','取り下げました':'Withdrawn','新規作成':'New','\uFF0B 新規作成':'\uFF0B New'
   };
   function translateTextNodes(root){
@@ -159,6 +160,10 @@
       }});
       var arr=[],x;while(x=w.nextNode())arr.push(x);
       arr.forEach(function(n){var k=n.nodeValue.trim();if(JA2EN[k]!=null)n.nodeValue=n.nodeValue.replace(k,JA2EN[k]);});
+      var titled=document.querySelectorAll('[title]');
+      Array.prototype.forEach.call(titled,function(el){var tt=el.getAttribute('title');if(tt&&JA2EN.hasOwnProperty(tt.trim()))el.setAttribute('title',JA2EN[tt.trim()]);});
+      var phd=document.querySelectorAll('[placeholder]');
+      Array.prototype.forEach.call(phd,function(el){var pp=el.getAttribute('placeholder');if(pp&&JA2EN.hasOwnProperty(pp.trim()))el.setAttribute('placeholder',JA2EN[pp.trim()]);});
     }catch(e){}
   }
 
