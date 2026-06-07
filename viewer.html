@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <script>(function(){try{var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},4000);}}catch(e){}})();</script>
-    <style>html.i18n-pending #app{visibility:hidden!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
+    <script>(function(){try{var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},2500);}}catch(e){}})();</script>
+    <style>html.i18n-pending #app{opacity:0!important;pointer-events:none!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v34_gate_home_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v35_gate_opacity';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
