@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <script>(function(){try{var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},2500);}}catch(e){}})();</script>
+    <script>(function(){try{var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},6000);}}catch(e){}})();</script>
     <style>html.i18n-pending #app{opacity:0!important;pointer-events:none!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v36_reader_wait_trans';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v37_reveal_when_no_jp';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2709,8 +2709,11 @@ function _maybeReveal(){try{
   if(state.lang!=='en'){_revealApp();return;}
   if(state.currentScreen==='home'){return;}
   if(state.currentScreen!=='reader'){_revealApp();return;}
-  var hash=state._curHash||(typeof _contentHash==='function'?_contentHash():null);
-  if(state.workTrans&&state.workTransHash===hash){_revealApp();}
+  var app=document.getElementById('app');
+  if(!app){return;}
+  // 読者画面では本文に日本語が1文字でも残っていれば表示しない（英文完成まで隠す）
+  if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(app.textContent||'')){return;}
+  _revealApp();
 }catch(e){_revealApp();}}
 function _preloadWorkTrans(){
   if(state.lang!=='en'||state.currentScreen!=='reader')return;
