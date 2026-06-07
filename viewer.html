@@ -20,7 +20,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v31_login_modal_tooltip_fouc';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v32_gallery_labels';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2284,23 +2284,23 @@ function renderGallery(){
     var _types=_typeOrder.filter(function(t){return _byType[t];});
     Object.keys(_byType).forEach(function(t){if(_types.indexOf(t)<0)_types.push(t);});
     _types.forEach(function(type){
-      var _ic=_typeIcon[type]||'🎭';var _tja=_typeJa[type]||type;
+      var _ic=_typeIcon[type]||'🎭';var _tja=_trFull(_typeJa[type]||type);
       h+='<div style="margin:18px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--accent,#8E44AD);font-weight:700;font-size:15px">'+_ic+' '+_tja+' <span style="font-size:12px;color:var(--text-muted);font-weight:400">'+type+'</span></div>';
       // race でグループ化
       var _byRace={};
       _byType[type].forEach(function(grp){var r=grp.race||'';if(!_byRace[r])_byRace[r]=[];_byRace[r].push(grp);});
       Object.keys(_byRace).sort().forEach(function(race){
-        var _rja=_raceJa[race]||race;
+        var _rja=_trFull(_raceJa[race]||race);
         h+='<div style="margin:10px 0 4px;font-size:12px;font-weight:600;color:var(--text-secondary)">'+_rja+' <span style="font-size:10px;color:var(--text-muted)">'+race+'</span></div>';
         h+='<div class="gallery-cat-grid">';
         _byRace[race].sort(function(a,b){return _ageOrder.indexOf(a.age)-_ageOrder.indexOf(b.age);});
         _byRace[race].forEach(function(grp){
           var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
-          var _aja=_ageJa[grp.age]||grp.age;
+          var _aja=_trFull(_ageJa[grp.age]||grp.age);
           h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()">'
             +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
             +'<span class="gallery-cat-label">'+_aja+'</span>'
-            +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+'件</span></button>';
+            +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+(state.lang==='en'?'':'件')+'</span></button>';
         });
         h+='</div>';
       });
