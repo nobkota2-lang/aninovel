@@ -2,6 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{var l=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},4000);}}catch(e){}})();</script>
+  <style>html.i18n-pending body{visibility:hidden!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>アニノベル - アニメ風吹き出しで読むオリジナル小説プラットフォーム</title>
   <meta name="description" content="アニノベルは、アニメ風の吹き出し表示と音声読み上げで小説を楽しめる新しい読書プラットフォームです。読者は無料で作品閲覧・投票でき、作者はビジュアルエディタで作品投稿が可能です。">
@@ -231,86 +233,85 @@
 <!-- ヘッダー -->
 <header class="portal-header">
   <a href="index.html" class="logo">
-    <span class="logo-text" data-i18n="site.name">アニノベル</span>
-    <span class="logo-sub" data-i18n="site.portal">作品ポータル</span>
+    <span class="logo-text">アニノベル</span>
+    <span class="logo-sub">作品ポータル</span>
   </a>
   <div class="header-actions">
-    <span id="aninovel-lang-slot" style="display:inline-flex;align-items:center;margin-right:4px"></span>
     <div id="auth-area"></div>
-    <button class="btn-icon" id="theme-toggle" title="テーマ切替" data-i18n="btn.theme" data-i18n-attr="title">&#x1F313;</button>
+    <button class="btn-icon" id="theme-toggle" title="テーマ切替">&#x1F313;</button>
   </div>
 </header>
 
 <!-- ヒーロー -->
 <section class="portal-hero">
-  <h1 class="font-serif" data-i18n="site.tagline">物語の世界へようこそ</h1>
-  <p data-i18n="site.subtitle">オリジナル小説を読んで、投票して、お気に入りを見つけよう</p>
+  <h1 class="font-serif">物語の世界へようこそ</h1>
+  <p>オリジナル小説を読んで、投票して、お気に入りを見つけよう</p>
   <div class="hero-stats" id="hero-stats"></div>
 </section>
 
 <!-- サイト説明 -->
 <section class="portal-container">
-  <h2 class="section-title"><span class="icon">&#x2728;</span><span data-i18n="about.title">アニノベルとは</span></h2>
-  <p class="about-lead font-serif" data-i18n="about.lead">アニノベルは、アニメ風の吹き出し表示で小説を読める新しい読書プラットフォームです。<br>「読者」と「作者」、2つのモードで物語の世界をお楽しみいただけます。</p>
+  <h2 class="section-title"><span class="icon">&#x2728;</span>アニノベルとは</h2>
+  <p class="about-lead font-serif">アニノベルは、アニメ風の吹き出し表示で小説を読める新しい読書プラットフォームです。<br>「読者」と「作者」、2つのモードで物語の世界をお楽しみいただけます。</p>
 
   <div class="mode-cards">
     <!-- 読者モード -->
     <div class="mode-card reader-mode-card">
       <div class="mode-icon">&#x1F4D6;</div>
-      <h3 class="mode-title font-serif" data-i18n="mode.reader">読者モード</h3>
+      <h3 class="mode-title font-serif">読者モード</h3>
       <div class="mode-desc">
-        <p class="mode-highlight" data-i18n="mode.reader.cta">立ち読みはログイン不要！</p>
-        <p data-i18n="reader.desc">作品を自由に閲覧できます。気に入った作品に投票もできます。</p>
-        <h4 data-i18n="reader.features">ログインすると使える機能</h4>
+        <p class="mode-highlight">立ち読みはログイン不要！</p>
+        <p>作品を自由に閲覧できます。気に入った作品に投票もできます。</p>
+        <h4>ログインすると使える機能</h4>
         <ul>
-          <li data-i18n="reader.feat.bookmark">&#x1F516; しおり機能 &mdash; 読みかけのページを記録</li>
-          <li data-i18n="reader.feat.custom">&#x1F3A8; キャラカスタマイズ &mdash; 登場人物のアイコンや吹き出しの色を自分好みに変更（ナレーターも対応）</li>
-          <li data-i18n="reader.feat.vote">&#x2764; 投票 &mdash; お気に入り作品を応援</li>
+          <li>&#x1F516; しおり機能 &mdash; 読みかけのページを記録</li>
+          <li>&#x1F3A8; キャラカスタマイズ &mdash; 登場人物のアイコンや吹き出しの色を自分好みに変更（ナレーターも対応）</li>
+          <li>&#x2764; 投票 &mdash; お気に入り作品を応援</li>
         </ul>
-        <p class="mode-note" data-i18n="reader.note">※カスタマイズしない場合は作者推奨の設定がそのまま使われます。</p>
-        <p class="mode-reg" data-i18n="reader.reg">登録に必要なもの: <strong>メールアドレス</strong>のみ</p>
+        <p class="mode-note">※カスタマイズしない場合は作者推奨の設定がそのまま使われます。</p>
+        <p class="mode-reg">登録に必要なもの: <strong>メールアドレス</strong>のみ</p>
       </div>
       <div class="mode-cta">
-        <button class="btn btn-primary mode-register-btn" data-role="reader" data-i18n="reader.signup">&#x1F4E8; 読者として新規登録</button>
-        <button class="btn btn-ghost mode-login-btn" data-i18n="btn.login">ログイン</button>
+        <button class="btn btn-primary mode-register-btn" data-role="reader">&#x1F4E8; 読者として新規登録</button>
+        <button class="btn btn-ghost mode-login-btn">ログイン</button>
       </div>
     </div>
 
     <!-- 作者モード -->
     <div class="mode-card author-mode-card">
       <div class="mode-icon">&#x270F;</div>
-      <h3 class="mode-title font-serif" data-i18n="mode.author">作者モード</h3>
+      <h3 class="mode-title font-serif">作者モード</h3>
       <div class="mode-desc">
-        <p data-i18n="author.desc">自分のオリジナル作品を投稿・編集できます。ドラッグ＆ドロップで簡単に構成を変更。</p>
-        <h4 data-i18n="author.features">主な機能</h4>
+        <p>自分のオリジナル作品を投稿・編集できます。ドラッグ＆ドロップで簡単に構成を変更。</p>
+        <h4>主な機能</h4>
         <ul>
-          <li data-i18n="author.feat.editor">&#x1F4DD; ビジュアルエディタ &mdash; 吹き出し形式でリアルタイム編集</li>
-          <li data-i18n="author.feat.char">&#x1F464; キャラクター管理 &mdash; アイコン・色・プロフィール設定</li>
-          <li data-i18n="author.feat.import">&#x1F4C2; 多形式インポート &mdash; TXT / DOCX / PDF / EPUB 対応</li>
-          <li data-i18n="author.feat.export">&#x1F4E4; エクスポート &mdash; .aninovel 形式で保存・共有</li>
+          <li>&#x1F4DD; ビジュアルエディタ &mdash; 吹き出し形式でリアルタイム編集</li>
+          <li>&#x1F464; キャラクター管理 &mdash; アイコン・色・プロフィール設定</li>
+          <li>&#x1F4C2; 多形式インポート &mdash; TXT / DOCX / PDF / EPUB 対応</li>
+          <li>&#x1F4E4; エクスポート &mdash; .aninovel 形式で保存・共有</li>
         </ul>
-        <p class="mode-reg" data-i18n="author.reg">登録に必要なもの: <strong>メールアドレス + 個人情報</strong>（氏名・住所・電話番号）</p>
-        <p class="mode-note" data-i18n="author.note">※メールアドレスに仮登録情報を送信し、記載URLにアクセスすると本登録完了です。</p>
+        <p class="mode-reg">登録に必要なもの: <strong>メールアドレス + 個人情報</strong>（氏名・住所・電話番号）</p>
+        <p class="mode-note">※メールアドレスに仮登録情報を送信し、記載URLにアクセスすると本登録完了です。</p>
       </div>
       <div class="mode-cta">
-        <button class="btn btn-primary mode-register-btn" data-role="author" data-i18n="author.signup">&#x270F; 作者として新規登録</button>
-        <button class="btn btn-ghost mode-login-btn" data-i18n="btn.login">ログイン</button>
-        <button class="btn btn-ghost mode-mywork-btn" data-i18n="btn.mywork">&#x1F4DA; マイ作品</button>
+        <button class="btn btn-primary mode-register-btn" data-role="author">&#x270F; 作者として新規登録</button>
+        <button class="btn btn-ghost mode-login-btn">ログイン</button>
+        <button class="btn btn-ghost mode-mywork-btn">&#x1F4DA; マイ作品</button>
       </div>
     </div>
   </div>
 
   <!-- 認証フロー説明 -->
   <div class="auth-flow-info">
-    <h3 class="font-serif" data-i18n="flow.title">&#x1F512; アカウント登録の流れ</h3>
+    <h3 class="font-serif">&#x1F512; アカウント登録の流れ</h3>
     <div class="flow-steps">
-      <div class="flow-step"><span class="step-num">1</span><span class="step-text" data-i18n="flow.step1">メールアドレスと必要事項を入力して仮登録</span></div>
+      <div class="flow-step"><span class="step-num">1</span><span class="step-text">メールアドレスと必要事項を入力して仮登録</span></div>
       <div class="flow-arrow">&#x25B6;</div>
-      <div class="flow-step"><span class="step-num">2</span><span class="step-text" data-i18n="flow.step2">届いたメールの確認URLをクリック</span></div>
+      <div class="flow-step"><span class="step-num">2</span><span class="step-text">届いたメールの確認URLをクリック</span></div>
       <div class="flow-arrow">&#x25B6;</div>
-      <div class="flow-step"><span class="step-num">3</span><span class="step-text" data-i18n="flow.step3">本登録完了！すべての機能が利用可能に</span></div>
+      <div class="flow-step"><span class="step-num">3</span><span class="step-text">本登録完了！すべての機能が利用可能に</span></div>
     </div>
-    <p class="flow-note" data-i18n="flow.note">パスワードをお忘れの場合は、ログイン画面の「パスワードを忘れた方」からメールで再設定できます。</p>
+    <p class="flow-note">パスワードをお忘れの場合は、ログイン画面の「パスワードを忘れた方」からメールで再設定できます。</p>
   </div>
 </section>
 
@@ -318,17 +319,17 @@
 <main id="main" class="portal-container">
 
   <!-- 作品一覧 -->
-  <h2 class="section-title"><span class="icon">&#x1F4DA;</span><span data-i18n="work.list">作品一覧</span></h2>
+  <h2 class="section-title"><span class="icon">&#x1F4DA;</span>作品一覧</h2>
   <div class="works-grid" id="works-grid"></div>
 
   <!-- ランキング -->
-  <h2 class="section-title"><span class="icon">&#x1F3C6;</span><span data-i18n="ranking">ランキング</span></h2>
+  <h2 class="section-title"><span class="icon">&#x1F3C6;</span>ランキング</h2>
   <div class="ranking-section">
     <div class="ranking-controls">
-      <button class="ranking-sort-btn active" data-sort="votes" data-i18n="rank.votes">&#x2764; 投票数</button>
-      <button class="ranking-sort-btn" data-sort="newest" data-i18n="rank.newest">&#x1F195; 新着順</button>
-      <button class="ranking-sort-btn" data-sort="chars" data-i18n="rank.chars">&#x1F4DD; 文字数</button>
-      <button class="ranking-sort-btn" data-sort="pages" data-i18n="rank.pages">&#x1F4D6; ページ数</button>
+      <button class="ranking-sort-btn active" data-sort="votes">&#x2764; 投票数</button>
+      <button class="ranking-sort-btn" data-sort="newest">&#x1F195; 新着順</button>
+      <button class="ranking-sort-btn" data-sort="chars">&#x1F4DD; 文字数</button>
+      <button class="ranking-sort-btn" data-sort="pages">&#x1F4D6; ページ数</button>
     </div>
     <div class="ranking-list" id="ranking-list"></div>
   </div>
@@ -343,16 +344,17 @@
 <!-- フッター -->
 <footer class="portal-footer">
   <div class="footer-links">
-    <a href="manual.html" data-i18n="nav.manual">マニュアル</a>
-    <a href="#" id="footer-login-link" data-i18n="nav.login">ログイン / 新規登録</a>
-    <a href="legal/terms.html" data-i18n="nav.terms">利用規約</a>
-    <a href="legal/privacy.html" data-i18n="nav.privacy">プライバシーポリシー</a>
-    <a href="legal/tokushoho.html" data-i18n="nav.tokushoho">特商法表記</a>
+    <a href="manual.html">マニュアル</a>
+    <a href="#" id="footer-login-link">ログイン / 新規登録</a>
+    <a href="legal/terms.html">利用規約</a>
+    <a href="legal/privacy.html">プライバシーポリシー</a>
+    <a href="legal/tokushoho.html">特商法表記</a>
     <a href="legal/dmca.html" data-i18n="nav.dmca">著作権窓口</a>
-    <a href="legal/accessibility.html" data-i18n="nav.accessibility">アクセシビリティ</a>
+    <a href="legal/accessibility.html">アクセシビリティ</a>
     <a href="#" data-i18n="nav.plan" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">💎 プラン</a>
     <a href="#" data-i18n="nav.share" data-aninovel-share="auto" data-share-title="アニノベル - アニメ風吹き出しで読むオリジナル小説">📤 シェア</a>
     <a href="#" data-i18n="nav.newsletter" onclick="if(window.AninovelNewsletter)AninovelNewsletter.openSubscribeModal();return false;">📬 メルマガ購読</a>
+    <span id="aninovel-lang-slot" style="margin-left:12px"></span>
   </div>
   <p class="note">アニノベル &copy; 2026</p>
 </footer>

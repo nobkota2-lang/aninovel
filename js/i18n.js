@@ -130,7 +130,7 @@
       });
     }finally{
       // 自分が起こしたMutationが届く前に待ってから解除
-      autoTranslateDOM(document.body);setTimeout(function(){_applying=false;},0);
+      autoTranslateDOM(document.body);if(currentLang==='en'){try{document.documentElement.classList.remove('i18n-pending');}catch(e){}}setTimeout(function(){_applying=false;},0);
     }
   }
 
@@ -186,5 +186,5 @@
     SUPPORTED:SUPPORTED,
     renderSwitcher:renderSwitcher
   };
-  window.__ANINOVEL_I18N_VER__='i18n_autotrans_v1';console.info('[i18n] 言語=',currentLang);
+  window.__ANINOVEL_I18N_VER__='i18n_autotrans_v2_gate';console.info('[i18n] 言語=',currentLang);
 })();
