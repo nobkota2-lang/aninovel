@@ -133,6 +133,35 @@
     return d[key]||DICT[DEFAULT_LANG][key]||key;
   }
 
+  // ===== 固定UI文字列の日本語→英語 自動置換マップ（data-i18n非対応の動的描画用） =====
+  var JA2EN={
+    'マイ作品':'My Works','ログイン':'Sign in','ログアウト':'Sign out','ログインしました':'Signed in','ログアウトしました':'Signed out',
+    '作者登録':'Register as Author','読者登録':'Register as Reader','アカウント':'Account','モード切替':'Switch mode','ダッシュボード':'Dashboard','管理パネル':'Admin panel','新しい作品':'New work',
+    '表示名':'Display name','氏名（本名）':'Full name (legal)','メールアドレス':'Email address','電話番号':'Phone number','住所':'Address','パスワード（6文字以上）':'Password (6+ characters)','パスワード再設定':'Reset password','再設定メールを送信':'Send reset email',
+    '作成しました':'Created','停止しました':'Suspended','再開しました':'Resumed','削除しました':'Deleted','復活しました':'Restored','取り下げました':'Withdrawn','投稿しました！':'Published!','公開停止しました':'Unpublished','本登録が完了しました！':'Registration complete!',
+    '投稿を取り下げる':'Withdraw submission','作品がありません':'No works','ユーザーがいません':'No users','削除に失敗しました':'Delete failed','作者ログインが必要です':'Author sign-in required','作品タイトルを入力してください':'Please enter a work title','作者アカウントのみ利用できます':'Available to author accounts only','コンテンツがない作品は投稿できません':'Cannot publish a work with no content',
+    'しおりはまだありません。':'No bookmarks yet.','投票した作品はまだありません。':'No voted works yet.','まだ作品がありません。下の「新規作成」からはじめましょう。':'No works yet. Start from \u201cNew\u201d below.',
+    'メール確認をシミュレート（本登録）':'Simulate email verification (complete sign-up)','削除しました（サーバー未同期の可能性）':'Deleted (may not be synced to server)',
+    '作者登録には個人情報が必要です。これらの情報は作品の権利管理のために使用されます。':'Author registration requires personal info, used for rights management of works.',
+    '登録済みのメールアドレスを入力してください。パスワード再設定用のメールを送信します。':'Enter your registered email address. We will send a password reset email.',
+    'Phase 1 デモ: 実際のメール送信は行われません。下のボタンで本登録をシミュレートします。':'Phase 1 demo: no real email is sent. Use the button below to simulate sign-up.',
+    'オーナー':'Owner','作者':'Author','読者':'Reader',
+    '\u270F\uFE0F 編集':'\u270F\uFE0F Edit','\uD83D\uDCE4 投稿':'\uD83D\uDCE4 Publish','\uD83D\uDCE5 取下':'\uD83D\uDCE5 Withdraw','\u2714 投稿済':'\u2714 Published','投稿しました！':'Published!','取り下げました':'Withdrawn','新規作成':'New','\uFF0B 新規作成':'\uFF0B New'
+  };
+  function translateTextNodes(root){
+    if(currentLang!=='en'||!root||!document.body)return;
+    try{
+      var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+        var p=n.parentNode;if(!p)return NodeFilter.FILTER_REJECT;
+        var tg=p.nodeName;if(tg==='SCRIPT'||tg==='STYLE'||tg==='TEXTAREA')return NodeFilter.FILTER_REJECT;
+        var t=n.nodeValue;if(!t||!t.trim())return NodeFilter.FILTER_REJECT;
+        return JA2EN.hasOwnProperty(t.trim())?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+      }});
+      var arr=[],x;while(x=w.nextNode())arr.push(x);
+      arr.forEach(function(n){var k=n.nodeValue.trim();if(JA2EN[k]!=null)n.nodeValue=n.nodeValue.replace(k,JA2EN[k]);});
+    }catch(e){}
+  }
+
   var _applying=false;
   function applyToDOM(){
     if(_applying)return; // MutationObserver無限ループ防止
@@ -146,6 +175,7 @@
         if(attr){if(el.getAttribute(attr)!==val)el.setAttribute(attr,val);}
         else{if(el.textContent!==val)el.textContent=val;}
       });
+      if(currentLang==='en')translateTextNodes(document.body);
     }finally{
       // 自分が起こしたMutationが届く前に待ってから解除
       setTimeout(function(){_applying=false;},0);
@@ -165,7 +195,7 @@
     wrap.className='aninovel-lang-switcher';
     wrap.style.cssText='display:inline-flex;align-items:center;gap:4px;font-size:12px';
     wrap.innerHTML=SUPPORTED.map(function(l){
-      var label=l==='ja'?'日本語':l==='en'?'English':l;
+      var label=l==='ja'?(currentLang==='en'?'Japanese':'日本語'):l==='en'?'English':l;
       return '<button data-lang="'+l+'" style="padding:4px 10px;border:1px solid '+(l===currentLang?'#C0392B':'transparent')+';background:'+(l===currentLang?'#C0392B':'transparent')+';color:'+(l===currentLang?'#fff':'inherit')+';border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px">'+label+'</button>';
     }).join('');
     wrap.querySelectorAll('button').forEach(function(b){
@@ -183,14 +213,11 @@
     var obs=new MutationObserver(function(muts){
       if(_applying||_scheduled)return;
       // 新しく追加された要素に data-i18n が含まれている場合のみ再適用
-      var hasI18n=muts.some(function(m){
-        for(var i=0;i<m.addedNodes.length;i++){
-          var n=m.addedNodes[i];
-          if(n.nodeType===1&&(n.matches&&(n.matches('[data-i18n]')||n.querySelector('[data-i18n]'))))return true;
-        }
+      var hasAdded=muts.some(function(m){
+        for(var i=0;i<m.addedNodes.length;i++){if(m.addedNodes[i].nodeType===1)return true;}
         return false;
       });
-      if(!hasI18n)return;
+      if(!hasAdded)return;
       _scheduled=true;
       requestAnimationFrame(function(){_scheduled=false;applyToDOM();});
     });
@@ -202,7 +229,8 @@
     setLang:setLang,
     getLang:function(){return currentLang;},
     SUPPORTED:SUPPORTED,
-    renderSwitcher:renderSwitcher
+    renderSwitcher:renderSwitcher,
+    apply:applyToDOM
   };
   console.info('[i18n] 言語=',currentLang);
 })();

@@ -4,6 +4,8 @@
  */
 (function() {
   'use strict';
+  window.__ANINOVEL_PORTAL_VER__='portal_i18n_v2';
+  try{console.info('[portal] VER=portal_i18n_v2');}catch(e){}
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
 
@@ -49,9 +51,49 @@
   }
 
   // === 作品カードを生成 ===
+  function _en(){return !!(window.AninovelI18n&&AninovelI18n.getLang&&AninovelI18n.getLang()==='en');}
+  function _rl(rm){return _en()&&rm&&rm.labelEn?rm.labelEn:(rm&&rm.label)||'';}
+  // === 作品コンテンツ翻訳（タイトル/説明/タグ=翻訳, 著者=ローマ字音訳） ===
+  var _portalTr=null, _allWorks=null;
+  function applyPortalTrans(works){
+    if(!_portalTr||!works)return;
+    works.forEach(function(w){
+      var nodes=document.querySelectorAll('[data-work-id="'+w.id+'"]');
+      Array.prototype.forEach.call(nodes,function(node){
+        var tt=node.querySelector('.card-title,.ranking-title'); if(tt&&_portalTr.t[w.id]!=null)tt.textContent=_portalTr.t[w.id];
+        var au=node.querySelector('.card-author,.ranking-author'); if(au&&_portalTr.a[w.id]!=null)au.textContent=_portalTr.a[w.id];
+        var ds=node.querySelector('.card-description'); if(ds&&_portalTr.d[w.id]!=null)ds.textContent=_portalTr.d[w.id];
+        var tagEls=node.querySelectorAll('.card-tags .tag');
+        if(_portalTr.g[w.id])Array.prototype.forEach.call(tagEls,function(te,i){if(_portalTr.g[w.id][i]!=null)te.textContent=_portalTr.g[w.id][i];});
+      });
+    });
+  }
+  function translatePortalContent(works){
+    if(!_en()||!works||!works.length)return;
+    if(_portalTr){applyPortalTrans(works);return;}
+    var items=[],chars=[];
+    works.forEach(function(w){
+      if(w.title)items.push({id:'t::'+w.id,text:w.title});
+      if(w.description)items.push({id:'d::'+w.id,text:w.description});
+      (w.tags||[]).forEach(function(tg,i){items.push({id:'g::'+w.id+'::'+i,text:tg});});
+      if(w.author)chars.push({id:'a::'+w.id,name:w.author});
+    });
+    if(!items.length&&!chars.length)return;
+    fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:'en',items:items,characters:chars})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d||(!d.items&&!d.characters))return;
+        var tr={t:{},a:{},d:{},g:{}};
+        (d.items||[]).forEach(function(x){var p=x.id.split('::');if(p[0]==='t')tr.t[p[1]]=x.text;else if(p[0]==='d')tr.d[p[1]]=x.text;else if(p[0]==='g'){(tr.g[p[1]]=tr.g[p[1]]||[])[+p[2]]=x.text;}});
+        (d.characters||[]).forEach(function(x){var p=x.id.split('::');tr.a[p[1]]=x.name;});
+        _portalTr=tr;
+        applyPortalTrans(works);
+        if(_allWorks)applyPortalTrans(_allWorks);
+      }).catch(function(e){console.warn('[portal translate]',e);});
+  }
   function createWorkCard(work, votes) {
     var v = votes[work.id] || { total: 0, userVoted: false };
     var card = h('div', { className: 'work-card anim-slide' });
+    card.setAttribute('data-work-id', work.id);
     card.onclick = function() { openWork(work.id); };
 
     var banner = h('div', { className: 'card-banner' });
@@ -64,9 +106,9 @@
     body.appendChild(h('div', { className: 'card-description' }, work.description));
 
     var stats = h('div', { className: 'card-stats' });
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + '字' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + '人' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_en()?' pages':'頁') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + (_en()?' chars':'字') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + (_en()?' cast':'人') }));
     body.appendChild(stats);
 
     var tags = h('div', { className: 'card-tags' });
@@ -108,6 +150,7 @@
   function createRankingItem(work, index, votes) {
     var v = votes[work.id] || { total: 0, userVoted: false };
     var item = h('div', { className: 'ranking-item' });
+    item.setAttribute('data-work-id', work.id);
     item.onclick = function() { openWork(work.id); };
 
     var num = h('div', { className: 'ranking-number' }, String(index + 1));
@@ -117,7 +160,7 @@
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_en()?' pages':'頁') }));
 
     var voteBtn = createVoteBtn(work.id, { total: work.totalVotes || v.total, userVoted: work.userVoted || v.userVoted });
 
@@ -142,6 +185,7 @@
       $$('.ranking-sort-btn').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.sort === state.rankSort);
       });
+      if(_en())translatePortalContent(works);
     });
   }
 
@@ -407,9 +451,9 @@
 
   // === ロール表示ヘルパー ===
   var ROLE_META = {
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', color: '#F59E0B' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     color: '#8B5CF6' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     color: '#3B82F6' }
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn:'Owner', color: '#F59E0B' },
+    author: { icon: '\u270F\uFE0F', label: '作者', labelEn:'Author', color: '#8B5CF6' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者', labelEn:'Reader', color: '#3B82F6' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
 
@@ -431,7 +475,7 @@
       var modeBadge = h('span', {
         className: 'role-mode-badge',
         style: 'background:' + rm.color + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap'
-      }, rm.icon + ' ' + rm.label + 'モード');
+      }, rm.icon + ' ' + _rl(rm) + (_en()?' Mode':'モード'));
       badge.appendChild(modeBadge);
       badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
 
@@ -665,17 +709,17 @@
     if (state.user && state.user.loggedIn) {
       var ar = roleOf(state.user);
       var rm = ROLE_META[ar] || ROLE_META.reader;
-      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return (ROLE_META[r] || {}).label || r; }).join(' / ');
+      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return _en()?((ROLE_META[r]||{}).labelEn||(ROLE_META[r]||{}).label||r):((ROLE_META[r] || {}).label || r); }).join(' / ');
       var tips = ar === 'owner'
-        ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
+        ? (_en()?'\uD83D\uDC51 Manage users and works from the Admin panel. \u270F\uFE0F My Works and \uD83D\uDCCA Dashboard are also available.':'\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。')
         : ar === 'author'
-        ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
-        : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
+        ? (_en()?'Open \u201cMy Works\u201d from \u270F\uFE0F at the top right to create or edit, and check the \uD83D\uDCCA Dashboard.':'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。')
+        : (_en()?'Bookmarks, voting and character customization are available. Check the \uD83D\uDCCA Dashboard.':'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。');
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
-      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + ' おかえりなさい、' + state.user.displayName + ' さん'));
-      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'));
+      banner.appendChild(h('div', { className: 'welcome-title' }, (_en()?(rm.icon+' Welcome back, '+state.user.displayName):(rm.icon+' おかえりなさい、'+state.user.displayName+' さん'))));
+      banner.appendChild(h('div', { className: 'welcome-role' }, (_en()?('Current mode: '+_rl(rm)+' (roles: '+rolesLabel+')'):('現在のモード: '+rm.label+'（登録ロール: '+rolesLabel+'）'))));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
@@ -842,6 +886,7 @@
 
       // ランキング
       renderRanking('votes');
+      _allWorks=catalog.works; if(_en())translatePortalContent(catalog.works);
     });
 
     // ランキングソートボタン
