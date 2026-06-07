@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v35_gate_opacity';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v36_reader_wait_trans';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2708,7 +2708,7 @@ function _revealApp(){try{document.documentElement.classList.remove('i18n-pendin
 function _maybeReveal(){try{
   if(state.lang!=='en'){_revealApp();return;}
   if(state.currentScreen==='home'){return;}
-  if(state.currentScreen!=='reader'||state.isAuthorMode){_revealApp();return;}
+  if(state.currentScreen!=='reader'){_revealApp();return;}
   var hash=state._curHash||(typeof _contentHash==='function'?_contentHash():null);
   if(state.workTrans&&state.workTransHash===hash){_revealApp();}
 }catch(e){_revealApp();}}
