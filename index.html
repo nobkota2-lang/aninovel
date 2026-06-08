@@ -247,11 +247,35 @@
 <section class="portal-hero">
   <h1 class="font-serif">物語の世界へようこそ</h1>
   <p>オリジナル小説を読んで、投票して、お気に入りを見つけよう</p>
+  <div class="hero-cta">
+    <a href="#main" class="btn btn-primary btn-lg">📖 作品を見る</a>
+    <a href="#about-section" class="btn btn-ghost btn-lg">アニノベルとは？</a>
+  </div>
   <div class="hero-stats" id="hero-stats"></div>
 </section>
 
 <!-- サイト説明 -->
-<section class="portal-container">
+<main id="main" class="portal-container">
+
+  <!-- 作品一覧 -->
+  <h2 class="section-title"><span class="icon">&#x1F4DA;</span>作品一覧</h2>
+  <div class="works-grid" id="works-grid"></div>
+
+  <!-- ランキング -->
+  <h2 class="section-title"><span class="icon">&#x1F3C6;</span>ランキング</h2>
+  <div class="ranking-section">
+    <div class="ranking-controls">
+      <button class="ranking-sort-btn active" data-sort="votes">&#x2764; 投票数</button>
+      <button class="ranking-sort-btn" data-sort="newest">&#x1F195; 新着順</button>
+      <button class="ranking-sort-btn" data-sort="chars">&#x1F4DD; 文字数</button>
+      <button class="ranking-sort-btn" data-sort="pages">&#x1F4D6; ページ数</button>
+    </div>
+    <div class="ranking-list" id="ranking-list"></div>
+  </div>
+
+</main>
+
+<section class="portal-container" id="about-section">
   <h2 class="section-title"><span class="icon">&#x2728;</span>アニノベルとは</h2>
   <p class="about-lead font-serif">アニノベルは、アニメ風の吹き出し表示で小説を読める新しい読書プラットフォームです。<br>「読者」と「作者」、2つのモードで物語の世界をお楽しみいただけます。</p>
 
@@ -315,27 +339,6 @@
     <p class="flow-note">パスワードをお忘れの場合は、ログイン画面の「パスワードを忘れた方」からメールで再設定できます。</p>
   </div>
 </section>
-
-<!-- メインコンテンツ -->
-<main id="main" class="portal-container">
-
-  <!-- 作品一覧 -->
-  <h2 class="section-title"><span class="icon">&#x1F4DA;</span>作品一覧</h2>
-  <div class="works-grid" id="works-grid"></div>
-
-  <!-- ランキング -->
-  <h2 class="section-title"><span class="icon">&#x1F3C6;</span>ランキング</h2>
-  <div class="ranking-section">
-    <div class="ranking-controls">
-      <button class="ranking-sort-btn active" data-sort="votes">&#x2764; 投票数</button>
-      <button class="ranking-sort-btn" data-sort="newest">&#x1F195; 新着順</button>
-      <button class="ranking-sort-btn" data-sort="chars">&#x1F4DD; 文字数</button>
-      <button class="ranking-sort-btn" data-sort="pages">&#x1F4D6; ページ数</button>
-    </div>
-    <div class="ranking-list" id="ranking-list"></div>
-  </div>
-
-</main>
 
 <!-- 広告枠 (作品一覧の下) -->
 <div class="portal-container" style="margin:32px auto">

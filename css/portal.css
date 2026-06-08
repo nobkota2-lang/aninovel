@@ -180,3 +180,17 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
   .section-title{font-size:20px;margin:32px 0 16px}
   .modal-content{padding:20px}
 }
+
+
+/* === Hero CTA === */
+.hero-cta{display:flex;gap:12px;justify-content:center;margin-top:28px;flex-wrap:wrap}
+.btn-lg{padding:13px 30px;font-size:15px;border-radius:10px}
+.hero-cta .btn-primary{background:#fff;color:var(--accent);box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.hero-cta .btn-primary:hover{background:#fff;transform:translateY(-2px);box-shadow:0 10px 28px rgba(0,0,0,.28)}
+.hero-cta .btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35)}
+.hero-cta .btn-ghost:hover{background:rgba(255,255,255,.22)}
+
+/* === Welcome banner CTA === */
+.welcome-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.welcome-cta .btn{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.32)}
+.welcome-cta .btn:hover{background:rgba(255,255,255,.30);transform:translateY(-1px)}

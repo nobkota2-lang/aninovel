@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
-  try{window.__ANINOVEL_PORTAL_VER__='portal_trans_v2_banner';}catch(e){}
+  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p0_v3';}catch(e){}
 
   // === 多言語: 作品コンテンツ翻訳 ===
   var _ptCache = {};
@@ -714,16 +714,29 @@
       banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_enB ? (' Welcome back, ' + state.user.displayName + '!') : (' おかえりなさい、' + state.user.displayName + ' さん'))));
       banner.appendChild(h('div', { className: 'welcome-role' }, _enB ? ('Current mode: ' + (rm.labelEn||rm.label) + ' (Roles: ' + rolesLabel + ')') : ('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）')));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+      if (ar === 'owner' || ar === 'author') {
+        var wcta = h('div', { className: 'welcome-cta' });
+        var bWork = h('button', { className: 'btn' }, _enB ? '\u270F\uFE0F My Works' : '\u270F\uFE0F \u30DE\u30A4\u4F5C\u54C1');
+        bWork.onclick = function(){ try{ showMyWorksModal(); }catch(e){} };
+        wcta.appendChild(bWork);
+        var bDash = h('button', { className: 'btn' }, _enB ? '\uD83D\uDCCA Dashboard' : '\uD83D\uDCCA \u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9');
+        bDash.onclick = function(){ try{ showDashboard(); }catch(e){} };
+        wcta.appendChild(bDash);
+        if (ar === 'owner') {
+          var bAdmin = h('button', { className: 'btn' }, _enB ? '\uD83D\uDC51 Admin' : '\uD83D\uDC51 \u7BA1\u7406\u30D1\u30CD\u30EB');
+          bAdmin.onclick = function(){ try{ showAdminPanel(); }catch(e){} };
+          wcta.appendChild(bAdmin);
+        }
+        banner.appendChild(wcta);
+      }
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
-      var aboutTitle = document.querySelector('.section-title');
-      var aboutSec = aboutTitle && aboutTitle.parentElement;
+      var aboutSec = document.getElementById('about-section');
       if (aboutSec) aboutSec.style.display = 'none';
     } else {
       if (existing) existing.remove();
       hero.style.display = '';
-      var aboutTitle2 = document.querySelector('.section-title');
-      var aboutSec2 = aboutTitle2 && aboutTitle2.parentElement;
+      var aboutSec2 = document.getElementById('about-section');
       if (aboutSec2) aboutSec2.style.display = '';
     }
   }
