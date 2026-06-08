@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v37_reveal_when_no_jp';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v39_autosave_silent_60s';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -242,7 +242,7 @@ function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentP
 function _saveProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var tp=getTP();var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');all[_workParam]={page:state.currentPage,total:tp,at:Date.now()};localStorage.setItem('aninovel_progress',JSON.stringify(all));}catch(e){}}
 function _restoreProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');var p=all[_workParam];if(p&&typeof p.page==='number'){var tp=getTP();state.currentPage=Math.max(0,Math.min(p.page,(tp>0?tp-1:0)));}}catch(e){}}
 function scrollToItem(id){if(!id)return;requestAnimationFrame(function(){var el=document.querySelector('[data-cid="'+id+'"]');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})})}
-function saveData(){try{
+function saveData(silent){try{
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   var payload={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
   if(wp&&wp.indexOf('my_')===0){
@@ -263,7 +263,7 @@ function saveData(){try{
     localStorage.setItem('aninovel_data',JSON.stringify(Object.assign({},payload,{bookmarks:state.bookmarks,darkMode:state.darkMode,timestamp:new Date().toISOString()})));
   }
   state.lastSaved=new Date().toLocaleTimeString();
-  if(typeof showToast==='function')showToast('保存しました');
+  if(!silent && typeof showToast==='function')showToast('保存しました');
 }catch(e){console.error('[Save]エラー',e);alert('保存エラー: '+e.message);}render()}
 function loadData(){try{var s=localStorage.getItem('aninovel_data');if(s){var d=JSON.parse(s);state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.darkMode!==undefined)state.darkMode=d.darkMode}}catch(e){console.error(e)}}
 function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,timestamp:new Date().toISOString()},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(state.novel.title||'作品')+'_'+Date.now()+'.aninovel';a.click();URL.revokeObjectURL(a.href)}
@@ -3232,7 +3232,7 @@ window.onload=function(){
                             }
                         }catch(e){console.error(e);}
                     };
-                    setInterval(function(){if(state.isAuthorMode&&window._saveMyWork)window._saveMyWork();},15000);
+                    /* 15秒自動保存は削除（60秒saveDataがmy_作品も保存。中断軽減） */
                     return;
                 }
             }catch(e){console.error(e);}
@@ -3272,7 +3272,7 @@ window.onload=function(){
         window.location.replace('index.html');
         return;
     }
-    setInterval(function(){if(state.isAuthorMode)saveData()},30000);
+    setInterval(function(){if(state.isAuthorMode)saveData(true)},60000);/* 60秒・無音・再描画/カーソル/スクロール変更なし */
     window.addEventListener('beforeunload',function(){try{_saveProgress()}catch(e){}});
 };
 
