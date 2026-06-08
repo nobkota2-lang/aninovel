@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
-  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p0_v3';}catch(e){}
+  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p1_v4';}catch(e){}
 
   // === 多言語: 作品コンテンツ翻訳 ===
   var _ptCache = {};
@@ -712,8 +712,18 @@
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
       banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_enB ? (' Welcome back, ' + state.user.displayName + '!') : (' おかえりなさい、' + state.user.displayName + ' さん'))));
+      var _tipsHidden = false; try { _tipsHidden = localStorage.getItem('aninovel_welcome_tips_hidden') === '1'; } catch(e){}
       banner.appendChild(h('div', { className: 'welcome-role' }, _enB ? ('Current mode: ' + (rm.labelEn||rm.label) + ' (Roles: ' + rolesLabel + ')') : ('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）')));
-      banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+      if (!_tipsHidden) {
+        banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+        var _dismiss = h('button', { className: 'welcome-dismiss', title: _enB ? 'Hide tips' : '\u8AAC\u660E\u3092\u96A0\u3059' }, '\u00D7');
+        _dismiss.onclick = function() {
+          try { localStorage.setItem('aninovel_welcome_tips_hidden', '1'); } catch(e){}
+          var t = banner.querySelector('.welcome-tips'); if (t) t.style.display = 'none';
+          _dismiss.style.display = 'none';
+        };
+        banner.appendChild(_dismiss);
+      }
       if (ar === 'owner' || ar === 'author') {
         var wcta = h('div', { className: 'welcome-cta' });
         var bWork = h('button', { className: 'btn' }, _enB ? '\u270F\uFE0F My Works' : '\u270F\uFE0F \u30DE\u30A4\u4F5C\u54C1');
@@ -859,6 +869,40 @@
   }
 
   // === メイン初期化 ===
+  // === 作品グリッドの状態表示（ローディング/空/エラー）===
+  function setGridState(kind) {
+    var grid = $('#works-grid');
+    if (!grid) return;
+    var en = _plang() === 'en';
+    grid.innerHTML = '';
+    if (kind === 'loading') {
+      for (var i = 0; i < 6; i++) {
+        grid.appendChild(h('div', { className: 'work-card skeleton-card' },
+          h('div', { className: 'card-banner' }),
+          h('div', { className: 'card-body' },
+            h('div', { className: 'sk sk-title' }),
+            h('div', { className: 'sk sk-line' }),
+            h('div', { className: 'sk sk-line short' })
+          )
+        ));
+      }
+    } else if (kind === 'empty') {
+      grid.appendChild(h('div', { className: 'grid-state' },
+        h('div', { className: 'grid-state-icon' }, '\uD83D\uDCDA'),
+        h('div', { className: 'grid-state-text' }, en ? 'No works published yet.' : '\u307E\u3060\u516C\u958B\u4F5C\u54C1\u304C\u3042\u308A\u307E\u305B\u3093\u3002')
+      ));
+    } else if (kind === 'error') {
+      var box = h('div', { className: 'grid-state' },
+        h('div', { className: 'grid-state-icon' }, '\u26A0\uFE0F'),
+        h('div', { className: 'grid-state-text' }, en ? 'Failed to load works.' : '\u4F5C\u54C1\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002')
+      );
+      var retry = h('button', { className: 'btn btn-ghost btn-sm' }, en ? 'Retry' : '\u518D\u8AAD\u307F\u8FBC\u307F');
+      retry.onclick = function() { location.reload(); };
+      box.appendChild(retry);
+      grid.appendChild(box);
+    }
+  }
+
   function init() {
     initTheme();
 
@@ -873,6 +917,7 @@
     });
 
     // カタログ読み込み＆描画
+    setGridState('loading');
     Promise.all([S.getCatalog(), S.getVotes()]).then(function(results) {
       var catalog = results[0];
       var votes = results[1];
@@ -883,20 +928,24 @@
         // 作品一覧（新着順にソート）
         var grid = $('#works-grid');
         if (grid) {
-          grid.innerHTML = '';
-          var sorted = catalog.works.slice().sort(function(a, b) {
+          var sorted = (catalog.works || []).slice().sort(function(a, b) {
             return new Date(b.createdAt) - new Date(a.createdAt);
           });
-          sorted.forEach(function(w) {
-            grid.appendChild(createWorkCard(w, votes));
-          });
+          if (sorted.length === 0) {
+            setGridState('empty');
+          } else {
+            grid.innerHTML = '';
+            sorted.forEach(function(w) {
+              grid.appendChild(createWorkCard(w, votes));
+            });
+          }
         }
 
         // ランキング
         renderRanking('votes');
         _portalReveal();
       });
-    }).catch(function(){ _portalReveal(); });
+    }).catch(function(){ setGridState('error'); _portalReveal(); });
 
     // ランキングソートボタン
     $$('.ranking-sort-btn').forEach(function(btn) {

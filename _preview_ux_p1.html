@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600;700&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=Shippori+Mincho:wght@400;500;600;700&display=swap');
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UX P1 Preview</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600;700&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=Shippori+Mincho:wght@400;500;600;700&display=swap');
 
 :root{--bg-primary:#FAF6F0;--bg-secondary:#F5EFE6;--bg-paper:#FDF9F3;--bg-toolbar:#3D3A36;--text-primary:#2D2A26;--text-secondary:#6B635A;--text-muted:#A39E96;--accent:#C0392B;--accent-soft:#E74C3C;--accent-author:#8E44AD;--accent-author-soft:#9B59B6;--border:#E2DCD4;--border-light:#EDE8E0;--shadow:rgba(45,42,38,0.08);--shadow-strong:rgba(45,42,38,0.15);--panel-bg:#FFFFFF;--card-bg:#FFFFFF;--hero-from:#2D2A26;--hero-to:#6B4423}
 [data-theme="dark"]{--bg-primary:#1A1A1A;--bg-secondary:#222;--bg-paper:#252525;--bg-toolbar:#222;--text-primary:#E8E0D8;--text-secondary:#A09890;--text-muted:#706860;--accent:#E74C3C;--accent-soft:#FF6B5A;--accent-author:#9B59B6;--accent-author-soft:#BB7CD4;--border:#3A3530;--border-light:#302C28;--shadow:rgba(0,0,0,0.3);--shadow-strong:rgba(0,0,0,0.5);--panel-bg:#2A2A2A;--card-bg:#2A2A2A;--hero-from:#111;--hero-to:#2A1428}
@@ -215,3 +216,48 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .welcome-banner{position:relative}
 .welcome-dismiss{position:absolute;top:14px;right:16px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:18px;line-height:1;cursor:pointer;transition:background .2s;display:flex;align-items:center;justify-content:center}
 .welcome-dismiss:hover{background:rgba(255,255,255,.32)}
+
+.demo-wrap{max-width:1100px;margin:0 auto;padding:24px}
+.demo-h{font-family:'Shippori Mincho',serif;font-size:18px;color:var(--text-secondary);margin:32px 0 14px;border-bottom:1px dashed var(--border);padding-bottom:6px}
+</style></head>
+<body>
+<div class="demo-wrap">
+  <h2 class="demo-h">① ローディング（スケルトン）</h2>
+  <div class="works-grid">
+    <div class="work-card skeleton-card"><div class="card-banner"></div><div class="card-body"><div class="sk sk-title"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div></div>
+    <div class="work-card skeleton-card"><div class="card-banner"></div><div class="card-body"><div class="sk sk-title"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div></div>
+    <div class="work-card skeleton-card"><div class="card-banner"></div><div class="card-body"><div class="sk sk-title"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div></div>
+  </div>
+
+  <h2 class="demo-h">② 空状態</h2>
+  <div class="works-grid"><div class="grid-state"><div class="grid-state-icon">📚</div><div class="grid-state-text">まだ公開作品がありません。</div></div></div>
+
+  <h2 class="demo-h">③ エラー状態</h2>
+  <div class="works-grid"><div class="grid-state"><div class="grid-state-icon">⚠️</div><div class="grid-state-text">作品の読み込みに失敗しました。</div><button class="btn btn-ghost btn-sm">再読み込み</button></div></div>
+
+  <h2 class="demo-h">④ ようこそバナー（コンパクト＋dismiss＋作家CTA）</h2>
+  <div class="welcome-banner" style="background:linear-gradient(135deg,#F59E0B,#D97706)">
+    <button class="welcome-dismiss" title="説明を隠す">×</button>
+    <div class="welcome-title">👑 おかえりなさい、Nobby さん</div>
+    <div class="welcome-role">現在のモード: オーナー（登録ロール: オーナー / 作者 / 読者）</div>
+    <div class="welcome-tips">👑 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。</div>
+    <div class="welcome-cta">
+      <button class="btn">✏️ マイ作品</button>
+      <button class="btn">📊 ダッシュボード</button>
+      <button class="btn">👑 管理</button>
+    </div>
+  </div>
+
+  <h2 class="demo-h">⑤ ヒーローCTA（参考）</h2>
+  <div class="portal-hero" style="border-radius:16px">
+    <h1 class="font-serif">物語の世界へようこそ</h1>
+    <p class="hero-lead">アニメ風の吹き出しとキャラクターで小説が動き出す、新しい読書体験。</p>
+    <p>オリジナル小説を読んで、投票して、お気に入りを見つけよう</p>
+    <div class="hero-cta">
+      <a href="#" class="btn btn-primary btn-lg">📖 作品を見る</a>
+      <a href="#" class="btn btn-ghost btn-lg">アニノベルとは？</a>
+    </div>
+    <p class="hero-note">ログイン不要で読めます</p>
+  </div>
+</div>
+</body></html>
