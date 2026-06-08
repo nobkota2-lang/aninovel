@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v39_autosave_silent_60s';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v40_tts13_lipsync_urlfix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -171,7 +171,7 @@ imageGalleryOpen:false,galleryTab:'photo',galleryGroup:null,galleryPage:0,galler
 searchOpen:false,searchQuery:'',searchResults:[],searchCurrentIdx:-1,
 metaEditOpen:false,fullscreen:false,darkMode:false,dupModalOpen:false,
 editingItem:null,currentPage:0,bookmarks:[],lastSaved:'未保存',draggedItem:null,readerCustom:null,readerCustomOpen:false,readerCustomCharId:null,
-tts:{active:false,paused:false,rate:1.4,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
+tts:{active:false,paused:false,rate:1.3,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
 _scrollToId:null,
 novel:{title:'夏の日の冒険',author:'山田太郎'},
 displaySettings:{fontSize:18,lineHeight:2.0,iconSize:56,font:"'Shippori Mincho', serif",fontEn:"Georgia, 'Times New Roman', serif",orientation:'horizontal',narratorStyle:'bubble'},
@@ -1101,7 +1101,7 @@ function _generateLipGif(cid,callback){
   // 事前生成GIF優先: iconImg が /gallery/.../X.png 形式なら 対応する /lipsync/.../X.gif を探す。
   // 見つかればそれを採用、無ければ next() で MediaPipe 生成にフォールバック。
   function tryPreGen(next){
-    var m=/^\/gallery\/(.+)\.png$/i.exec(iconImg||"");
+    var m=/(?:^https?:\/\/[^\/]+)?\/?gallery\/(.+)\.png$/i.exec(iconImg||"");
     if(!m){return next();}
     var gifUrl="/lipsync/"+m[1]+".gif";
     var probe=new Image(),done=false;
