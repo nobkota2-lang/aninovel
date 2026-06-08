@@ -238,7 +238,9 @@ var _sideMap={};
 function _computeSideMap(){_sideMap={};var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var seen={},n=0;arr.forEach(function(it){if(it.type==='pageBreak'){seen={};n=0;return;}if(it.type==='dialogue'&&it.characterId){if(it.characterId==='narrator'){_sideMap[it.id]='left';return;}if(seen[it.characterId]===undefined){seen[it.characterId]=(n%2===0)?'left':'right';n++;}_sideMap[it.id]=seen[it.characterId];}});}
 function getPC(){_computeSideMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
 function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
-function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render()}}
+function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render();_saveProgress()}}
+function _saveProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var tp=getTP();var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');all[_workParam]={page:state.currentPage,total:tp,at:Date.now()};localStorage.setItem('aninovel_progress',JSON.stringify(all));}catch(e){}}
+function _restoreProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');var p=all[_workParam];if(p&&typeof p.page==='number'){var tp=getTP();state.currentPage=Math.max(0,Math.min(p.page,(tp>0?tp-1:0)));}}catch(e){}}
 function scrollToItem(id){if(!id)return;requestAnimationFrame(function(){var el=document.querySelector('[data-cid="'+id+'"]');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})})}
 function saveData(){try{
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
@@ -3262,7 +3264,7 @@ window.onload=function(){
             state.currentScreen='reader';
             // 投稿版でも作者(author/owner)としてログイン中なら作者モードを許可
             try{var _u=JSON.parse(localStorage.getItem('aninovel_user'));var _r=_u&&(_u.roles||[_u.role||'reader']);state.isAuthorMode=!!(_u&&_u.loggedIn&&_r&&(_r.indexOf('author')>=0||_r.indexOf('owner')>=0));}catch(e){state.isAuthorMode=false;}
-            _preloadWorkTrans();render();
+            _restoreProgress();_preloadWorkTrans();render();
             _schedulePregen();
         }).catch(function(e){console.error(e);render()});
     } else {
@@ -3271,6 +3273,7 @@ window.onload=function(){
         return;
     }
     setInterval(function(){if(state.isAuthorMode)saveData()},30000);
+    window.addEventListener('beforeunload',function(){try{_saveProgress()}catch(e){}});
 };
 
     </script>

@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
-  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p1_v4';}catch(e){}
+  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p1_v5_continue';}catch(e){}
 
   // === 多言語: 作品コンテンツ翻訳 ===
   var _ptCache = {};
@@ -869,6 +869,53 @@
   }
 
   // === メイン初期化 ===
+  // === 続きから読む（読書位置から復帰）===
+  function _renderContinueReading(catalog) {
+    var main = $('#main');
+    if (!main) return;
+    var old = $('#continue-section');
+    if (old) old.remove();
+    var prog = {};
+    try { prog = JSON.parse(localStorage.getItem('aninovel_progress') || '{}'); } catch (e) {}
+    var en = _plang() === 'en';
+    var items = [];
+    (catalog.works || []).forEach(function(w) {
+      var p = prog[w.id];
+      if (!p || typeof p.page !== 'number') return;
+      if (p.total && p.page >= p.total - 1) return; // 読了は除外
+      items.push({ w: w, p: p });
+    });
+    items.sort(function(a, b) { return (b.p.at || 0) - (a.p.at || 0); });
+    if (!items.length) return;
+    items = items.slice(0, 3);
+    var sec = h('section', { id: 'continue-section', className: 'portal-container continue-section' });
+    var ttl = h('h2', { className: 'section-title' });
+    ttl.appendChild(h('span', { className: 'icon' }, '\uD83D\uDD16'));
+    ttl.appendChild(document.createTextNode(en ? ' Continue reading' : ' \u7D9A\u304D\u304B\u3089\u8AAD\u3080'));
+    sec.appendChild(ttl);
+    var row = h('div', { className: 'continue-grid' });
+    items.forEach(function(it) {
+      var w = it.w, p = it.p;
+      var pct = p.total ? Math.round((p.page + 1) / p.total * 100) : 0;
+      var card = h('div', { className: 'continue-card' });
+      card.onclick = function() { openWork(w.id); };
+      card.appendChild(h('div', { className: 'continue-title' }, _pt(w.title)));
+      card.appendChild(h('div', { className: 'continue-author' }, _pt(w.author)));
+      var bar = h('div', { className: 'continue-bar' });
+      var fill = h('div', { className: 'continue-bar-fill' });
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      card.appendChild(bar);
+      var metaTxt = en
+        ? ('Page ' + (p.page + 1) + (p.total ? (' / ' + p.total) : '') + (p.total ? (' \u00B7 ' + pct + '%') : ''))
+        : ((p.page + 1) + (p.total ? ('/' + p.total) : '') + '\u30DA\u30FC\u30B8' + (p.total ? (' \u30FB ' + pct + '%') : ''));
+      card.appendChild(h('div', { className: 'continue-meta' }, metaTxt));
+      row.appendChild(card);
+    });
+    sec.appendChild(row);
+    main.insertBefore(sec, main.firstChild);
+  }
+
   // === 作品グリッドの状態表示（ローディング/空/エラー）===
   function setGridState(kind) {
     var grid = $('#works-grid');
@@ -941,6 +988,8 @@
           }
         }
 
+        // 続きから読む
+        _renderContinueReading(catalog);
         // ランキング
         renderRanking('votes');
         _portalReveal();
