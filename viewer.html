@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v44_voice_fixes';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v45_vv_testplay';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1486,6 +1486,7 @@ function _stopAllSpeech(){
   if(_cloudAudioCtrl){try{_cloudAudioCtrl.stop();}catch(e){}_cloudAudioCtrl=null;}
   if(_preAudioCtrl){try{_preAudioCtrl.stop();}catch(e){}_preAudioCtrl=null;}
   if(_auraCtrl){try{_auraCtrl.stop();}catch(e){}_auraCtrl=null;}
+  if(_testAudio){try{_testAudio.pause();}catch(e){}_testAudio=null;}
   _ttsUtterance=null;
 }
 // ===== 英語クラウドTTS (Deepgram Aura via /api/tts) =====
@@ -1528,17 +1529,36 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
 }
 function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||('id:'+id);}
 function _auraNameById(id){var n=null;_AURA_VOICES.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||id;}
+var _testAudio=null;
+function _voicevoxSynthBlob(text,speaker,engineUrl){
+  engineUrl=engineUrl||'http://localhost:50021';
+  return fetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(text),{method:'POST'})
+    .then(function(qr){if(!qr.ok)throw new Error('audio_query '+qr.status);return qr.json();})
+    .then(function(query){query.speedScale=1.0;return fetch(engineUrl+'/synthesis?speaker='+speaker,{method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},body:JSON.stringify(query)});})
+    .then(function(sr){if(!sr.ok)throw new Error('synthesis '+sr.status);return sr.blob();});
+}
+function _playTestBlob(b,rate){
+  if(_testAudio){try{_testAudio.pause();}catch(e){}}
+  var a=new Audio();_testAudio=a;a.src=URL.createObjectURL(b);
+  try{a.playbackRate=rate;a.defaultPlaybackRate=rate;}catch(e){}
+  var p;try{p=a.play();}catch(e){}if(p&&p.catch)p.catch(function(){});
+}
 function _testVoice(){
   var v=state.editingItem&&state.editingItem.data;if(!v)return;
   _stopAllSpeech();
+  var rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.3));
   if(v.voiceLang==='en'){
     _auraCtrl=_speakItemAura({id:'__test',text:(v.name?v.name+'. This is a test voice. Ten apples on the table.':'This is a test voice. Ten apples on the table.')},v,++_speakSessionId,function(){},function(){_auraCtrl=null;},function(e){_auraCtrl=null;alert('Auraの試聴に失敗しました（要デプロイ/AIバインディング）: '+(e&&e.message||e));});
-  }else{
-    var utt=new SpeechSynthesisUtterance((v.name?v.name+'。':'')+'テスト音声です。１０階から見下ろします。');
-    utt.lang='ja-JP';var fv=_ttsVoice(v);if(fv)utt.voice=fv;
-    utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.3));
-    speechSynthesis.cancel();speechSynthesis.speak(utt);
+    return;
   }
+  var sampleJa=(v.name?v.name+'。':'')+'テスト音声です。１０階から見下ろします。';
+  var spk=_voicevoxSpeakerFor(v);
+  // 作者PCで VOICEVOX(localhost:50021) が起動していれば、選んだ話者で実合成して試聴。
+  _voicevoxSynthBlob(sampleJa,spk).then(function(b){_playTestBlob(b,rate);}).catch(function(err){
+    console.info('[TTS] VOICEVOX未起動 → 標準TTSで試聴 ('+(err&&err.message||err)+')');
+    var utt=new SpeechSynthesisUtterance(sampleJa);utt.lang='ja-JP';var fv=_ttsVoice(v);if(fv)utt.voice=fv;
+    utt.rate=rate;speechSynthesis.cancel();speechSynthesis.speak(utt);
+  });
 }
 // ===== 事前生成音声 (VOICEVOX) =====
 var _preAudioCtrl=null;
