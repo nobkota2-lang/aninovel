@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v43_single_voice_field';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v44_voice_fixes';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -484,14 +484,14 @@ function _assignCharVoices(){
 
 // --- キャラクターの音声を返す（性別対応・キャラ別割り当て） ---
 function _ttsVoice(ch){
+  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
+  var lang=(ch&&ch.voiceLang==='en')?'en':'ja';
   var voiceName=null;
   if(ch){
     var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[ch.id];
-    voiceName=(rc&&rc.ttsVoice)||ch.ttsVoice||_charVoiceMap[ch.id]||null;
+    voiceName=(rc&&rc.ttsVoice)||_charVoiceMap[ch.id]||null; // 旧 character.ttsVoice(手動選択)は廃止
   }
-  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
-  if(voiceName){var v=voices.find(function(x){return x.name===voiceName});if(v)return v;}
-  var lang=(ch&&ch.voiceLang==='en')?'en':'ja';
+  if(voiceName){var v=voices.find(function(x){return x.name===voiceName});if(v&&v.lang&&v.lang.indexOf(lang)===0)return v;}
   var langVoices=_sortByQuality(voices.filter(function(v){return v.lang&&v.lang.indexOf(lang)===0}));
   if(!langVoices.length){
     langVoices=_sortByQuality(voices.filter(function(v){return v.lang&&v.lang.indexOf(lang==='en'?'ja':'en')===0}));
@@ -1485,7 +1485,60 @@ function _stopAllSpeech(){
   try{speechSynthesis.cancel();}catch(e){}
   if(_cloudAudioCtrl){try{_cloudAudioCtrl.stop();}catch(e){}_cloudAudioCtrl=null;}
   if(_preAudioCtrl){try{_preAudioCtrl.stop();}catch(e){}_preAudioCtrl=null;}
+  if(_auraCtrl){try{_auraCtrl.stop();}catch(e){}_auraCtrl=null;}
   _ttsUtterance=null;
+}
+// ===== 英語クラウドTTS (Deepgram Aura via /api/tts) =====
+var _auraCtrl=null,_auraCache={};
+function _auraVoiceFor(ch){
+  if(ch&&ch.auraVoice)return ch.auraVoice;
+  var g=ch?(ch.gender||'neutral'):'neutral';
+  return (g==='male')?'angus':'asteria';
+}
+function _speakItemAura(item,ch,session,onStart,onEnd,onError){
+  var text=(item.text||'').trim();
+  if(!text){if(onEnd)onEnd();return {stop:function(){}};}
+  var voice=_auraVoiceFor(ch);
+  var chunks=_ttsChunk(text,1500);
+  var idx=0,curAudio=null,started=false,stopped=false;
+  function stale(){return session!==_speakSessionId||stopped;}
+  function playUrl(url){
+    if(stale())return;
+    var a=new Audio();curAudio=a;a.src=url;
+    try{var r=Math.max(0.5,Math.min(2.5,state.tts.rate||1.3));a.playbackRate=r;a.defaultPlaybackRate=r;}catch(e){}
+    a.onplay=function(){if(stale())return;if(!started){started=true;if(onStart)onStart();}};
+    a.onended=function(){if(stale())return;idx++;playNext();};
+    a.onerror=function(){if(stale())return;if(onError)onError(new Error('aura audio error'));};
+    var p;try{p=a.play();}catch(e){if(!stale()&&onError)onError(e);return;}
+    if(p&&p.catch)p.catch(function(e){if(!stale()&&onError)onError(e);});
+  }
+  function playNext(){
+    if(stale())return;
+    if(idx>=chunks.length){if(onEnd)onEnd();return;}
+    var ctext=chunks[idx];
+    var key=_simpleHashJS(ctext+'|aura|'+voice);
+    if(_auraCache[key]){playUrl(_auraCache[key]);return;}
+    fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ctext,voice:voice,model:'aura-2-en'})})
+      .then(function(res){if(!res.ok)throw new Error('tts http '+res.status);return res.blob();})
+      .then(function(b){if(stale())return;var url=URL.createObjectURL(b);_auraCache[key]=url;playUrl(url);})
+      .catch(function(e){if(stale())return;if(onError)onError(e);});
+  }
+  playNext();
+  return {stop:function(){stopped=true;try{if(curAudio)curAudio.pause();}catch(e){}}};
+}
+function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||('id:'+id);}
+function _auraNameById(id){var n=null;_AURA_VOICES.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||id;}
+function _testVoice(){
+  var v=state.editingItem&&state.editingItem.data;if(!v)return;
+  _stopAllSpeech();
+  if(v.voiceLang==='en'){
+    _auraCtrl=_speakItemAura({id:'__test',text:(v.name?v.name+'. This is a test voice. Ten apples on the table.':'This is a test voice. Ten apples on the table.')},v,++_speakSessionId,function(){},function(){_auraCtrl=null;},function(e){_auraCtrl=null;alert('Auraの試聴に失敗しました（要デプロイ/AIバインディング）: '+(e&&e.message||e));});
+  }else{
+    var utt=new SpeechSynthesisUtterance((v.name?v.name+'。':'')+'テスト音声です。１０階から見下ろします。');
+    utt.lang='ja-JP';var fv=_ttsVoice(v);if(fv)utt.voice=fv;
+    utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.3));
+    speechSynthesis.cancel();speechSynthesis.speak(utt);
+  }
 }
 // ===== 事前生成音声 (VOICEVOX) =====
 var _preAudioCtrl=null;
@@ -1727,8 +1780,9 @@ var _VV_SPEAKERS=[
   {g:'中性',items:[[3,'ずんだもん'],[1,'ずんだもん（あまあま）'],[7,'ずんだもん（ツンツン）'],[75,'ずんだもん（ヘロヘロ）']]},
   {g:'男性',items:[[13,'青山龍星'],[11,'玄野武宏'],[12,'白上虎太郎'],[21,'剣崎雌雄'],[42,'ちび式じい'],[52,'雀松朱司'],[53,'麒ヶ島宗麟'],[81,'青山龍星（熱血）']]}
 ];
-function _vvSpeakerOptions(sel){
-  var s='<option value="">（性別デフォルト）</option>';
+function _vvSpeakerOptions(sel,gender){
+  var defId=_VOICEVOX_DEFAULTS[gender||'neutral'];if(defId==null)defId=_VOICEVOX_DEFAULTS.neutral;
+  var s='<option value="">（自動：'+_vvNameById(defId)+'）</option>';
   _VV_SPEAKERS.forEach(function(grp){
     s+='<optgroup label="'+grp.g+'">';
     grp.items.forEach(function(it){ s+='<option value="'+it[0]+'"'+(sel===it[0]?' selected':'')+'>'+it[1]+'（id:'+it[0]+'）</option>'; });
@@ -1740,8 +1794,9 @@ var _AURA_VOICES=[
   {g:'女性',items:[['asteria','Asteria'],['luna','Luna'],['athena','Athena'],['hera','Hera'],['stella','Stella']]},
   {g:'男性',items:[['angus','Angus'],['arcas','Arcas'],['orion','Orion'],['zeus','Zeus'],['perseus','Perseus']]}
 ];
-function _auraVoiceOptions(sel){
-  var s='<option value="">（性別デフォルト）</option>';
+function _auraVoiceOptions(sel,gender){
+  var defV=(gender==='male')?'angus':'asteria';
+  var s='<option value="">（自動：'+_auraNameById(defV)+'）</option>';
   _AURA_VOICES.forEach(function(grp){
     s+='<optgroup label="'+grp.g+'">';
     grp.items.forEach(function(it){ s+='<option value="'+it[0]+'"'+(sel===it[0]?' selected':'')+'>'+it[1]+'</option>'; });
@@ -1757,9 +1812,9 @@ function _voicePickerHtml(data){
   s+='<option value="en"'+(lang==='en'?' selected':'')+'>外国人（英語）</option></select></div>';
   s+='<div><label '+L+'>🎙 読み上げ音声</label>';
   if(lang==='en'){
-    s+='<select onchange="state.editingItem.data.auraVoice=this.value||null" style="width:100%">'+_auraVoiceOptions(data.auraVoice||null)+'</select>';
+    s+='<select onchange="state.editingItem.data.auraVoice=this.value||null" style="width:100%">'+_auraVoiceOptions(data.auraVoice||null,data.gender)+'</select>';
   }else{
-    s+='<select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="width:100%">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null)+'</select>';
+    s+='<select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="width:100%">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null,data.gender)+'</select>';
   }
   s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:4px">日本語=VOICEVOX、英語=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動使用。</div></div>';
   return s;
@@ -1902,6 +1957,13 @@ function _speakItem(item,onEnd){
   }
   _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
+  // 英語キャラ: クラウドAura(高音質)で再生。失敗時のみ英語Web Speechへ。
+  if(ch&&ch.voiceLang==='en'){
+    _auraCtrl=_speakItemAura(item,ch,mySession,applyCharId,
+      function(){if(mySession!==_speakSessionId)return;_auraCtrl=null;safeEnd();},
+      function(err){if(mySession!==_speakSessionId)return;_auraCtrl=null;console.warn('[TTS] Aura失敗→英語Web Speech:',err&&err.message||err);try{speechSynthesis.cancel();}catch(e){}_speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);});
+    return;
+  }
   // 音声オーバーライドが設定されている場合は事前生成音声を使わず Web Speech 側で再生
   // (事前生成はビルド時の話者で固定されているため、ユーザの音声変更が反映されない)
   // オーバーライド元は2系統: ① 作者編集の character.ttsVoice ② 読者カスタムの readerCustom[id].ttsVoice
@@ -1909,7 +1971,6 @@ function _speakItem(item,onEnd){
   try{
     var _rcEntry=ch&&state.readerCustom&&state.readerCustom[ch.id];
     if(_rcEntry&&_rcEntry.ttsVoice){_voiceOverride=_rcEntry.ttsVoice;_voiceOverrideSrc='readerCustom';}
-    else if(ch&&ch.ttsVoice){_voiceOverride=ch.ttsVoice;_voiceOverrideSrc='character';}
   }catch(e){}
   if(_voiceOverride && _hasPreAudio(item.id)){console.info('[TTS] 事前生成音声をスキップ (音声オーバーライド: '+_voiceOverrideSrc+') item='+item.id+' ch='+(ch&&ch.name)+' voice='+_voiceOverride);}
   // 最優先: 事前生成音声 (VOICEVOX) があればそれを使用 (音声オーバーライド未設定時のみ)
@@ -2289,7 +2350,7 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
 function renderSettings(){var s=state.displaySettings;return'<div class="panel-slide '+(state.settingsOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">⚙️ 表示設定</span><button onclick="state.settingsOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:20px;display:flex;flex-direction:column;gap:20px"><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">文字サイズ: <strong>'+s.fontSize+'px</strong></label><input type="range" min="12" max="32" value="'+s.fontSize+'" oninput="state.displaySettings.fontSize=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">行間: <strong>'+s.lineHeight+'</strong></label><input type="range" min="1" max="3" step="0.1" value="'+s.lineHeight+'" oninput="state.displaySettings.lineHeight=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">アイコン: <strong>'+s.iconSize+'px</strong></label><input type="range" min="32" max="96" value="'+s.iconSize+'" oninput="state.displaySettings.iconSize=+this.value;render()" style="width:100%"></div><div>'+(state.lang==='en'?'<label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">Font</label><select onchange="state.displaySettings.fontEn=this.value;render()" style="width:100%">'+_fontOpts(_EN_FONTS,s.fontEn||'')+'</select>':'<label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">フォント</label><select onchange="state.displaySettings.font=this.value;render()" style="width:100%">'+_fontOpts(_JP_FONTS,s.font)+'</select>')+'</div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">書式</label><select onchange="state.displaySettings.orientation=this.value;render()" style="width:100%"><option value="horizontal"'+(s.orientation==='horizontal'?' selected':'')+'>横書き</option><option value="vertical"'+(s.orientation==='vertical'?' selected':'')+'>縦書き</option></select></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">ナレーション</label><select onchange="state.displaySettings.narratorStyle=this.value;render()" style="width:100%"><option value="bubble"'+(s.narratorStyle==='bubble'?' selected':'')+'>吹き出し</option><option value="plain"'+(s.narratorStyle==='plain'?' selected':'')+'>べた書き</option></select></div></div></div>'}
 function renderTOC(){return'<div class="panel-slide '+(state.tocOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📑 目次</span><button onclick="state.tocOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.chapters.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">章がありません</p>':'<div style="display:flex;flex-direction:column;gap:12px">'+state.chapters.map(function(ch){return'<div style="border-left:3px solid var(--accent);padding-left:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">'+esc(ch.title)+'</div>'+ch.sections.map(function(sec){return'<div style="padding-left:12px;font-size:13px;color:var(--text-secondary);margin-top:2px">'+esc(sec.title)+'</div>'}).join('')+'</div>'}).join('')+'</div>')+'</div></div>'}
 function renderBM(){return'<div class="panel-slide '+(state.bookmarkListOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📚 しおり一覧</span><button onclick="state.bookmarkListOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.bookmarks.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">しおりがありません</p>':'<div style="display:flex;flex-direction:column;gap:8px">'+state.bookmarks.map(function(bm){var ba=_acts.length;_acts.push(function(){deleteBookmark(bm.id)});return'<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;cursor:pointer" onclick="jumpToBookmark('+bm.page+')"><span style="font-size:18px">🔖</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+esc(bm.title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+new Date(bm.timestamp).toLocaleString()+'</div></div><button onclick="event.stopPropagation();act('+ba+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-muted)">🗑️</button></div>'}).join('')+'</div>')+'</div></div>'}
-function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(_editName(data))+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(_editShort(data))+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="neutral"'+(gender==='neutral'||!gender?' selected':'')+'>指定なし</option><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div>'+_voicePickerHtml(data)+'<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🎨 カラーセット<span style="font-size:11px;color:var(--muted);font-weight:400">（吹き出し色 + アイコン色のセット）</span></label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:64px;height:40px;border-radius:18px 18px 18px 4px;border:3px solid '+(data.bubbleColor===c.bubble?'var(--accent)':'var(--border)')+';background:'+c.bubble+';cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding-left:6px" title="'+c.name+'"><span style="width:18px;height:18px;border-radius:50%;background:'+c.icon+';border:1px solid rgba(0,0,0,0.1)"></span></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 色を個別に指定</button>';if(state.colorPickerOpen){h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色（背景）</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div>';if(!data.iconImage)h+='<div style="flex:1"><label style="font-size:11px">アイコン色（略称表示用）</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div>';h+='</div>';}h+='</div><div><div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button onclick="(function(){var v=state.editingItem.data;var en=(v.voiceLang===\'en\');var utt=new SpeechSynthesisUtterance(en?(v.name?v.name+\'. This is a test voice.\':\'This is a test voice.\'):(v.name?v.name+\'。テスト音声です。\':\'テスト音声です。\'));utt.lang=en?\'en-US\':\'ja-JP\';var fv=_ttsVoice(v);if(fv)utt.voice=fv;utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.3));speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生（標準音声）</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">プレビューは標準音声（VOICEVOX/Aura は生成時に使用）</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
+function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(_editName(data))+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(_editShort(data))+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="neutral"'+(gender==='neutral'||!gender?' selected':'')+'>指定なし</option><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div>'+_voicePickerHtml(data)+'<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🎨 カラーセット<span style="font-size:11px;color:var(--muted);font-weight:400">（吹き出し色 + アイコン色のセット）</span></label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:64px;height:40px;border-radius:18px 18px 18px 4px;border:3px solid '+(data.bubbleColor===c.bubble?'var(--accent)':'var(--border)')+';background:'+c.bubble+';cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding-left:6px" title="'+c.name+'"><span style="width:18px;height:18px;border-radius:50%;background:'+c.icon+';border:1px solid rgba(0,0,0,0.1)"></span></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 色を個別に指定</button>';if(state.colorPickerOpen){h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色（背景）</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div>';if(!data.iconImage)h+='<div style="flex:1"><label style="font-size:11px">アイコン色（略称表示用）</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div>';h+='</div>';}h+='</div><div><div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button onclick="_testVoice()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">日本語=標準音声で試聴／英語=Auraで試聴（要デプロイ）</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト</label><textarea rows="8" oninput="state.editingItem.data.text=this.value" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(data.text)+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
 function openGallery(){
   state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;
   if(!state.galleryManifest){
