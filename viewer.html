@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v45_vv_testplay';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v46_talk_fallback';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -122,6 +122,8 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .char-icon-wrap{position:relative;flex-shrink:0;display:inline-flex}
 @keyframes tts-glow{0%,100%{box-shadow:0 0 0 2px rgba(99,102,241,.5),0 2px 8px var(--shadow)}50%{box-shadow:0 0 0 4px rgba(99,102,241,.9),0 2px 8px var(--shadow)}}
 .char-icon-wrap.tts-speaking .char-icon{animation:tts-glow 0.44s steps(2,end) infinite}
+@keyframes tts-talk{0%{transform:scaleY(1)}25%{transform:scaleY(0.9)}45%{transform:scaleY(0.99)}65%{transform:scaleY(0.93)}100%{transform:scaleY(1)}}
+.tts-talk .char-icon img{animation:tts-talk 0.26s ease-in-out infinite;transform-origin:50% 100%;will-change:transform}
 .lipsync-ov{position:absolute;top:0;left:0;border-radius:50%;pointer-events:none;z-index:4}
 .tts-highlight{background:linear-gradient(90deg,rgba(99,102,241,.12),rgba(139,92,246,.08));border-radius:6px;outline:1px solid rgba(99,102,241,.3)}
 @keyframes tts-narr-pulse{0%,100%{background:linear-gradient(90deg,rgba(99,102,241,.10),rgba(139,92,246,.06));box-shadow:inset 0 0 0 1px rgba(99,102,241,.25)}50%{background:linear-gradient(90deg,rgba(99,102,241,.22),rgba(139,92,246,.18));box-shadow:inset 0 0 0 2px rgba(99,102,241,.55)}}
@@ -1180,6 +1182,7 @@ function _lipWrapsForCurrent(cid){
 function _applyLipGif(cid,gifUrl){
   _lipWrapsForCurrent(cid).forEach(function(wrap){
     wrap.classList.add('tts-speaking');
+    wrap.classList.remove('tts-talk');
     var imgEl=wrap.querySelector('.char-icon img');
     if(imgEl){
       if(!imgEl.dataset.lipOrig)imgEl.dataset.lipOrig=imgEl.src;
@@ -1189,12 +1192,13 @@ function _applyLipGif(cid,gifUrl){
 }
 // GIF未生成時、元画像のまま発光だけ適用（見苦しい口パクフォールバック抑制）
 function _applyLipGlow(cid){
-  _lipWrapsForCurrent(cid).forEach(function(wrap){wrap.classList.add('tts-speaking');});
+  _lipWrapsForCurrent(cid).forEach(function(wrap){wrap.classList.add('tts-speaking');wrap.classList.add('tts-talk');});
 }
 
 function _restoreLipImg(cid){
   document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]').forEach(function(wrap){
     wrap.classList.remove('tts-speaking');
+    wrap.classList.remove('tts-talk');
     var imgEl=wrap.querySelector('.char-icon img');
     if(imgEl&&imgEl.dataset.lipOrig){
       imgEl.src=imgEl.dataset.lipOrig;
