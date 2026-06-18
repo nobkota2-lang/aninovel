@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v46_talk_fallback';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v47_gif_probe_log';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1108,7 +1108,7 @@ function _generateLipGif(cid,callback){
   // 見つかればそれを採用、無ければ next() で MediaPipe 生成にフォールバック。
   function tryPreGen(next){
     var m=/(?:^https?:\/\/[^\/]+)?\/?gallery\/(.+)\.png$/i.exec(iconImg||"");
-    if(!m){return next();}
+    if(!m){console.info("[LipSync] アイコンが/gallery/...png形式でないため事前生成GIF探索をスキップ→MediaPipe。icon:",iconImg);return next();}
     var gifUrl="/lipsync/"+m[1]+".gif";
     var probe=new Image(),done=false;
     probe.onload=function(){
@@ -1119,7 +1119,7 @@ function _generateLipGif(cid,callback){
     };
     probe.onerror=function(){
       if(done)return;done=true;
-      console.info("[LipSync] 事前生成GIFなし→MediaPipe生成");
+      console.info("[LipSync] 事前生成GIF 404→MediaPipe生成。探したURL:",gifUrl,"／元アイコン:",iconImg);
       next();
     };
     probe.src=gifUrl;
