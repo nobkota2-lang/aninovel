@@ -254,4 +254,35 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
   /* ようこそバナーの余白を少し詰める */
   .welcome-banner { padding: 16px 16px; }
 }
- 
+ /* ============================================================
+   モバイル ボタン溢れ対策 v2 (portal)
+   css/portal.css の「末尾」に貼り付けてください。
+   既存ルールは書き換えず、後勝ちで上書きします。
+   ポータルJS(portal.js)側の ⋮メニュー実装(p_mobile_more_menu)とセットです。
+   ============================================================ */
+
+/* 横並びボタンの器を折り返し可能に（安全網：何があっても全ボタン到達可能） */
+.user-badge,
+.header-actions,
+.auth-buttons { flex-wrap: wrap; }
+
+/* ログイン時バッジ：PCは従来通り横並び、モバイルは「⋮」メニューに集約 */
+.badge-actions { display: contents; }            /* PC: 子ボタンがそのまま並ぶ */
+.user-badge .badge-more-btn { display: none; }   /* PC: ⋮ は隠す */
+
+@media (max-width: 768px) {
+  /* ヘッダーの 56px 固定高を解除（折り返した2段目が隠れない） */
+  .portal-header { height: auto; min-height: 56px; padding: 8px 12px; }
+  .header-actions { justify-content: flex-end; gap: 6px; row-gap: 6px; }
+
+  /* バッジ：個別アクションを隠し、⋮ メニューへ集約 */
+  .badge-actions { display: none; }
+  .user-badge .badge-more-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 18px; line-height: 1; padding: 6px 10px;
+  }
+  .user-badge { gap: 8px; }
+
+  /* ようこそバナーの余白を少し詰める */
+  .welcome-banner { padding: 16px 16px; }
+}

@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
-  try{window.__ANINOVEL_PORTAL_VER__='portal_ux_p1_v5_continue';}catch(e){}
+  try{window.__ANINOVEL_PORTAL_VER__='p_mobile_more_menu';}catch(e){}
 
   // === 多言語: 作品コンテンツ翻訳 ===
   var _ptCache = {};
@@ -464,13 +464,14 @@
       }, rm.icon + ' ' + (_plang()==='en'?((rm.labelEn||rm.label)+' mode'):(rm.label+'モード')));
       badge.appendChild(modeBadge);
       badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
+      var actionsWrap = h('div', { className: 'badge-actions' });
 
       // モード切替ドロップダウン（複数ロール保有時）
       var roles = state.user.roles || [ar];
       if (roles.length > 1) {
         var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: (_plang()==='en'?'Switch mode':'モード切替'), style: 'font-size:13px' }, '\u{1F504}');
         switchBtn.onclick = function() { showRoleSwitchMenu(switchBtn); };
-        badge.appendChild(switchBtn);
+        actionsWrap.appendChild(switchBtn);
       } else {
         // 未登録ロールへの追加登録ボタン
         var addLabel = _plang()==='en' ? (ar === 'reader' ? 'Author registration' : 'Reader registration') : (ar === 'reader' ? '作者登録' : '読者登録');
@@ -485,21 +486,21 @@
             if (em) em.value = state.user.email || '';
           }, 0);
         };
-        badge.appendChild(addBtn);
+        actionsWrap.appendChild(addBtn);
       }
 
       var dashBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'ダッシュボード' }, '\u{1F4CA}');
       dashBtn.onclick = showDashboard;
-      badge.appendChild(dashBtn);
+      actionsWrap.appendChild(dashBtn);
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
         myBtn.onclick = showMyWorksModal;
-        badge.appendChild(myBtn);
+        actionsWrap.appendChild(myBtn);
       }
       if (roles.indexOf('owner') >= 0) {
         var adminBtn = h('button', { className: 'btn btn-ghost btn-sm', title: '管理パネル', style: 'color:#F59E0B' }, '\uD83D\uDC51');
         adminBtn.onclick = showAdminPanel;
-        badge.appendChild(adminBtn);
+        actionsWrap.appendChild(adminBtn);
       }
       var logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログアウト');
       logoutBtn.onclick = function() {
@@ -509,7 +510,11 @@
           toast('ログアウトしました');
         });
       };
-      badge.appendChild(logoutBtn);
+      actionsWrap.appendChild(logoutBtn);
+      badge.appendChild(actionsWrap);
+      var moreBtn = h('button', { className: 'btn btn-ghost btn-sm badge-more-btn', title: (_plang()==='en'?'Menu':'メニュー') }, '⋮');
+      moreBtn.onclick = function() { showBadgeMenu(moreBtn, actionsWrap); };
+      badge.appendChild(moreBtn);
       container.appendChild(badge);
     } else {
       var loginBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログイン');
@@ -519,7 +524,30 @@
   }
 
   // === モード切替ポップアップ ===
-  function showRoleSwitchMenu(anchor) {
+  function showBadgeMenu(anchor, actionsWrap) {
+    var old = document.getElementById('badge-more-popup');
+    if (old) { old.remove(); return; }
+    var popup = h('div', { id: 'badge-more-popup', style: 'position:absolute;right:0;top:100%;margin-top:4px;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:1000;min-width:190px;padding:6px 0' });
+    var btns = actionsWrap.querySelectorAll('button');
+    Array.prototype.forEach.call(btns, function(b) {
+      var txt = (b.textContent || '').trim();
+      var title = b.getAttribute('title') || '';
+      var label = (txt.length <= 3) ? (txt + (title ? '  ' + title : '')) : txt;
+      var item = h('button', { style: 'display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left' }, label);
+      item.onclick = function() { popup.remove(); b.click(); };
+      item.onmouseenter = function() { item.style.background = 'var(--bg-secondary)'; };
+      item.onmouseleave = function() { item.style.background = 'none'; };
+      popup.appendChild(item);
+    });
+    anchor.parentNode.style.position = 'relative';
+    anchor.parentNode.appendChild(popup);
+    setTimeout(function() {
+      document.addEventListener('click', function hh(e) {
+        if (!popup.contains(e.target) && e.target !== anchor) { popup.remove(); document.removeEventListener('click', hh); }
+      });
+    }, 0);
+}
+function showRoleSwitchMenu(anchor) {
     var old = $('#role-switch-popup');
     if (old) { old.remove(); return; }
     var popup = h('div', { id: 'role-switch-popup', style: 'position:absolute;right:0;top:100%;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:999;min-width:180px;padding:6px 0' });
