@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v47_gif_probe_log';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v48_aura_pregen';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1523,7 +1523,7 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
     var ctext=chunks[idx];
     var key=_simpleHashJS(ctext+'|aura|'+voice);
     if(_auraCache[key]){playUrl(_auraCache[key]);return;}
-    fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ctext,voice:voice,model:'aura-2-en'})})
+    fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ctext,voice:voice,model:'aura-1'})})
       .then(function(res){if(!res.ok)throw new Error('tts http '+res.status);return res.blob();})
       .then(function(b){if(stale())return;var url=URL.createObjectURL(b);_auraCache[key]=url;playUrl(url);})
       .catch(function(e){if(stale())return;if(onError)onError(e);});
@@ -1902,8 +1902,8 @@ async function generateVoicesLocal(opts){
   var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
   var total=items.length,generated=0,cached=0,failed=0;
   if(!total){alert('生成対象のセリフがありません');return {ok:true,total:0};}
-  if(!confirm('VOICEVOX でこの作品の全セリフ('+total+'件)を音声生成します。\n数十秒〜数分かかります。続行しますか?'))return {ok:false,cancelled:true};
-  var progressBox=_showProgress('🎤 音声生成中');
+  if(!opts.noConfirm && !confirm('VOICEVOX でこの作品の全セリフ('+total+'件)を音声生成します。\n数十秒〜数分かかります。続行しますか?'))return {ok:false,cancelled:true};
+  var progressBox=opts.progressBox||_showProgress('🎤 音声生成中');
   try{
     for(var i=0;i<items.length;i++){
       var it=items[i];
@@ -1933,12 +1933,87 @@ async function generateVoicesLocal(opts){
         console.warn('[VOICEVOX] 失敗 item='+it.id,e&&e.message||e);failed++;
       }
     }
-  }finally{_hideProgress(progressBox);}
+  }finally{if(!opts.progressBox)_hideProgress(progressBox);}
   // 再生時に使えるようソースマップを再構築
   _audioManifest=_audioManifest||false; // 既存維持
-  await _buildAudioSources();
-  alert('音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
+  if(!opts.noRebuild)await _buildAudioSources();
+  if(!opts.noAlert)alert('音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
   return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
+}
+// ===== 英語クラウド事前生成 (Deepgram Aura via /api/tts) — VOICEVOXと同じIDBへ保存 =====
+async function generateVoicesAura(opts){
+  opts=opts||{};
+  var wid=_currentWorkId();
+  var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
+  var enItems=items.filter(function(it){
+    var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
+    return ch&&ch.voiceLang==='en';
+  });
+  var total=enItems.length;
+  if(!total){if(!opts.silent)alert('英語キャラの生成対象セリフがありません');return {ok:true,total:0,generated:0,cached:0,failed:0};}
+  if(!opts.noConfirm){
+    if(!confirm('クラウド(Aura)でこの作品の英語セリフ('+total+'件)を音声生成します。\nこのブラウザに保存されます。続行しますか?'))return {ok:false,cancelled:true};
+  }
+  var existing={};
+  (await _idbListByWork(wid)).forEach(function(r){existing[r.itemId]=r;});
+  var generated=0,cached=0,failed=0;
+  var progressBox=opts.progressBox||_showProgress('\u2601\uFE0F 英語音声生成中 (Aura)');
+  try{
+    for(var i=0;i<enItems.length;i++){
+      var it=enItems[i];
+      var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
+      var voice=_auraVoiceFor(ch);
+      var hash=_simpleHashJS((it.text||'')+'|aura1='+voice);
+      var prev=existing[it.id];
+      if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
+      _updateProgress(progressBox,i+1,total,it.id);
+      try{
+        var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:it.text,voice:voice,model:'aura-1'})});
+        if(!res.ok)throw new Error('tts http '+res.status);
+        var blob=await res.blob();
+        if(!blob||blob.size<200)throw new Error('empty audio '+(blob&&blob.size));
+        await _idbPut(wid,it.id,blob,{engine:'aura',voice:voice,hash:hash,chars:(it.text||'').length,bytes:blob.size});
+        generated++;
+      }catch(e){
+        console.warn('[Aura] 失敗 item='+it.id,e&&e.message||e);failed++;
+      }
+    }
+  }finally{if(!opts.progressBox)_hideProgress(progressBox);}
+  if(!opts.noRebuild)await _buildAudioSources();
+  if(!opts.noAlert)alert('英語音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
+  return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
+}
+// ===== 統合ディスパッチャ: 英語=Aura(クラウド) / 日本語=VOICEVOX を一括 =====
+async function generateVoices(){
+  var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
+  var enCnt=0,jaCnt=0;
+  items.forEach(function(it){
+    var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
+    if(ch&&ch.voiceLang==='en')enCnt++;else jaCnt++;
+  });
+  if(!enCnt&&!jaCnt){alert('生成対象のセリフがありません');return;}
+  var msg='この作品の音声を生成します。\n';
+  if(enCnt)msg+='\u30FB英語セリフ '+enCnt+'件 \u2192 クラウド(Aura)\n';
+  if(jaCnt)msg+='\u30FB日本語セリフ '+jaCnt+'件 \u2192 VOICEVOX (要 localhost:50021 起動)\n';
+  msg+='\n続行しますか?';
+  if(!confirm(msg))return;
+  var pg=_showProgress('\U0001F3A4 音声生成中');
+  var rEn={generated:0,cached:0,failed:0,total:0},rJa={generated:0,cached:0,failed:0,total:0};
+  try{
+    if(enCnt){
+      var re=await generateVoicesAura({noConfirm:true,noAlert:true,noRebuild:true,progressBox:pg});
+      if(re)rEn=re;
+    }
+    if(jaCnt){
+      var rj=await generateVoicesLocal({noConfirm:true,noAlert:true,noRebuild:true,progressBox:pg});
+      if(rj&&rj.ok)rJa=rj;
+    }
+  }finally{_hideProgress(pg);}
+  await _buildAudioSources();
+  var lines=['音声生成完了'];
+  if(enCnt)lines.push('英語(Aura): 新規='+rEn.generated+' / キャッシュ='+rEn.cached+' / 失敗='+rEn.failed);
+  if(jaCnt)lines.push('日本語(VOICEVOX): 新規='+rJa.generated+' / キャッシュ='+rJa.cached+' / 失敗='+rJa.failed);
+  alert(lines.join('\n'));
 }
 function _showProgress(title){
   var el=document.createElement('div');
@@ -1983,9 +2058,19 @@ function _speakItem(item,onEnd){
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
   // 英語キャラ: クラウドAura(高音質)で再生。失敗時のみ英語Web Speechへ。
   if(ch&&ch.voiceLang==='en'){
-    _auraCtrl=_speakItemAura(item,ch,mySession,applyCharId,
-      function(){if(mySession!==_speakSessionId)return;_auraCtrl=null;safeEnd();},
-      function(err){if(mySession!==_speakSessionId)return;_auraCtrl=null;console.warn('[TTS] Aura失敗→英語Web Speech:',err&&err.message||err);try{speechSynthesis.cancel();}catch(e){}_speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);});
+    var _liveAura=function(){
+      _auraCtrl=_speakItemAura(item,ch,mySession,applyCharId,
+        function(){if(mySession!==_speakSessionId)return;_auraCtrl=null;safeEnd();},
+        function(err){if(mySession!==_speakSessionId)return;_auraCtrl=null;console.warn('[TTS] Aura失敗→英語Web Speech:',err&&err.message||err);try{speechSynthesis.cancel();}catch(e){}_speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);});
+    };
+    // 事前生成(IDB/サーバー)があれば優先再生、無い/失敗時はライブAuraへ
+    if(_hasPreAudio(item.id)){
+      _preAudioCtrl=_speakItemAudio(item,ch,mySession,applyCharId,
+        function(){if(mySession!==_speakSessionId)return;_preAudioCtrl=null;safeEnd();},
+        function(err){if(mySession!==_speakSessionId)return;console.warn('[TTS] 英語事前生成音声失敗→ライブAura:',err&&err.message||err);_preAudioCtrl=null;_liveAura();});
+      return;
+    }
+    _liveAura();
     return;
   }
   // 音声オーバーライドが設定されている場合は事前生成音声を使わず Web Speech 側で再生
@@ -2367,7 +2452,7 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=_l
 
 function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div>'+_langToggle()+'<button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
-function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';h+='<button onclick="generateVoicesLocal()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="VOICEVOX (localhost:50021) でこの作品の全セリフを音声生成し、このブラウザに保存">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleLang()" class="btn-icon" title="Language / 言語切替">'+(state.lang==='en'?'🌐EN':'🌐JA')+'</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
+function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var h='<div style="display:flex;flex-direction:column;height:100vh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px">';if(state.isAuthorMode){h+='<button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button>';if(_workParam&&_workParam.indexOf("my_")===0)h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';h+='<button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="VOICEVOX (localhost:50021) でこの作品の全セリフを音声生成し、このブラウザに保存">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='<button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label>';}h+='<button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button>'+((!_portalMode||_isLoggedIn())?'<button onclick="addBookmark()" class="btn-icon" title="しおり追加">🔖</button><button onclick="state.bookmarkListOpen=!state.bookmarkListOpen;render()" class="btn-icon" title="しおり一覧">📚</button>':'')+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><button onclick="toggleLang()" class="btn-icon" title="Language / 言語切替">'+(state.lang==='en'?'🌐EN':'🌐JA')+'</button><button onclick="toggleDarkMode()" class="btn-icon" title="'+(state.darkMode?'ライトモードに切替':'ナイトモードに切替')+'">'+(state.darkMode?'☀️':'🌙')+'</button><button onclick="toggleFullscreen()" class="btn-icon" title="'+(state.fullscreen?'通常表示に戻す':'全画面表示')+'">'+(state.fullscreen?'⊡':'⊞')+'</button><button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){h+=item.type==='dialogue'?renderDialogue(item,i):renderNarration(item);h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar
     h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border)"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(_cname(ch))+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';h+='<div class="page-footer"><button onclick="jP('+(state.currentPage-1)+')"'+(state.currentPage===0?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage===0?'opacity:.4;cursor:default':'')+'">← 前</button><div style="display:flex;align-items:center;gap:12px"><span style="font-size:13px;color:var(--text-secondary)"><strong>'+(state.currentPage+1)+'</strong> / '+tp+'</span><input type="number" min="1" max="'+tp+'" value="'+(state.currentPage+1)+'" onchange="jP(parseInt(this.value)-1)" style="width:56px;text-align:center;padding:4px;font-size:13px">'+(state.isAuthorMode?'<span style="font-size:11px;color:var(--text-muted)">💾 '+state.lastSaved+'</span>':'<button onclick="if(window.AninovelShare)AninovelShare.openMenu({title:(state.novel&&state.novel.title)||\'アニノベル\',url:location.href,text:\'「\'+((state.novel&&state.novel.title)||\'\')+\'」を読んでいます\'})" class="btn-icon" title="シェア" style="font-size:14px;color:var(--text-muted);background:transparent;border:none;cursor:pointer">📤</button>'+'<button onclick="if(window.AninovelModeration)AninovelModeration.openReportDialog({workId:_workParam||\'_local\',targetType:\'work\',targetId:_workParam||\'_local\',ctx:state.novel&&state.novel.title})" class="btn-icon" title="通報" style="font-size:14px;color:var(--text-muted);background:transparent;border:none;cursor:pointer">🚩</button>')+'</div><button onclick="jP('+(state.currentPage+1)+')"'+(state.currentPage>=tp-1?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage>=tp-1?'opacity:.4;cursor:default':'')+'">次 →</button></div>';if(state.settingsOpen)h+=renderSettings();if(state.tocOpen)h+=renderTOC();if(state.bookmarkListOpen)h+=renderBM();h+='</div>';return h}
 
