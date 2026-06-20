@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v50_mobile_overflow_menu';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v51_touch_button_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3222,6 +3222,7 @@ function setupDnD(){
 
     // === Mobile Touch D&D ===
     app.addEventListener('touchstart',function(e){
+        if(e.target.closest('button,a,input,select,textarea,label'))return;
         var el=e.target.closest('[data-dragid]');
         if(el&&state.isAuthorMode){
             _dType='content';_dPayload=el.getAttribute('data-dragid');_tMoved=false;
