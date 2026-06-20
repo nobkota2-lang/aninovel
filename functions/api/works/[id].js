@@ -18,7 +18,7 @@
  *   DELETE /api/works/pub_xxxxx              … 削除
  */
 
-const ID_RE = /^pub_[A-Za-z0-9_]{1,80}$/;
+const ID_RE = /^(?:pub|demo|sample|featured|tutorial)_[A-Za-z0-9_-]{1,80}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 const CATALOG_KEY = '__catalog__';
 const MAX_VERSIONS = 20;  // 保持するバージョン履歴の最大数
@@ -65,7 +65,7 @@ async function readVersionList(kv, id) {
 export async function onRequestGet(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
-    return json({ error: 'invalid work id' }, 400);
+    return json({ error: 'invalid work id: ' + String(id) + ' (allowed: pub_/demo_/sample_/featured_/tutorial_ + [A-Za-z0-9_-])' }, 400);
   }
   const kv = getKV(context.env);
   if (!kv) {
@@ -114,7 +114,7 @@ export async function onRequestGet(context) {
 export async function onRequestPut(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
-    return json({ error: 'invalid work id' }, 400);
+    return json({ error: 'invalid work id: ' + String(id) + ' (allowed: pub_/demo_/sample_/featured_/tutorial_ + [A-Za-z0-9_-])' }, 400);
   }
   const kv = getKV(context.env);
   if (!kv) {
@@ -203,7 +203,7 @@ export async function onRequestPut(context) {
 export async function onRequestDelete(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
-    return json({ error: 'invalid work id' }, 400);
+    return json({ error: 'invalid work id: ' + String(id) + ' (allowed: pub_/demo_/sample_/featured_/tutorial_ + [A-Za-z0-9_-])' }, 400);
   }
   const kv = getKV(context.env);
   if (!kv) {
