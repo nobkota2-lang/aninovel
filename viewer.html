@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v54_owner_publish_clarify';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v55_slug_id_accept';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3426,9 +3426,9 @@ async function publishMyWork(){
     }
 
     // ===== オーナーモード：既存作品（デモ/pub_*等）を直接更新公開 =====
-    var _OWNER_ID_RE=/^(?:pub|demo|sample|featured|tutorial)_[A-Za-z0-9_-]{1,80}$/;
+    var _OWNER_ID_RE=/^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
     if(!_OWNER_ID_RE.test(_workParam)){
-      alert('この作品IDはサーバーに上書き公開できません。\n作品ID: '+_workParam+'\n\n受け入れる形式:  pub_ / demo_ / sample_ / featured_ / tutorial_ + [A-Za-z0-9_-]\n\n（デモ作品のフォルダ名/ファイル名がこの形式になっているかご確認ください）');
+      alert('この作品IDはサーバーに上書き公開できません。\n作品ID: '+_workParam+'\n\n受け入れる形式: 先頭がアルファベット、続けて [A-Za-z0-9_-]（最大100文字）');
       return;
     }
     if(!confirm('オーナー権限でこの作品を上書き公開します。\n作品ID: '+_workParam+'\n続行しますか？'))return;
