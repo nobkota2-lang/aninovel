@@ -72,7 +72,7 @@ export async function onRequestPost({ request, env }) {
 
     const canonical = JSON.stringify({ v:4, t:target, s:source, title, items:items.map(i=>[i.id,i.text]), chars:characters.map(c=>[c.id,c.name]) });
     const hash = (await sha256hex(canonical)).slice(0, 40);
-    const cacheKey = `worktr6:${target}:${hash}`;
+    const cacheKey = `worktr7:${target}:${hash}`;
 
     if (KV && !debug) {
       const cached = await KV.get(cacheKey);
@@ -111,6 +111,10 @@ export async function onRequestPost({ request, env }) {
       if (!s) return true;
       const t = s.trim();
       if (!t) return true;
+      // ★ターゲット言語の特性違反（英語ターゲットで日本語が残っていれば劣化）
+      if (target === 'en' && /[\u3040-\u30ff\u3400-\u9fff]/.test(t)) return true;
+      // ★ターゲットが日本語でラテン文字主体ならおかしい（簡易チェック）
+      if (target === 'ja' && t.length >= 6 && !/[\u3040-\u30ff\u3400-\u9fff]/.test(t) && /^[A-Za-z0-9 ,.!?'"\-]+$/.test(t)) return true;
       // 末尾が中途半端な前置詞/不完全な文
       if (/\b(?:to|of|in|on|at|for|with|by|from|the|a|an|and|or|but)\.?$/i.test(t)) return true;
       // 同じ3〜12語フレーズが3回以上連続
@@ -123,7 +127,7 @@ export async function onRequestPost({ request, env }) {
         const uniq = new Set(tokens).size;
         if (uniq / tokens.length < 0.5) return true;
       }
-      // 結果が原文より極端に短い（情報欠落の兆候、ただし1〜2語の短文は除外）
+      // 結果が原文より極端に短い
       if (original && original.length >= 12 && t.length < original.length * 0.35) return true;
       return false;
     }
@@ -132,7 +136,7 @@ export async function onRequestPost({ request, env }) {
     async function llamaTranslate(text){
       const res = await runWithFallback({
         messages: [
-          { role:'system', content:`You are a literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. Preserve tone and cultural nuance (use natural idioms; never translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes.` },
+          { role:'system', content:`You are a literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. CRITICAL: Output MUST be entirely in ${tgtISO}; never include any ${srcISO} characters or romanized originals in the output. Preserve tone and cultural nuance (use natural ${tgtISO} idioms; never translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes, no explanations.` },
           { role:'user', content:text },
         ],
         max_tokens: Math.max(200, Math.min(1024, text.length * 4)),
@@ -190,11 +194,20 @@ export async function onRequestPost({ request, env }) {
           out = s;
         }
         if (debug) dbg.push({op:'m2m', in:s, out});
-        // 劣化検出 → llama
+        // 劣化検出（日本語が残っている等）→ llama にフォールバック
         if (isDegenerate(out, s) || out === s) {
           const alt = await llamaTranslate(s);
           if (debug) dbg.push({op:'llama-fallback', in:s, m2m:out, llama:alt});
-          if (!isDegenerate(alt, s)) out = alt;
+          if (!isDegenerate(alt, s)) {
+            out = alt;
+          } else {
+            // llama も劣化 → もう一度 llama に再試行（明示的に「英語のみで」と再要求）
+            const retry = await llamaTranslate('Translate the following sentence to ' + tgtISO + ' (output ONLY ' + tgtISO + ', no other characters): ' + s);
+            if (debug) dbg.push({op:'llama-retry', in:s, retry});
+            if (!isDegenerate(retry, s)) out = retry;
+            // それでもダメなら、せめて原文の日本語を残すよりは英訳の形式に寄せる
+            // → でも勝手な翻訳は危険なので原文を残す
+          }
         }
         tr.push(out);
       }

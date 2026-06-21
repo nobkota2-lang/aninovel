@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v58_i18n_republish';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v59_tts_text_lang';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2202,7 +2202,7 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       setTimeout(function(){if(!isStale())speakNext();},120);return;
     }
     var utt=new SpeechSynthesisUtterance(chunks[idx]);
-    utt.lang=((ch&&ch.voiceLang==='en')?'en-US':'ja-JP');
+    var _txtHasJa=/[\u3040-\u30ff\u3400-\u9fff]/.test(chunks[idx]);var _txtHasEn=/[A-Za-z]{2,}/.test(chunks[idx]);utt.lang=_txtHasJa?'ja-JP':(_txtHasEn?'en-US':((ch&&ch.voiceLang==='en')?'en-US':'ja-JP'));
     utt.rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.4));
     var _gp=ch&&ch.gender;utt.pitch=(_gp==='male')?(state.lang==='en'?0.8:0.92):((_gp==='female')?(state.lang==='en'?1.3:1.06):1.0);
     if(currentVoice)utt.voice=currentVoice;
