@@ -14,7 +14,14 @@ const LANG = { en:'english', ja:'japanese', zh:'chinese', ko:'korean', es:'spani
 const ISO  = { en:'English', ja:'Japanese', zh:'Chinese', ko:'Korean', es:'Spanish', fr:'French', de:'German', pt:'Portuguese', it:'Italian' };
 
 const MODEL = '@cf/meta/m2m100-1.2b';
-const FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const FALLBACK_MODELS = [
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/google/gemma-3-12b-it',
+  '@cf/mistralai/mistral-small-3.1-24b-instruct',
+  '@cf/meta/llama-3.2-3b-instruct',
+];
+let _activeFallback = null; // セッション内で生きてるモデルを記憶
 const CONCURRENCY = 4;
 const MAX_CHARS_PER_CHUNK = 120;
 
@@ -42,9 +49,30 @@ export async function onRequestPost({ request, env }) {
 
     // キャッシュ v4（再翻訳強制）
     const KV = env.WORKS || env.WORKS_KV;
+
+    // ===== 現行モデルを順に試して、最初に成功したモデルで実行 =====
+    async function runWithFallback(payload){
+      const order = _activeFallback
+        ? [_activeFallback, ...FALLBACK_MODELS.filter(m=>m!==_activeFallback)]
+        : FALLBACK_MODELS.slice();
+      let lastErr = null;
+      for (const m of order) {
+        try {
+          const r = await env.AI.run(m, payload);
+          _activeFallback = m;
+          if (debug) dbg.push({op:'fallback-model-ok', model: m});
+          return { ok: true, model: m, response: r };
+        } catch (e) {
+          lastErr = e;
+          if (debug) dbg.push({op:'fallback-model-fail', model: m, error: String(e && e.message)});
+        }
+      }
+      return { ok: false, error: lastErr };
+    }
+
     const canonical = JSON.stringify({ v:4, t:target, s:source, title, items:items.map(i=>[i.id,i.text]), chars:characters.map(c=>[c.id,c.name]) });
     const hash = (await sha256hex(canonical)).slice(0, 40);
-    const cacheKey = `worktr4:${target}:${hash}`;
+    const cacheKey = `worktr6:${target}:${hash}`;
 
     if (KV && !debug) {
       const cached = await KV.get(cacheKey);
@@ -102,58 +130,48 @@ export async function onRequestPost({ request, env }) {
 
     // ===== llama 翻訳（フォールバック）=====
     async function llamaTranslate(text){
-      try {
-        const r = await env.AI.run(FALLBACK_MODEL, {
-          messages: [
-            { role:'system', content:`You are a literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. Preserve tone and cultural nuance (use natural idioms; never translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes.` },
-            { role:'user', content:text },
-          ],
-          max_tokens: Math.max(200, Math.min(1024, text.length * 4)),
-          temperature: 0.2,
-        });
-        let out = (r && (r.response != null ? r.response : r.result)) || '';
-        out = String(out).trim();
-        // 装飾・前置きを除去
-        out = out.replace(/^[`"'*]+|[`"'*]+$/g, '').trim();
-        out = out.replace(/^(?:translation|english|英訳|訳)[: \-]+/i, '').trim();
-        return out || text;
-      } catch (e) {
-        if (debug) dbg.push({op:'llama-translate', error: String(e && e.message)});
-        return text;
-      }
+      const res = await runWithFallback({
+        messages: [
+          { role:'system', content:`You are a literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. Preserve tone and cultural nuance (use natural idioms; never translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes.` },
+          { role:'user', content:text },
+        ],
+        max_tokens: Math.max(200, Math.min(1024, text.length * 4)),
+        temperature: 0.2,
+      });
+      if (!res.ok) { if (debug) dbg.push({op:'llama-translate-allfail', error: String(res.error && res.error.message)}); return text; }
+      const r = res.response;
+      let out = (r && (r.response != null ? r.response : r.result)) || '';
+      out = String(out).trim();
+      out = out.replace(/^[`"'*]+|[`"'*]+$/g, '').trim();
+      out = out.replace(/^(?:translation|english|英訳|訳)[: \-]+/i, '').trim();
+      return out || text;
     }
 
     // ===== ローマ字化（緩い検証）=====
     async function romanizeName(name){
       if (!name || !name.trim()) return name;
       if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
-      try {
-        const r = await env.AI.run(FALLBACK_MODEL, {
-          messages: [
-            { role:'system', content:'Output ONLY Hepburn romaji for the Japanese personal name. No quotes, no markdown, no explanation, no labels. Family name first, given name second, separated by a single space. Capitalize the first letter of each name. Examples: 田中 健太 -> Tanaka Kenta. 佐藤 美咲 -> Sato Misaki. 山田太郎 -> Yamada Taro. 愛美 -> Aimi.' },
-            { role:'user', content:name },
-          ],
-          max_tokens: 32,
-          temperature: 0.0,
-        });
-        let raw = (r && (r.response != null ? r.response : r.result)) || '';
-        let out = String(raw).trim();
-        // 1行目だけ
-        out = out.split(/[\r\n]+/)[0].trim();
-        // 装飾・記号・前置きを除去
-        out = out.replace(/^[`"'*_\[\(『「]+|[`"'*_\]\)。、!?！？.,;:』」]+$/g, '').trim();
-        out = out.replace(/^(?:romaji|name|hepburn|translation|romanized)[: \-]+/i, '').trim();
-        // 妥当な英字名の判定（緩め）：英字始まり、英字/空白/ハイフン/ピリオド許可
-        if (out && /^[A-Za-z][A-Za-z \u00C0-\u017F\.\-']{0,60}$/.test(out) && !/[\u3040-\u30ff\u3400-\u9fff]/.test(out)) {
-          if (debug) dbg.push({op:'romanize', in: name, raw, out});
-          return out;
-        }
-        if (debug) dbg.push({op:'romanize-reject', in: name, raw, out, reason: 'regex_or_has_jp'});
-        return name;
-      } catch (e) {
-        if (debug) dbg.push({op:'romanize-error', in: name, error: String(e && e.message)});
-        return name;
+      const res = await runWithFallback({
+        messages: [
+          { role:'system', content:'Output ONLY Hepburn romaji for the Japanese personal name. No quotes, no markdown, no explanation, no labels. Family name first, given name second, separated by a single space. Capitalize the first letter of each name. Examples: 田中 健太 -> Tanaka Kenta. 佐藤 美咲 -> Sato Misaki. 山田太郎 -> Yamada Taro. 愛美 -> Aimi.' },
+          { role:'user', content:name },
+        ],
+        max_tokens: 32,
+        temperature: 0.0,
+      });
+      if (!res.ok) { if (debug) dbg.push({op:'romanize-allfail', in: name, error: String(res.error && res.error.message)}); return name; }
+      const r = res.response;
+      let raw = (r && (r.response != null ? r.response : r.result)) || '';
+      let out = String(raw).trim();
+      out = out.split(/[\r\n]+/)[0].trim();
+      out = out.replace(/^[`"'*_\[\(『「]+|[`"'*_\]\)。、!?！？.,;:』」]+$/g, '').trim();
+      out = out.replace(/^(?:romaji|name|hepburn|translation|romanized)[: \-]+/i, '').trim();
+      if (out && /^[A-Za-z][A-Za-z \u00C0-\u017F\.\-']{0,60}$/.test(out) && !/[\u3040-\u30ff\u3400-\u9fff]/.test(out)) {
+        if (debug) dbg.push({op:'romanize', in: name, raw, out, model: res.model});
+        return out;
       }
+      if (debug) dbg.push({op:'romanize-reject', in: name, raw, out, model: res.model});
+      return name;
     }
 
     // ===== 1行翻訳 =====
@@ -207,7 +225,7 @@ export async function onRequestPost({ request, env }) {
     if (debug) out._debug = dbg;
     const payload = JSON.stringify(out);
     if (KV && !debug) await KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
-    return new Response(payload, { headers: { ...JSON_HEADERS, 'X-Cache':'MISS', 'X-KV': KV ? (KV === env.WORKS ? 'WORKS' : 'WORKS_KV') : 'NONE' } });
+    return new Response(payload, { headers: { ...JSON_HEADERS, 'X-Cache':'MISS', 'X-KV': KV ? (KV === env.WORKS ? 'WORKS' : 'WORKS_KV') : 'NONE', 'X-AI-Model': _activeFallback || 'none' } });
   } catch (e) {
     return json({ error:'exception', message: String((e && e.message) || e), _debug: debug?dbg:undefined }, 500);
   }
