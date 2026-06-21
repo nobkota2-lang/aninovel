@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v57_getwork_kv_first';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v58_i18n_republish';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2912,7 +2912,7 @@ var I18N_DICT={'中性':'Neutral','保存完了':'Saved','内容を保存しま�
   '重複は検出されませんでした 🎉':'No duplicates found 🎉',
   '★ = 削除推奨。「ジャンプ」で本文の位置を確認できます。':'★ = recommended for deletion. Use "Jump" to locate it in the text.',
   '同一テキストが複数ある箇所を表示します。ナレーター側がキャラセリフを引用しているケース等が候補です。':'Shows places where the same text appears more than once — e.g. the narrator quoting a character line.'
-};
+,'📢 上書き公開':'📢 Republish','上書き公開':'Republish','公開保存しました！':'Saved and published!','公開保存エラー: ':'Publish error: ','この作品IDはサーバーに上書き公開できません。':'This work ID cannot be republished to the server.','作品ID:':'Work ID:','受け入れる形式: 先頭がアルファベット、続けて [A-Za-z0-9_-]（最大100文字）':'Allowed format: starts with a letter, then [A-Za-z0-9_-], max 100 chars','オーナー権限でこの作品を上書き公開します。':'Republish this work with owner privileges.','続行しますか？':'Continue?','マイ作品のみ投稿できます':'Only your own works (My Works) can be published','コンテンツがない作品は投稿できません':'Cannot publish a work with no content','作者ツール（公開保存・音声生成・重複検出）':'Author tools (Publish / Generate audio / Detect duplicates)','メニュー':'Menu'};
 var state_lang_ready=true;
 function _trKey(s){ if(s==null) return s; var k=(''+s).trim(); if(!k) return s; var hit=I18N_DICT[k]; if(hit==null) return s; return (''+s).replace(k,hit); }
 function _trFull(s){ if(s==null||state.lang!=='en') return s; var k=(''+s).trim(); return (I18N_DICT[k]!=null)?I18N_DICT[k]:s; }
@@ -2966,16 +2966,16 @@ function _preloadWorkTrans(){
   if(state.lang!=='en'||state.currentScreen!=='reader')return;
   try{ var hash=state._curHash||_contentHash();
     if(state.workTransHash===hash&&state.workTrans)return;
-    var cached=localStorage.getItem('aninovel_tr_en3_'+hash);
+    var cached=localStorage.getItem('aninovel_tr_en4_'+hash);
     if(cached){var c=JSON.parse(cached);state.workTrans=c.items||{};state.workTransMeta={title:c.title,author:c.author};state.workTransHash=hash;state.charTrans=c.chars||{};state.charTransHash=hash;}
   }catch(e){}
 }
 function maybeTranslateWork(){
-  if(state.lang!=='en' || state.currentScreen!=='reader') return;
+  if(state.lang!=='en') return;
   var hash=state._curHash||_contentHash();
   if(state.workTransHash===hash && state.workTrans) return; // 翻訳済み
   try{
-    var cached=localStorage.getItem('aninovel_tr_en3_'+hash);
+    var cached=localStorage.getItem('aninovel_tr_en4_'+hash);
     if(cached){ var c=JSON.parse(cached); state.workTrans=c.items||{}; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; }
   }catch(e){}
   translateWork(hash);
@@ -2994,7 +2994,7 @@ function translateWork(hash){
     if(d&&d.items&&d.items.length){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
       state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
-      try{ localStorage.setItem('aninovel_tr_en3_'+hash, JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
+      try{ localStorage.setItem('aninovel_tr_en4_'+hash, JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
       render();
     } else { showToast('Translation failed'); }
   }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
