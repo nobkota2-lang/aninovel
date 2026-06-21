@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v56_char_romaji_cache';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v57_getwork_kv_first';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3346,6 +3346,24 @@ var _portalMode=!!_workParam;
   setMeta('meta[property="og:url"]','content','https://aninovel.com/viewer.html?work='+safe);
 })();
 
+// ===== Owner/Demo 作品の getWork ラッパ：KV優先（v56_owner_publish_fix）=====
+(function(){
+  if(!window.AninovelServices){window.addEventListener('load',arguments.callee);return;}
+  if(window.AninovelServices.__demoWrapped) return;
+  var orig=window.AninovelServices.getWork.bind(window.AninovelServices);
+  window.AninovelServices.getWork=function(id){
+    if(!id||id.indexOf('my_')===0||id.indexOf('pub_')===0)return orig(id);
+    // スラッグ形式（デモ作品等）はサーバKVを先に確認、無ければ元のフロー(静的contentUrl)へ
+    return fetch('/api/works/'+encodeURIComponent(id),{cache:'no-store'})
+      .then(function(r){
+        if(r.ok) return r.json();          // KVに上書き公開済み → そちらを使う
+        return orig(id);                    // KVに無い → 静的JSON経由（カタログのcontentUrl）
+      })
+      .catch(function(){return orig(id);});
+  };
+  window.AninovelServices.__demoWrapped=true;
+  console.info('[AninovelServices] getWork wrapped (KV-first for demo/slug IDs)');
+})();
 function goHome(){
     if(_portalMode){window.location.href='index.html'}
     else{state.currentScreen='home';render()}
