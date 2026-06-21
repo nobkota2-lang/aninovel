@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v59_tts_text_lang';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v60_trcache_en5';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2966,7 +2966,7 @@ function _preloadWorkTrans(){
   if(state.lang!=='en'||state.currentScreen!=='reader')return;
   try{ var hash=state._curHash||_contentHash();
     if(state.workTransHash===hash&&state.workTrans)return;
-    var cached=localStorage.getItem('aninovel_tr_en4_'+hash);
+    var cached=localStorage.getItem('aninovel_tr_en5_'+hash);
     if(cached){var c=JSON.parse(cached);state.workTrans=c.items||{};state.workTransMeta={title:c.title,author:c.author};state.workTransHash=hash;state.charTrans=c.chars||{};state.charTransHash=hash;}
   }catch(e){}
 }
@@ -2975,7 +2975,7 @@ function maybeTranslateWork(){
   var hash=state._curHash||_contentHash();
   if(state.workTransHash===hash && state.workTrans) return; // 翻訳済み
   try{
-    var cached=localStorage.getItem('aninovel_tr_en4_'+hash);
+    var cached=localStorage.getItem('aninovel_tr_en5_'+hash);
     if(cached){ var c=JSON.parse(cached); state.workTrans=c.items||{}; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; }
   }catch(e){}
   translateWork(hash);
@@ -2994,7 +2994,7 @@ function translateWork(hash){
     if(d&&d.items&&d.items.length){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
       state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
-      try{ localStorage.setItem('aninovel_tr_en4_'+hash, JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
+      try{ localStorage.setItem('aninovel_tr_en5_'+hash, JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
       render();
     } else { showToast('Translation failed'); }
   }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
