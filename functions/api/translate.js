@@ -1,9 +1,7 @@
-// functions/api/translate.js
-// AniNovel 作品自動翻訳 API (Cloudflare Pages Function)
-//
+// functions/api/translate.js  v4 — 堅牢化版
 // 翻訳エンジン: Cloudflare Workers AI  @cf/meta/m2m100-1.2b
-//   - 無料枠: 10,000 Neurons/日（カード登録不要）
-//   - 文単位分割 + 繰り返し劣化検知 + llama-3.1-8b-instruct フォールバック で品質確保
+// 劣化検出強化 + llama-3.1-8b-instruct フォールバック + 名前ローマ字化（緩い検証）
+// デバッグ: ?debug=1 で AI レスポンスを返す
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -17,12 +15,14 @@ const ISO  = { en:'English', ja:'Japanese', zh:'Chinese', ko:'Korean', es:'Spani
 
 const MODEL = '@cf/meta/m2m100-1.2b';
 const FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct';
-const CONCURRENCY = 6;
+const CONCURRENCY = 4;
 const MAX_CHARS_PER_CHUNK = 120;
 
 export async function onRequestOptions() { return new Response(null, { headers: CORS }); }
 
 export async function onRequestPost({ request, env }) {
+  const debug = new URL(request.url).searchParams.get('debug') === '1';
+  const dbg = []; // デバッグログ
   try {
     const body = await request.json().catch(() => ({}));
     const target = (body.target || 'en').toLowerCase();
@@ -32,24 +32,25 @@ export async function onRequestPost({ request, env }) {
     const items = Array.isArray(body.items) ? body.items.filter(i => i && i.id && typeof i.text === 'string') : [];
     const characters = Array.isArray(body.characters) ? body.characters.filter(c => c && c.id && typeof c.name === 'string' && c.name.trim()) : [];
 
-    if (items.length === 0 && !title) return json({ error:'no_content' }, 400);
-    if (target === source) return json({ title, author, items, cache:'NOOP' });
+    if (items.length === 0 && !title && characters.length === 0) return json({ error:'no_content' }, 400);
+    if (target === source) return json({ title, author, items, characters, cache:'NOOP' });
 
     const srcLang = LANG[source] || source;
     const tgtLang = LANG[target] || target;
     const srcISO  = ISO[source]  || source;
     const tgtISO  = ISO[target]  || target;
 
-    // キャッシュキーは v3（壊れた翻訳の引き継ぎ防止）
-    const canonical = JSON.stringify({ v:3, t:target, s:source, title, items:items.map(i=>[i.id,i.text]), chars:characters.map(c=>[c.id,c.name]) });
+    // キャッシュ v4（再翻訳強制）
+    const KV = env.WORKS || env.WORKS_KV;
+    const canonical = JSON.stringify({ v:4, t:target, s:source, title, items:items.map(i=>[i.id,i.text]), chars:characters.map(c=>[c.id,c.name]) });
     const hash = (await sha256hex(canonical)).slice(0, 40);
-    const cacheKey = `worktr3:${target}:${hash}`;
+    const cacheKey = `worktr4:${target}:${hash}`;
 
-    if (env.WORKS_KV) {
-      const cached = await env.WORKS_KV.get(cacheKey);
-      if (cached) return new Response(cached, { headers: { ...JSON_HEADERS, 'X-Cache':'HIT' } });
+    if (KV && !debug) {
+      const cached = await KV.get(cacheKey);
+      if (cached) return new Response(cached, { headers: { ...JSON_HEADERS, 'X-Cache':'HIT', 'X-KV': KV === env.WORKS ? 'WORKS' : 'WORKS_KV' } });
     }
-    if (!env.AI) return json({ error:'not_configured' }, 500);
+    if (!env.AI) return json({ error:'not_configured', message:'AI binding missing' }, 500);
 
     // ===== 文分割 =====
     function splitSentences(text){
@@ -63,7 +64,6 @@ export async function onRequestPost({ request, env }) {
       }
       buf += text.slice(last);
       if (buf) parts.push(buf);
-      // 長すぎる文は読点でさらに分割
       const out = [];
       for (const s of parts) {
         if (s.length <= MAX_CHARS_PER_CHUNK) { out.push(s); continue; }
@@ -78,19 +78,25 @@ export async function onRequestPost({ request, env }) {
       return out;
     }
 
-    // ===== 繰り返し劣化検出 =====
-    function isDegenerate(s){
-      if (!s) return false;
+    // ===== 劣化検出（強化）=====
+    function isDegenerate(s, original){
+      if (!s) return true;
+      const t = s.trim();
+      if (!t) return true;
+      // 末尾が中途半端な前置詞/不完全な文
+      if (/\b(?:to|of|in|on|at|for|with|by|from|the|a|an|and|or|but)\.?$/i.test(t)) return true;
       // 同じ3〜12語フレーズが3回以上連続
-      if (/(\b[\w'-]{1,40}(?:\s+[\w'-]{1,40}){1,11}\b)([,\s.;!?]+\1){2,}/i.test(s)) return true;
-      // 同じ単語が4回以上連続
-      if (/\b(\w{2,})\b(?:[,\s.;!?]+\b\1\b){3,}/i.test(s)) return true;
-      // ユニーク語率が低い
-      const tokens = s.toLowerCase().match(/[a-z\u3040-\u30ff\u4e00-\u9fff]+/g) || [];
-      if (tokens.length >= 12) {
+      if (/(\b[\w'-]{1,40}(?:\s+[\w'-]{1,40}){1,11}\b)([,\s.;!?]+\1){2,}/i.test(t)) return true;
+      // 同じ単語が3回以上連続
+      if (/\b(\w{2,})\b(?:[,\s.;!?]+\b\1\b){2,}/i.test(t)) return true;
+      // ユニーク語率
+      const tokens = t.toLowerCase().match(/[a-z]+/g) || [];
+      if (tokens.length >= 10) {
         const uniq = new Set(tokens).size;
-        if (uniq / tokens.length < 0.4) return true;
+        if (uniq / tokens.length < 0.5) return true;
       }
+      // 結果が原文より極端に短い（情報欠落の兆候、ただし1〜2語の短文は除外）
+      if (original && original.length >= 12 && t.length < original.length * 0.35) return true;
       return false;
     }
 
@@ -99,15 +105,55 @@ export async function onRequestPost({ request, env }) {
       try {
         const r = await env.AI.run(FALLBACK_MODEL, {
           messages: [
-            { role:'system', content:`You are a professional literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. Preserve tone, register, and cultural nuance (use natural ${tgtISO} idioms where appropriate; do NOT translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes.` },
+            { role:'system', content:`You are a literary translator. Translate the user's ${srcISO} text into natural, fluent ${tgtISO}. Preserve tone and cultural nuance (use natural idioms; never translate cultural expressions literally). Reply with ONLY the translation; no preface, no notes, no quotes.` },
             { role:'user', content:text },
           ],
-          max_tokens: Math.max(256, Math.min(1024, text.length * 4)),
+          max_tokens: Math.max(200, Math.min(1024, text.length * 4)),
+          temperature: 0.2,
         });
         let out = (r && (r.response != null ? r.response : r.result)) || '';
-        out = String(out).trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+        out = String(out).trim();
+        // 装飾・前置きを除去
+        out = out.replace(/^[`"'*]+|[`"'*]+$/g, '').trim();
+        out = out.replace(/^(?:translation|english|英訳|訳)[: \-]+/i, '').trim();
         return out || text;
-      } catch (e) { return text; }
+      } catch (e) {
+        if (debug) dbg.push({op:'llama-translate', error: String(e && e.message)});
+        return text;
+      }
+    }
+
+    // ===== ローマ字化（緩い検証）=====
+    async function romanizeName(name){
+      if (!name || !name.trim()) return name;
+      if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
+      try {
+        const r = await env.AI.run(FALLBACK_MODEL, {
+          messages: [
+            { role:'system', content:'Output ONLY Hepburn romaji for the Japanese personal name. No quotes, no markdown, no explanation, no labels. Family name first, given name second, separated by a single space. Capitalize the first letter of each name. Examples: 田中 健太 -> Tanaka Kenta. 佐藤 美咲 -> Sato Misaki. 山田太郎 -> Yamada Taro. 愛美 -> Aimi.' },
+            { role:'user', content:name },
+          ],
+          max_tokens: 32,
+          temperature: 0.0,
+        });
+        let raw = (r && (r.response != null ? r.response : r.result)) || '';
+        let out = String(raw).trim();
+        // 1行目だけ
+        out = out.split(/[\r\n]+/)[0].trim();
+        // 装飾・記号・前置きを除去
+        out = out.replace(/^[`"'*_\[\(『「]+|[`"'*_\]\)。、!?！？.,;:』」]+$/g, '').trim();
+        out = out.replace(/^(?:romaji|name|hepburn|translation|romanized)[: \-]+/i, '').trim();
+        // 妥当な英字名の判定（緩め）：英字始まり、英字/空白/ハイフン/ピリオド許可
+        if (out && /^[A-Za-z][A-Za-z \u00C0-\u017F\.\-']{0,60}$/.test(out) && !/[\u3040-\u30ff\u3400-\u9fff]/.test(out)) {
+          if (debug) dbg.push({op:'romanize', in: name, raw, out});
+          return out;
+        }
+        if (debug) dbg.push({op:'romanize-reject', in: name, raw, out, reason: 'regex_or_has_jp'});
+        return name;
+      } catch (e) {
+        if (debug) dbg.push({op:'romanize-error', in: name, error: String(e && e.message)});
+        return name;
+      }
     }
 
     // ===== 1行翻訳 =====
@@ -121,10 +167,16 @@ export async function onRequestPost({ request, env }) {
         try {
           const r = await env.AI.run(MODEL, { text: s, source_lang: srcLang, target_lang: tgtLang });
           out = (r && (r.translated_text != null ? r.translated_text : r.result)) || s;
-        } catch (e) { out = s; }
-        if (isDegenerate(out) || !out || out === s) {
+        } catch (e) {
+          if (debug) dbg.push({op:'m2m-error', in:s, error: String(e && e.message)});
+          out = s;
+        }
+        if (debug) dbg.push({op:'m2m', in:s, out});
+        // 劣化検出 → llama
+        if (isDegenerate(out, s) || out === s) {
           const alt = await llamaTranslate(s);
-          out = isDegenerate(alt) ? s : alt;
+          if (debug) dbg.push({op:'llama-fallback', in:s, m2m:out, llama:alt});
+          if (!isDegenerate(alt, s)) out = alt;
         }
         tr.push(out);
       }
@@ -141,28 +193,9 @@ export async function onRequestPost({ request, env }) {
 
     const titleTr = title ? await translateText(title) : '';
 
-    // 登場人物名はローマ字化
-    async function romanizeName(name){
-      if (!name || !name.trim()) return name;
-      if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
-      try {
-        const r = await env.AI.run(FALLBACK_MODEL, {
-          messages: [
-            { role:'system', content:'You transliterate Japanese personal names into Hepburn romaji. Reply with ONLY the romaji name, capitalized, no quotes, no notes, no explanation. Example: 愛美 -> Aimi, 山田太郎 -> Taro Yamada.' },
-            { role:'user', content:name },
-          ],
-          max_tokens: 24,
-        });
-        let out = (r && (r.response != null ? r.response : r.result)) || '';
-        out = String(out).trim().split('\n')[0].replace(/^["'`\s]+|["'`.。、\s]+$/g, '').trim();
-        if (out && /^[A-Za-z][A-Za-z .\-]{0,30}$/.test(out)) return out;
-        return name;
-      } catch (e) { return name; }
-    }
     const charactersOut = [];
     for (const c of characters) charactersOut.push({ id:c.id, name: await romanizeName(c.name) });
 
-    // 本文を並列翻訳
     const results = new Array(items.length);
     for (let i = 0; i < items.length; i += CONCURRENCY) {
       const chunk = items.slice(i, i + CONCURRENCY);
@@ -171,11 +204,12 @@ export async function onRequestPost({ request, env }) {
     }
 
     const out = { title: titleTr || title, author, items: results, characters: charactersOut };
+    if (debug) out._debug = dbg;
     const payload = JSON.stringify(out);
-    if (env.WORKS_KV) await env.WORKS_KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
-    return new Response(payload, { headers: { ...JSON_HEADERS, 'X-Cache':'MISS' } });
+    if (KV && !debug) await KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
+    return new Response(payload, { headers: { ...JSON_HEADERS, 'X-Cache':'MISS', 'X-KV': KV ? (KV === env.WORKS ? 'WORKS' : 'WORKS_KV') : 'NONE' } });
   } catch (e) {
-    return json({ error:'exception', message: String((e && e.message) || e) }, 500);
+    return json({ error:'exception', message: String((e && e.message) || e), _debug: debug?dbg:undefined }, 500);
   }
 }
 
