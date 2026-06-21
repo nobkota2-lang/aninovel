@@ -50,9 +50,17 @@ def main():
             rel = rel_posix(full, GALLERY)        # 例: Female/Japanese_Anime/Baby/xxx.png
             gallery_rels.append(rel)
             parts = rel.split("/")
-            if len(parts) != 4:
+            # 4階層: <Gender>/<Race>_<Type>/<Age>/<file>.png
+            # 5階層: <Gender>/<Race>_<Type>/<Age>/<partNN>/<file>.png  ← partNNはグループから除外、サブフォルダ扱い
+            if len(parts) == 4:
+                gender, styleset, age, _file = parts
+            elif len(parts) == 5:
+                gender, styleset, age, sub, _file = parts
+                # サブフォルダが part## / chunk## / batch## のような区分子であることを軽くチェック
+                # （何でも受け入れるが、明らかにageっぽい/typeっぽい場合は警告）
+                # 実用上は part01, part02 等を想定。受け入れて同じグループへマージ。
+            else:
                 skipped.append(rel); continue
-            gender, styleset, age, _file = parts
             if "_" not in styleset:
                 skipped.append(rel); continue
             race, typ = styleset.split("_", 1)

@@ -1,6 +1,6 @@
 {
 "version":10,
-"note":"AniNovel Gallery v10 (gender x race x type x age, 1532 images) - regenerated",
+"note":"AniNovel Gallery v10 (gender x race x type x age, 1536 images) - regenerated",
 "groups":[
 {
 "id":"female_asian_animegen_youngadult",
@@ -12,6 +12,9 @@
 "age":"YoungAdult",
 "ageBlock":3,
 "items":[
+{
+"p":"/gallery/Female/Asian_AnimeGen/YoungAdult/kuraki_anime.png"
+},
 {
 "p":"/gallery/Female/Asian_AnimeGen/YoungAdult/row004_col08_female.png"
 },
@@ -298,7 +301,7 @@
 "ageBlock":2,
 "items":[
 {
-"p":"/gallery/Female/Asian_Photo/Teen/1_%E5%80%89%E6%9C%A8%E9%BA%BB%E8%A1%A3%E4%BC%BC.png"
+"p":"/gallery/Female/Asian_Photo/Teen/Kurakimaini.png"
 },
 {
 "p":"/gallery/Female/Asian_Photo/Teen/female_photo_03_middle_school_04_r2c2.png"
@@ -470,6 +473,12 @@
 },
 {
 "p":"/gallery/Female/Asian_Photo/Adult/female_photo_06_working_age_70_r8c7.png"
+},
+{
+"p":"/gallery/Female/Asian_Photo/Adult/icon_female_jp_photo_20s_c617703a.png"
+},
+{
+"p":"/gallery/Female/Asian_Photo/Adult/real_female_lipsync_base_06ed8f03.png"
 }
 ]
 },
@@ -3580,7 +3589,7 @@
 "ageBlock":2,
 "items":[
 {
-"p":"/gallery/Male/Asian_Photo/Teen/2_%E3%82%B5%E3%83%AB%E9%A1%94.png"
+"p":"/gallery/Male/Asian_Photo/Teen/Sarugao.png"
 },
 {
 "p":"/gallery/Male/Asian_Photo/Teen/male_photo_03_middle_school_05_r3c1.png"
@@ -4277,6 +4286,9 @@
 },
 {
 "p":"/gallery/Male/Japanese_Anime/Teen/male_anime_04_high_school_16_r8c2.png"
+},
+{
+"p":"/gallery/Male/Japanese_Anime/Teen/monkey_boy.png"
 }
 ]
 },
@@ -5947,7 +5959,7 @@
 "ageBlock":4,
 "items":[
 {
-"p":"/gallery/Male/White_Photo/Adult/3_%E3%82%AA%E3%83%BC%E3%82%BD%E3%83%B3%E4%BC%BC.png"
+"p":"/gallery/Male/White_Photo/Adult/Ohdommi.png"
 },
 {
 "p":"/gallery/Male/White_Photo/Adult/male_photo_06_working_age_04_r1c4.png"
