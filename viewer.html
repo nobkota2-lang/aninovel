@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v61_lang_split_voice';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v62_audio_vars_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1598,6 +1598,8 @@ var _audioManifest=null; // { workId, items: { [itemId]: {...} } } or false (no 
 var _audioManifestLoading=null;
 // 音声ソース統合マップ: itemId → {type:'repo'|'idb'|'embedded', ...}
 var _audioSources={};
+var _audioSourcesJa={};
+var _audioSourcesEn={};
 function _currentWorkId(){
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   return wp||'_local';
