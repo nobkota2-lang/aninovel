@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v62_audio_vars_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v63_voice_lang_consistency';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1529,7 +1529,7 @@ function _auraVoiceFor(ch){
   return (g==='male')?'angus':'asteria';
 }
 function _speakItemAura(item,ch,session,onStart,onEnd,onError){
-  var text=(item.text||'').trim();
+  var text=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'').trim();
   if(!text){if(onEnd)onEnd();return {stop:function(){}};}
   var voice=_auraVoiceFor(ch);
   var chunks=_ttsChunk(text,1500);
@@ -1742,7 +1742,7 @@ function _buildAudioSources(){
     });
     lists.forEach(function(list,i){
       list.forEach(function(rec){
-        var lang=(rec.meta&&rec.meta.lang)||'ja';  // 旧データは ja扱い
+        var lang=(rec.meta&&rec.meta.lang) || ((rec.meta&&rec.meta.engine==='aura')?'en':'ja');  // 旧Auraデータは engine から推定
         var bucket = (lang==='en') ? _audioSourcesEn : _audioSourcesJa;
         // 既に自workIdのIDBが埋まっていれば上書きしない (先勝ち)
         if(bucket[rec.itemId]&&bucket[rec.itemId].type==='idb'&&bucket[rec.itemId].workId===wid){return;}
