@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v60_trcache_en5';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v61_lang_split_voice';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1630,22 +1630,33 @@ function _idbOpen(){
   });
   return _idbPromise;
 }
-function _idbKey(workId,itemId){return workId+'::'+itemId;}
+function _idbKey(workId,itemId,lang){return workId+'::'+itemId+(lang?'::'+lang:'');}
 function _idbPut(workId,itemId,blob,meta){
   return _idbOpen().then(function(db){
     return new Promise(function(res,rej){
       var tx=db.transaction(_IDB_STORE,'readwrite'),st=tx.objectStore(_IDB_STORE);
-      var rec={key:_idbKey(workId,itemId),workId:workId,itemId:itemId,blob:blob,meta:meta||{},updatedAt:Date.now()};
+      var _lang=(meta&&meta.lang)||'ja';
+      var rec={key:_idbKey(workId,itemId,_lang),workId:workId,itemId:itemId,blob:blob,meta:meta||{lang:_lang},updatedAt:Date.now()};
+      if(!rec.meta.lang) rec.meta.lang=_lang;
       var r=st.put(rec);r.onsuccess=function(){res();};r.onerror=function(){rej(r.error);};
     });
   });
 }
-function _idbGet(workId,itemId){
+function _idbGet(workId,itemId,lang){
   return _idbOpen().then(function(db){
     return new Promise(function(res,rej){
       var tx=db.transaction(_IDB_STORE,'readonly'),st=tx.objectStore(_IDB_STORE);
-      var r=st.get(_idbKey(workId,itemId));
-      r.onsuccess=function(){res(r.result||null);};r.onerror=function(){rej(r.error);};
+      var r=st.get(_idbKey(workId,itemId,lang||'ja'));
+      r.onsuccess=function(){
+        if(r.result){res(r.result);return;}
+        // 旧形式 (lang無し) へのフォールバック (lang='ja'指定時のみ)
+        if((lang||'ja')==='ja'){
+          var r2=st.get(workId+'::'+itemId);
+          r2.onsuccess=function(){res(r2.result||null);};
+          r2.onerror=function(){res(null);};
+        }else{ res(null); }
+      };
+      r.onerror=function(){rej(r.error);};
     });
   }).catch(function(){return null;});
 }
@@ -1706,46 +1717,56 @@ function _relatedWorkIds(wid){
 }
 function _buildAudioSources(){
   _audioSources={};
+  _audioSourcesJa={};
+  _audioSourcesEn={};
   // 優先度: embedded(item.audio) > IDB > server(R2) > repo
   var wid=_currentWorkId();
   var relIds=_relatedWorkIds(wid);
   var repo=(_audioManifest&&_audioManifest.items)||{};
-  Object.keys(repo).forEach(function(id){_audioSources[id]={type:'repo'};});
-  // 投稿作品(pub_*)はサーバー(R2)のVOICEVOX音声マニフェストを取得
+  Object.keys(repo).forEach(function(id){var src={type:'repo'};_audioSourcesJa[id]=src;_audioSources[id]=src;});
+  // 投稿作品(pub_*)はサーバー(R2)のVOICEVOX音声マニフェストを取得 (JAのみ)
   var serverP=(wid&&wid.indexOf('pub_')===0)
     ?fetch('/api/audio/'+encodeURIComponent(wid)).then(function(r){return r.ok?r.json():{items:{}};}).catch(function(){return {items:{}};})
     :Promise.resolve({items:{}});
-  // 自workId→関連workId の順で探索(先勝ち=自workIdが優先)
   return Promise.all([serverP].concat(relIds.map(function(w){return _idbListByWork(w);}))).then(function(results){
     var serverManifest=results[0]||{items:{}};
     var lists=results.slice(1);
-    // サーバー音声を登録 (repoより優先、idb/embeddedより下)
     Object.keys(serverManifest.items||{}).forEach(function(id){
-      if(!_audioSources[id]||_audioSources[id].type==='repo'){
-        _audioSources[id]={type:'server',workId:wid,meta:serverManifest.items[id]||{}};
+      if(!_audioSourcesJa[id]||_audioSourcesJa[id].type==='repo'){
+        var src={type:'server',workId:wid,meta:serverManifest.items[id]||{}};
+        _audioSourcesJa[id]=src;
+        _audioSources[id]=src;
       }
     });
     lists.forEach(function(list,i){
       list.forEach(function(rec){
-        // 既に自workIdのIDBが埋まっていれば上書きしない
-        var ex=_audioSources[rec.itemId];
-        if(!ex||ex.type==='repo'||ex.type==='server'){
-          _audioSources[rec.itemId]={type:'idb',blob:rec.blob,meta:rec.meta,fromWorkId:relIds[i]};
-        }
+        var lang=(rec.meta&&rec.meta.lang)||'ja';  // 旧データは ja扱い
+        var bucket = (lang==='en') ? _audioSourcesEn : _audioSourcesJa;
+        // 既に自workIdのIDBが埋まっていれば上書きしない (先勝ち)
+        if(bucket[rec.itemId]&&bucket[rec.itemId].type==='idb'&&bucket[rec.itemId].workId===wid){return;}
+        var src={type:'idb',workId:rec.workId,blob:rec.blob,meta:rec.meta||{},fromWorkId:rec.workId};
+        bucket[rec.itemId]=src;
+        // 後方互換のため _audioSources にも書く (lang=ja優先)
+        if(lang==='ja'||!_audioSources[rec.itemId])_audioSources[rec.itemId]=src;
       });
     });
+    // embedded (state.content[*].audio) は最優先 — JA扱い (現状の仕様維持)
     (state.content||[]).forEach(function(it){
-      if(it.audio)_audioSources[it.id]={type:'embedded',b64:it.audio};
+      if(it.audio){var src={type:'embedded'};_audioSourcesJa[it.id]=src;_audioSources[it.id]=src;}
     });
-    var vals=Object.values(_audioSources);
-    function _cnt(t){return vals.filter(function(v){return v.type===t;}).length;}
-    console.info('[TTS] 音声ソース統合: 合計'+vals.length+' (repo='+_cnt('repo')+' server='+_cnt('server')+' idb='+_cnt('idb')+' embedded='+_cnt('embedded')+')');
-    return _audioSources;
   });
 }
-function _hasPreAudio(itemId){return !!_audioSources[itemId];}
+function _hasPreAudio(itemId){
+  // state.lang に応じて参照するソースを分岐
+  var bucket = (state.lang==='en') ? (_audioSourcesEn||{}) : (_audioSourcesJa||_audioSources||{});
+  return !!bucket[itemId];
+}
+function _getAudioSrc(itemId){
+  var bucket = (state.lang==='en') ? (_audioSourcesEn||{}) : (_audioSourcesJa||_audioSources||{});
+  return bucket[itemId]||null;
+}
 function _resolveAudioUrl(itemId){
-  var src=_audioSources[itemId];
+  var src=(typeof _getAudioSrc==='function')?_getAudioSrc(itemId):_audioSources[itemId];
   if(!src)return null;
   if(src.type==='repo'){
     return {url:_audioBaseUrl()+encodeURIComponent(itemId)+'.wav',revoke:false};
@@ -1765,7 +1786,7 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   var resolved=_resolveAudioUrl(item.id);
   if(!resolved){if(onError)onError(new Error('no audio source'));return null;}
   var url=resolved.url,needsRevoke=resolved.revoke;
-  var src=_audioSources[item.id];
+  var src=(typeof _getAudioSrc==='function')?_getAudioSrc(item.id):_audioSources[item.id];
   var spk=src&&src.meta&&src.meta.speaker;
   var fromW=src&&src.fromWorkId;
   console.info('[TTS] 再生開始 item='+item.id+' chId='+(ch&&ch.id)+' chName='+(ch&&ch.name)+' txt="'+(item.text||'').substring(0,20)+'…" type='+(src&&src.type)+(spk!=null?' speaker='+spk:'')+(fromW?' fromWorkId='+fromW:''));
@@ -1859,16 +1880,19 @@ function _auraVoiceOptions(sel,gender){
 function _voicePickerHtml(data){
   var lang=(data.voiceLang==='en')?'en':'ja';
   var L='style="display:block;font-size:13px;font-weight:500;margin-bottom:6px"';
-  var s='<div><label '+L+'>🌐 言語 / 国籍</label><select onchange="state.editingItem.data.voiceLang=this.value;render()" style="width:100%">';
+  var s='';
+  // 母語 (Web Speech フォールバック時の言語)
+  s+='<div><label '+L+'>🌐 母語 / 国籍</label><select onchange="state.editingItem.data.voiceLang=this.value;render()" style="width:100%">';
   s+='<option value="ja"'+(lang==='ja'?' selected':'')+'>日本人（日本語）</option>';
-  s+='<option value="en"'+(lang==='en'?' selected':'')+'>外国人（英語）</option></select></div>';
-  s+='<div><label '+L+'>🎙 読み上げ音声</label>';
-  if(lang==='en'){
-    s+='<select onchange="state.editingItem.data.auraVoice=this.value||null" style="width:100%">'+_auraVoiceOptions(data.auraVoice||null,data.gender)+'</select>';
-  }else{
-    s+='<select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="width:100%">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null,data.gender)+'</select>';
-  }
-  s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:4px">日本語=VOICEVOX、英語=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動使用。</div></div>';
+  s+='<option value="en"'+(lang==='en'?' selected':'')+'>外国人（英語）</option></select>';
+  s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:4px">標準音声フォールバック時の言語</div></div>';
+  // 日本語の音声（VOICEVOX）— 常に表示
+  s+='<div style="margin-top:10px"><label '+L+'>🎙 日本語の音声（VOICEVOX）</label>';
+  s+='<select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="width:100%">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null,data.gender)+'</select></div>';
+  // 英語の音声（Aura）— 常に表示
+  s+='<div style="margin-top:10px"><label '+L+'>🎙 英語の音声（Aura）</label>';
+  s+='<select onchange="state.editingItem.data.auraVoice=this.value||null" style="width:100%">'+_auraVoiceOptions(data.auraVoice||null,data.gender)+'</select></div>';
+  s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:6px">読者の言語設定に合わせて音声が選ばれます。<br>日本語表示時=VOICEVOX、英語表示時=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動使用。</div>';
   return s;
 }
 // VOICEVOX 接続診断: 正常 / CORS拒否 / オフライン を切り分ける
@@ -1936,7 +1960,7 @@ async function generateVoicesLocal(opts){
     for(var i=0;i<items.length;i++){
       var it=items[i];
       var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
-      if(ch&&ch.voiceLang==='en'){continue;} // 英語キャラはVOICEVOX対象外（クラウドAura/標準TTSで処理）
+      // 注: voiceLang による分岐は廃止。全アイテム VOICEVOX 生成（state.lang='ja'時の再生で使用）
       var speaker=_voicevoxSpeakerFor(ch);
       var hash=_simpleHashJS((it.text||'')+'|sp='+speaker);
       var prev=existing[it.id];
@@ -1955,7 +1979,7 @@ async function generateVoicesLocal(opts){
         });
         if(!sr.ok)throw new Error('synthesis '+sr.status);
         var blob=await sr.blob();
-        await _idbPut(wid,it.id,blob,{speaker:speaker,hash:hash,chars:(it.text||'').length,bytes:blob.size});
+        await _idbPut(wid,it.id,blob,{lang:'ja',engine:'voicevox',speaker:speaker,hash:hash,chars:(it.text||'').length,bytes:blob.size});
         generated++;
       }catch(e){
         console.warn('[VOICEVOX] 失敗 item='+it.id,e&&e.message||e);failed++;
@@ -1973,17 +1997,23 @@ async function generateVoicesAura(opts){
   opts=opts||{};
   var wid=_currentWorkId();
   var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
-  var enItems=items.filter(function(it){
-    var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
-    return ch&&ch.voiceLang==='en';
-  });
+  // 全アイテムを対象（voiceLangで絞り込まない）
+  var enItems=items;
   var total=enItems.length;
-  if(!total){if(!opts.silent)alert('英語キャラの生成対象セリフがありません');return {ok:true,total:0,generated:0,cached:0,failed:0};}
-  if(!opts.noConfirm){
-    if(!confirm('クラウド(Aura)でこの作品の英語セリフ('+total+'件)を音声生成します。\nこのブラウザに保存されます。続行しますか?'))return {ok:false,cancelled:true};
+  if(!total){if(!opts.silent)alert('生成対象のセリフがありません');return {ok:true,total:0,generated:0,cached:0,failed:0};}
+  // 英訳を先に取得（state.workTransが無ければ /api/translate で取得）
+  var trMap={};
+  if(state.workTrans&&state.workTransHash===state._curHash){
+    Object.assign(trMap,state.workTrans);
+  }else{
+    try{
+      var _trRes=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:'en',source:'ja',items:items.map(function(it){return {id:it.id,text:it.text};}),characters:(state.characters||[]).filter(function(c){return c.id!=='narrator'&&c.name;}).map(function(c){return {id:c.id,name:c.name};})})});
+      if(_trRes.ok){var _trJson=await _trRes.json();(_trJson.items||[]).forEach(function(x){trMap[x.id]=x.text;});}
+    }catch(e){console.warn('[Aura] 英訳取得失敗:',e);}
   }
-  var existing={};
-  (await _idbListByWork(wid)).forEach(function(r){existing[r.itemId]=r;});
+  if(!opts.noConfirm){
+    if(!confirm('クラウド(Aura)でこの作品の英訳セリフ('+total+'件)を音声生成します。\nこのブラウザに保存されます。続行しますか?'))return {ok:false,cancelled:true};
+  }
   var generated=0,cached=0,failed=0;
   var progressBox=opts.progressBox||_showProgress('\u2601\uFE0F 英語音声生成中 (Aura)');
   try{
@@ -1991,16 +2021,20 @@ async function generateVoicesAura(opts){
       var it=enItems[i];
       var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
       var voice=_auraVoiceFor(ch);
-      var hash=_simpleHashJS((it.text||'')+'|aura1='+voice);
-      var prev=existing[it.id];
+      var srcText=trMap[it.id]||it.text||'';
+      if(/[\u3040-\u30ff\u3400-\u9fff]/.test(srcText)){
+        console.warn('[Aura] 英訳未取得 → スキップ item='+it.id);failed++;_updateProgress(progressBox,i+1,total,'skip(no-trans) '+it.id);continue;
+      }
+      var hash=_simpleHashJS(srcText+'|aura1='+voice);
+      var prev=await _idbGet(wid,it.id,'en');
       if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
       _updateProgress(progressBox,i+1,total,it.id);
       try{
-        var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:it.text,voice:voice,model:'aura-1'})});
+        var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:srcText,voice:voice,model:'aura-1'})});
         if(!res.ok)throw new Error('tts http '+res.status);
         var blob=await res.blob();
         if(!blob||blob.size<200)throw new Error('empty audio '+(blob&&blob.size));
-        await _idbPut(wid,it.id,blob,{engine:'aura',voice:voice,hash:hash,chars:(it.text||'').length,bytes:blob.size});
+        await _idbPut(wid,it.id,blob,{lang:'en',engine:'aura',voice:voice,hash:hash,chars:srcText.length,bytes:blob.size});
         generated++;
       }catch(e){
         console.warn('[Aura] 失敗 item='+it.id,e&&e.message||e);failed++;
@@ -2084,8 +2118,8 @@ function _speakItem(item,onEnd){
   }
   _updateTTSDisplay(); // UIテキスト(currentItemId)は即更新、lipsyncはonstartで更新
   function safeEnd(){if(mySession!==_speakSessionId)return;if(onEnd)onEnd();}
-  // 英語キャラ: クラウドAura(高音質)で再生。失敗時のみ英語Web Speechへ。
-  if(ch&&ch.voiceLang==='en'){
+  // 英語モード: クラウドAura(高音質)で再生。失敗時のみ英語Web Speechへ。
+  if(state.lang==='en'){
     var _liveAura=function(){
       _auraCtrl=_speakItemAura(item,ch,mySession,applyCharId,
         function(){if(mySession!==_speakSessionId)return;_auraCtrl=null;safeEnd();},
