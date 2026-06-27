@@ -49,45 +49,53 @@
   }
 
   // === 作品カードを生成 ===
-  // === 青空文庫シリーズ コーナー（謝辞付き） ===
+  // === 青空文庫シリーズ コーナー（謝辞付き・完全分離） ===
   function renderAozoraSeries(works, votes) {
-    var existing = document.getElementById('aozora-section');
-    if (existing) existing.parentNode.removeChild(existing);
-    if (!works || !works.length) return;
-    var main = document.getElementById('main');
-    if (!main) return;
+    try {
+      var existing = document.getElementById('aozora-section');
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      if (!works || !works.length) return;
+      var main = document.getElementById('main');
+      if (!main) return;
 
-    var sec = h('section', { className: 'portal-container', id: 'aozora-section' });
-    sec.style.marginTop = '8px';
+      var sec = document.createElement('section');
+      sec.className = 'portal-container';
+      sec.id = 'aozora-section';
+      sec.style.marginTop = '8px';
 
-    var title = h('div', { className: 'section-title' });
-    title.appendChild(h('span', {}, '📚 青空文庫シリーズ'));
-    sec.appendChild(title);
+      var title = document.createElement('div');
+      title.className = 'section-title';
+      title.textContent = '📚 青空文庫シリーズ';
+      sec.appendChild(title);
 
-    var lead = h('p', {
-      style: 'color:var(--text-secondary);font-size:14px;line-height:1.7;margin:4px 0 16px'
-    }, '著作権の保護期間が満了した名作を、アニメ風の語りでお楽しみいただけます。');
-    sec.appendChild(lead);
+      var lead = document.createElement('p');
+      lead.style.cssText = 'color:var(--text-secondary);font-size:14px;line-height:1.7;margin:4px 0 16px';
+      lead.textContent = '著作権の保護期間が満了した名作を、アニメ風の語りでお楽しみいただけます。';
+      sec.appendChild(lead);
 
-    var grid = h('div', { className: 'works-grid', id: 'aozora-grid' });
-    works.slice().sort(function(a, b){ return new Date(b.createdAt) - new Date(a.createdAt); })
-      .forEach(function(w){ grid.appendChild(createWorkCard(w, votes)); });
-    sec.appendChild(grid);
+      var grid = document.createElement('div');
+      grid.className = 'works-grid';
+      grid.id = 'aozora-grid';
+      works.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); })
+        .forEach(function (w) {
+          try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { /* 1枚失敗しても継続 */ }
+        });
+      sec.appendChild(grid);
 
-    // 謝辞
-    var ack = h('div', {
-      style: 'margin-top:16px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.8;color:var(--text-muted)'
-    });
-    ack.innerHTML = '本シリーズの原文は、ボランティアによる電子化ライブラリ「青空文庫」（aozora.gr.jp）のパブリックドメインテキストを利用しています。' +
-      '話者の振り分け・キャラクター造形・画面演出はアニノベルによる翻案です。' +
-      '貴重な原文を公開してくださっている青空文庫とボランティアの皆さまに感謝いたします。' +
-      '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>';
-    sec.appendChild(ack);
+      var ack = document.createElement('div');
+      ack.style.cssText = 'margin-top:16px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.8;color:var(--text-muted)';
+      ack.innerHTML = '本シリーズの原文は、ボランティアによる電子化ライブラリ「青空文庫」（aozora.gr.jp）のパブリックドメインテキストを利用しています。'
+        + '話者の振り分け・キャラクター造形・画面演出はアニノベルによる翻案です。'
+        + '貴重な原文を公開してくださっている青空文庫とボランティアの皆さまに感謝いたします。'
+        + '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>';
+      sec.appendChild(ack);
 
-    // #about-section の直前に挿入（無ければ #main の末尾）
-    var about = document.getElementById('about-section');
-    if (about && about.parentNode === main) main.insertBefore(sec, about);
-    else main.appendChild(sec);
+      var about = document.getElementById('about-section');
+      if (about && about.parentNode === main) main.insertBefore(sec, about);
+      else main.appendChild(sec);
+    } catch (err) {
+      console.warn('[Aozora] render skipped:', err);
+    }
   }
 
   function createWorkCard(work, votes) {
@@ -868,20 +876,27 @@
 
       renderHeroStats(catalog);
 
-      // 作品一覧（新着順にソート）。青空文庫シリーズ（tags に「青空文庫」を含む）は別枠に分離。
-      function _isAozora(w){return (w.tags||[]).indexOf('青空文庫')>=0;}
+      // 作品一覧（新着順）。青空文庫シリーズ（tags に「青空文庫」）は別枠へ分離。
+      // フィルタで万一失敗しても本一覧が消えないよう保護する。
+      function _isAozora(w){ try { return (w.tags||[]).indexOf('青空文庫')>=0; } catch(e){ return false; } }
       var grid = $('#works-grid');
       if (grid) {
         var sorted = catalog.works.slice().sort(function(a, b) {
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
-        sorted.filter(function(w){return !_isAozora(w);}).forEach(function(w) {
+        var regular = sorted;
+        try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
+        catch(e){ regular = sorted; }
+        regular.forEach(function(w) {
           grid.appendChild(createWorkCard(w, votes));
         });
       }
 
-      // 青空文庫シリーズ コーナー（謝辞付き）
-      renderAozoraSeries(catalog.works.filter(_isAozora), votes);
+      // 青空文庫シリーズ コーナー（謝辞付き）。失敗しても本一覧に影響させない。
+      try {
+        var _aozora = catalog.works.filter(_isAozora);
+        renderAozoraSeries(_aozora, votes);
+      } catch (e) { console.warn('[Aozora] section skipped:', e); }
 
       // ランキング
       renderRanking('votes');
