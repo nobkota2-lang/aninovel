@@ -4,18 +4,22 @@
  * サーバー(KV)に保存された投稿作品の一覧を返す。
  * ポータル(portal.js → getCatalog)の作品一覧で使用する。
  *
- * 配置: functions/api/catalog.js   (リポジトリ直下の functions/ 内)
+ * 配置: functions/api/catalog.js
  *
  * 必要なバインディング:
- *   WORKS_KV  (works API と同じ KV namespace: aninovel-works)
+ *   WORKS または WORKS_KV  (works API と同じ KV namespace: aninovel-works)
+ *   ※ [id].js と同じく両方の名前に対応する。
  *
  * エンドポイント:
  *   GET /api/catalog  …  { version:'server', works:[ <カタログエントリ> ] }
- *
- * 注: CORS / レート制限 は functions/_middleware.js が処理する。
  */
 
 const CATALOG_KEY = '__catalog__';
+
+// バインディング名を両対応 (WORKS 優先、なければ WORKS_KV) — [id].js と一致
+function getKV(env) {
+  return env.WORKS || env.WORKS_KV || null;
+}
 
 function json(obj, status) {
   return new Response(JSON.stringify(obj), {
@@ -29,13 +33,13 @@ function json(obj, status) {
 
 // GET /api/catalog — 投稿作品の一覧
 export async function onRequestGet(context) {
-  if (!context.env.WORKS_KV) {
-    // KV未バインドでもポータルが壊れないよう空配列を返す
-    return json({ version: 'server', works: [], error: 'WORKS_KV 未バインド' });
+  const kv = getKV(context.env);
+  if (!kv) {
+    return json({ version: 'server', works: [], error: 'KV (WORKS / WORKS_KV) 未バインド' });
   }
   let catalog = [];
   try {
-    const cur = await context.env.WORKS_KV.get(CATALOG_KEY);
+    const cur = await kv.get(CATALOG_KEY);
     if (cur) catalog = JSON.parse(cur);
     if (!Array.isArray(catalog)) catalog = [];
   } catch (e) {
