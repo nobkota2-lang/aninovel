@@ -726,16 +726,29 @@
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
-      var aboutTitle = document.querySelector('.section-title');
-      var aboutSec = aboutTitle && aboutTitle.parentElement;
+      var aboutSec = _findAboutSection();
       if (aboutSec) aboutSec.style.display = 'none';
     } else {
       if (existing) existing.remove();
       hero.style.display = '';
-      var aboutTitle2 = document.querySelector('.section-title');
-      var aboutSec2 = aboutTitle2 && aboutTitle2.parentElement;
+      var aboutSec2 = _findAboutSection();
       if (aboutSec2) aboutSec2.style.display = '';
     }
+  }
+
+  // 「アニノベルとは」About セクションだけを安全に特定する。
+  // 先頭の .section-title を盲目的に使うと、状況により #main（作品一覧の親）を
+  // 掴んで一覧ごと消す事故が起きるため、テキストで限定し #main・works-grid は除外。
+  function _findAboutSection() {
+    var titles = document.querySelectorAll('.section-title');
+    for (var i = 0; i < titles.length; i++) {
+      var txt = (titles[i].textContent || '');
+      if (txt.indexOf('アニノベルとは') !== -1 || txt.indexOf('について') !== -1) {
+        var sec = titles[i].parentElement;
+        if (sec && sec.id !== 'main' && !sec.querySelector('#works-grid')) return sec;
+      }
+    }
+    return null;
   }
 
   // === オーナー管理パネル ===
