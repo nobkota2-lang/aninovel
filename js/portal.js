@@ -6,6 +6,38 @@
   'use strict';
   var S = window.AninovelServices;
   var state = { user: null, rankSort: 'votes' };
+  try{window.__ANINOVEL_PORTAL_VER__='p_mobile_more_menu';}catch(e){}
+
+  // === 多言語: 作品コンテンツ翻訳 ===
+  var _ptCache = {};
+  function _plang(){ try{ return localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja'; }catch(e){ return 'ja'; } }
+  function _pt(t){ if(!t) return t; return (_plang()==='en' && _ptCache[t]) ? _ptCache[t] : t; }
+  function _ptBadge(ja, en){ return _plang()==='en' ? en : ja; }
+  function _portalReveal(){ try{ if(window.AninovelI18n && AninovelI18n.apply) AninovelI18n.apply(); if(window.__i18nReveal) window.__i18nReveal(); document.documentElement.classList.remove('i18n-pending'); }catch(e){} }
+  function _translatePortalWorks(works, done){
+    try{
+      if(_plang()!=='en' || !works || !works.length){ done&&done(); return; }
+      var items=[], authors=[], au={}, idx={};
+      works.forEach(function(w){
+        if(w.title && !_ptCache[w.title]){ var id1='i'+items.length; idx[id1]=w.title; items.push({id:id1,text:w.title}); }
+        if(w.description && !_ptCache[w.description]){ var id2='i'+items.length; idx[id2]=w.description; items.push({id:id2,text:w.description}); }
+        (w.tags||[]).forEach(function(tg){ if(tg && !_ptCache[tg]){ var id3='i'+items.length; idx[id3]=tg; items.push({id:id3,text:tg}); } });
+        if(w.author && !_ptCache[w.author] && !au[w.author]){ au[w.author]=1; var id4='a'+authors.length; idx[id4]=w.author; authors.push({id:id4,name:w.author}); }
+      });
+      if(!items.length && !authors.length){ done&&done(); return; }
+      fetch('/api/translate',{ method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ target:'en', items:items, characters:authors }) })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          try{
+            (d.items||[]).forEach(function(x){ if(x && x.text && idx[x.id]) _ptCache[idx[x.id]] = x.text; });
+            (d.characters||[]).forEach(function(x){ if(x && x.name && idx[x.id]) _ptCache[idx[x.id]] = x.name; });
+          }catch(e){}
+          done&&done();
+        })
+        .catch(function(){ done&&done(); });
+    }catch(e){ done&&done(); }
+  }
 
   // === DOM ヘルパー ===
   function $(sel, ctx) { return (ctx || document).querySelector(sel); }
@@ -49,47 +81,6 @@
   }
 
   // === 作品カードを生成 ===
-  // === 青空文庫シリーズ コーナー（謝辞付き） ===
-  function renderAozoraSeries(works, votes) {
-    var existing = document.getElementById('aozora-section');
-    if (existing) existing.parentNode.removeChild(existing);
-    if (!works || !works.length) return;
-    var main = document.getElementById('main');
-    if (!main) return;
-
-    var sec = h('section', { className: 'portal-container', id: 'aozora-section' });
-    sec.style.marginTop = '8px';
-
-    var title = h('div', { className: 'section-title' });
-    title.appendChild(h('span', {}, '📚 青空文庫シリーズ'));
-    sec.appendChild(title);
-
-    var lead = h('p', {
-      style: 'color:var(--text-secondary);font-size:14px;line-height:1.7;margin:4px 0 16px'
-    }, '著作権の保護期間が満了した名作を、アニメ風の語りでお楽しみいただけます。');
-    sec.appendChild(lead);
-
-    var grid = h('div', { className: 'works-grid', id: 'aozora-grid' });
-    works.slice().sort(function(a, b){ return new Date(b.createdAt) - new Date(a.createdAt); })
-      .forEach(function(w){ grid.appendChild(createWorkCard(w, votes)); });
-    sec.appendChild(grid);
-
-    // 謝辞
-    var ack = h('div', {
-      style: 'margin-top:16px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.8;color:var(--text-muted)'
-    });
-    ack.innerHTML = '本シリーズの原文は、ボランティアによる電子化ライブラリ「青空文庫」（aozora.gr.jp）のパブリックドメインテキストを利用しています。' +
-      '話者の振り分け・キャラクター造形・画面演出はアニノベルによる翻案です。' +
-      '貴重な原文を公開してくださっている青空文庫とボランティアの皆さまに感謝いたします。' +
-      '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>';
-    sec.appendChild(ack);
-
-    // #about-section の直前に挿入（無ければ #main の末尾）
-    var about = document.getElementById('about-section');
-    if (about && about.parentNode === main) main.insertBefore(sec, about);
-    else main.appendChild(sec);
-  }
-
   function createWorkCard(work, votes) {
     var v = votes[work.id] || { total: 0, userVoted: false };
     var card = h('div', { className: 'work-card anim-slide' });
@@ -100,18 +91,18 @@
     card.appendChild(banner);
 
     var body = h('div', { className: 'card-body' });
-    body.appendChild(h('div', { className: 'card-title' }, work.title));
-    body.appendChild(h('div', { className: 'card-author' }, work.author));
-    body.appendChild(h('div', { className: 'card-description' }, work.description));
+    body.appendChild(h('div', { className: 'card-title' }, _pt(work.title)));
+    body.appendChild(h('div', { className: 'card-author' }, _pt(work.author)));
+    body.appendChild(h('div', { className: 'card-description' }, _pt(work.description)));
 
     var stats = h('div', { className: 'card-stats' });
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + '字' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + '人' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + _ptBadge('頁','p') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + _ptBadge('字',' chars') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + _ptBadge('人',' cast') }));
     body.appendChild(stats);
 
     var tags = h('div', { className: 'card-tags' });
-    work.tags.forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
+    work.tags.forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, _pt(t))); });
     body.appendChild(tags);
 
     var footer = h('div', { className: 'card-footer' });
@@ -153,12 +144,12 @@
 
     var num = h('div', { className: 'ranking-number' }, String(index + 1));
     var info = h('div', { className: 'ranking-info' });
-    info.appendChild(h('div', { className: 'ranking-title' }, work.title));
-    info.appendChild(h('div', { className: 'ranking-author' }, work.author));
+    info.appendChild(h('div', { className: 'ranking-title' }, _pt(work.title)));
+    info.appendChild(h('div', { className: 'ranking-author' }, _pt(work.author)));
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + _ptBadge('頁','p') }));
 
     var voteBtn = createVoteBtn(work.id, { total: work.totalVotes || v.total, userVoted: work.userVoted || v.userVoted });
 
@@ -446,9 +437,9 @@
 
   // === ロール表示ヘルパー ===
   var ROLE_META = {
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', color: '#F59E0B' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     color: '#8B5CF6' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     color: '#3B82F6' }
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#F59E0B' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#8B5CF6' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#3B82F6' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
 
@@ -470,19 +461,20 @@
       var modeBadge = h('span', {
         className: 'role-mode-badge',
         style: 'background:' + rm.color + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap'
-      }, rm.icon + ' ' + rm.label + 'モード');
+      }, rm.icon + ' ' + (_plang()==='en'?((rm.labelEn||rm.label)+' mode'):(rm.label+'モード')));
       badge.appendChild(modeBadge);
       badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
+      var actionsWrap = h('div', { className: 'badge-actions' });
 
       // モード切替ドロップダウン（複数ロール保有時）
       var roles = state.user.roles || [ar];
       if (roles.length > 1) {
-        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'モード切替', style: 'font-size:13px' }, '\u{1F504}');
+        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: (_plang()==='en'?'Switch mode':'モード切替'), style: 'font-size:13px' }, '\u{1F504}');
         switchBtn.onclick = function() { showRoleSwitchMenu(switchBtn); };
-        badge.appendChild(switchBtn);
+        actionsWrap.appendChild(switchBtn);
       } else {
         // 未登録ロールへの追加登録ボタン
-        var addLabel = ar === 'reader' ? '作者登録' : '読者登録';
+        var addLabel = _plang()==='en' ? (ar === 'reader' ? 'Author registration' : 'Reader registration') : (ar === 'reader' ? '作者登録' : '読者登録');
         var addBtn = h('button', { className: 'btn btn-ghost btn-sm', title: addLabel, style: 'font-size:12px' }, '\uFF0B ' + addLabel);
         addBtn.onclick = function() {
           showAuthModal('register');
@@ -494,21 +486,21 @@
             if (em) em.value = state.user.email || '';
           }, 0);
         };
-        badge.appendChild(addBtn);
+        actionsWrap.appendChild(addBtn);
       }
 
       var dashBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'ダッシュボード' }, '\u{1F4CA}');
       dashBtn.onclick = showDashboard;
-      badge.appendChild(dashBtn);
+      actionsWrap.appendChild(dashBtn);
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
         myBtn.onclick = showMyWorksModal;
-        badge.appendChild(myBtn);
+        actionsWrap.appendChild(myBtn);
       }
       if (roles.indexOf('owner') >= 0) {
         var adminBtn = h('button', { className: 'btn btn-ghost btn-sm', title: '管理パネル', style: 'color:#F59E0B' }, '\uD83D\uDC51');
         adminBtn.onclick = showAdminPanel;
-        badge.appendChild(adminBtn);
+        actionsWrap.appendChild(adminBtn);
       }
       var logoutBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログアウト');
       logoutBtn.onclick = function() {
@@ -518,7 +510,11 @@
           toast('ログアウトしました');
         });
       };
-      badge.appendChild(logoutBtn);
+      actionsWrap.appendChild(logoutBtn);
+      badge.appendChild(actionsWrap);
+      var moreBtn = h('button', { className: 'btn btn-ghost btn-sm badge-more-btn', title: (_plang()==='en'?'Menu':'メニュー') }, '⋮');
+      moreBtn.onclick = function() { showBadgeMenu(moreBtn, actionsWrap); };
+      badge.appendChild(moreBtn);
       container.appendChild(badge);
     } else {
       var loginBtn = h('button', { className: 'btn btn-ghost btn-sm' }, 'ログイン');
@@ -528,7 +524,30 @@
   }
 
   // === モード切替ポップアップ ===
-  function showRoleSwitchMenu(anchor) {
+  function showBadgeMenu(anchor, actionsWrap) {
+    var old = document.getElementById('badge-more-popup');
+    if (old) { old.remove(); return; }
+    var popup = h('div', { id: 'badge-more-popup', style: 'position:absolute;right:0;top:100%;margin-top:4px;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:1000;min-width:190px;padding:6px 0' });
+    var btns = actionsWrap.querySelectorAll('button');
+    Array.prototype.forEach.call(btns, function(b) {
+      var txt = (b.textContent || '').trim();
+      var title = b.getAttribute('title') || '';
+      var label = (txt.length <= 3) ? (txt + (title ? '  ' + title : '')) : txt;
+      var item = h('button', { style: 'display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left' }, label);
+      item.onclick = function() { popup.remove(); b.click(); };
+      item.onmouseenter = function() { item.style.background = 'var(--bg-secondary)'; };
+      item.onmouseleave = function() { item.style.background = 'none'; };
+      popup.appendChild(item);
+    });
+    anchor.parentNode.style.position = 'relative';
+    anchor.parentNode.appendChild(popup);
+    setTimeout(function() {
+      document.addEventListener('click', function hh(e) {
+        if (!popup.contains(e.target) && e.target !== anchor) { popup.remove(); document.removeEventListener('click', hh); }
+      });
+    }, 0);
+}
+function showRoleSwitchMenu(anchor) {
     var old = $('#role-switch-popup');
     if (old) { old.remove(); return; }
     var popup = h('div', { id: 'role-switch-popup', style: 'position:absolute;right:0;top:100%;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:999;min-width:180px;padding:6px 0' });
@@ -539,7 +558,7 @@
         style: 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:' + (active ? 'var(--bg-secondary)' : 'none') + ';cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left'
       });
       item.appendChild(h('span', {}, m.icon));
-      item.appendChild(h('span', { style: 'flex:1' }, m.label + 'モード'));
+      item.appendChild(h('span', { style: 'flex:1' }, (_plang()==='en'?((m.labelEn||m.label)+' mode'):(m.label+'モード'))));
       if (active) item.appendChild(h('span', { style: 'color:var(--accent);font-size:12px' }, '\u2714'));
       item.onclick = function() {
         popup.remove();
@@ -547,7 +566,7 @@
           S.switchActiveRole(r).then(function(u) {
             state.user = u;
             updateAuthUI();
-            toast(m.icon + ' ' + m.label + 'モードに切り替えました');
+            toast(m.icon + ' ' + (_plang()==='en'?((m.labelEn||m.label)+' mode selected'):(m.label+'モードに切り替えました')));
           });
         }
       };
@@ -704,28 +723,58 @@
     if (state.user && state.user.loggedIn) {
       var ar = roleOf(state.user);
       var rm = ROLE_META[ar] || ROLE_META.reader;
-      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return (ROLE_META[r] || {}).label || r; }).join(' / ');
-      var tips = ar === 'owner'
-        ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
-        : ar === 'author'
-        ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
-        : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
+      var _enB = _plang()==='en';
+      var rolesLabel = (state.user.roles || [ar]).map(function(r) { var M=ROLE_META[r]||{}; return (_enB?(M.labelEn||M.label):M.label) || r; }).join(' / ');
+      var tips = _enB
+        ? (ar === 'owner'
+            ? '\uD83D\uDC51 Manage users and works in the Admin panel. ✏️ My Works and 📊 Dashboard are also available.'
+            : ar === 'author'
+            ? 'Open "My Works" from ✏️ at the top right to create or edit your works, and check the 📊 Dashboard.'
+            : 'You can use bookmarks, voting, and character customization. Check the 📊 Dashboard.')
+        : (ar === 'owner'
+            ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
+            : ar === 'author'
+            ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
+            : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。');
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
-      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + ' おかえりなさい、' + state.user.displayName + ' さん'));
-      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'));
-      banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_enB ? (' Welcome back, ' + state.user.displayName + '!') : (' おかえりなさい、' + state.user.displayName + ' さん'))));
+      var _tipsHidden = false; try { _tipsHidden = localStorage.getItem('aninovel_welcome_tips_hidden') === '1'; } catch(e){}
+      banner.appendChild(h('div', { className: 'welcome-role' }, _enB ? ('Current mode: ' + (rm.labelEn||rm.label) + ' (Roles: ' + rolesLabel + ')') : ('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）')));
+      if (!_tipsHidden) {
+        banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+        var _dismiss = h('button', { className: 'welcome-dismiss', title: _enB ? 'Hide tips' : '\u8AAC\u660E\u3092\u96A0\u3059' }, '\u00D7');
+        _dismiss.onclick = function() {
+          try { localStorage.setItem('aninovel_welcome_tips_hidden', '1'); } catch(e){}
+          var t = banner.querySelector('.welcome-tips'); if (t) t.style.display = 'none';
+          _dismiss.style.display = 'none';
+        };
+        banner.appendChild(_dismiss);
+      }
+      if (ar === 'owner' || ar === 'author') {
+        var wcta = h('div', { className: 'welcome-cta' });
+        var bWork = h('button', { className: 'btn' }, _enB ? '\u270F\uFE0F My Works' : '\u270F\uFE0F \u30DE\u30A4\u4F5C\u54C1');
+        bWork.onclick = function(){ try{ showMyWorksModal(); }catch(e){} };
+        wcta.appendChild(bWork);
+        var bDash = h('button', { className: 'btn' }, _enB ? '\uD83D\uDCCA Dashboard' : '\uD83D\uDCCA \u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9');
+        bDash.onclick = function(){ try{ showDashboard(); }catch(e){} };
+        wcta.appendChild(bDash);
+        if (ar === 'owner') {
+          var bAdmin = h('button', { className: 'btn' }, _enB ? '\uD83D\uDC51 Admin' : '\uD83D\uDC51 \u7BA1\u7406\u30D1\u30CD\u30EB');
+          bAdmin.onclick = function(){ try{ showAdminPanel(); }catch(e){} };
+          wcta.appendChild(bAdmin);
+        }
+        banner.appendChild(wcta);
+      }
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
-      var aboutTitle = document.querySelector('.section-title');
-      var aboutSec = aboutTitle && aboutTitle.parentElement;
+      var aboutSec = document.getElementById('about-section');
       if (aboutSec) aboutSec.style.display = 'none';
     } else {
       if (existing) existing.remove();
       hero.style.display = '';
-      var aboutTitle2 = document.querySelector('.section-title');
-      var aboutSec2 = aboutTitle2 && aboutTitle2.parentElement;
+      var aboutSec2 = document.getElementById('about-section');
       if (aboutSec2) aboutSec2.style.display = '';
     }
   }
@@ -848,6 +897,87 @@
   }
 
   // === メイン初期化 ===
+  // === 続きから読む（読書位置から復帰）===
+  function _renderContinueReading(catalog) {
+    var main = $('#main');
+    if (!main) return;
+    var old = $('#continue-section');
+    if (old) old.remove();
+    var prog = {};
+    try { prog = JSON.parse(localStorage.getItem('aninovel_progress') || '{}'); } catch (e) {}
+    var en = _plang() === 'en';
+    var items = [];
+    (catalog.works || []).forEach(function(w) {
+      var p = prog[w.id];
+      if (!p || typeof p.page !== 'number') return;
+      if (p.total && p.page >= p.total - 1) return; // 読了は除外
+      items.push({ w: w, p: p });
+    });
+    items.sort(function(a, b) { return (b.p.at || 0) - (a.p.at || 0); });
+    if (!items.length) return;
+    items = items.slice(0, 3);
+    var sec = h('section', { id: 'continue-section', className: 'portal-container continue-section' });
+    var ttl = h('h2', { className: 'section-title' });
+    ttl.appendChild(h('span', { className: 'icon' }, '\uD83D\uDD16'));
+    ttl.appendChild(document.createTextNode(en ? ' Continue reading' : ' \u7D9A\u304D\u304B\u3089\u8AAD\u3080'));
+    sec.appendChild(ttl);
+    var row = h('div', { className: 'continue-grid' });
+    items.forEach(function(it) {
+      var w = it.w, p = it.p;
+      var pct = p.total ? Math.round((p.page + 1) / p.total * 100) : 0;
+      var card = h('div', { className: 'continue-card' });
+      card.onclick = function() { openWork(w.id); };
+      card.appendChild(h('div', { className: 'continue-title' }, _pt(w.title)));
+      card.appendChild(h('div', { className: 'continue-author' }, _pt(w.author)));
+      var bar = h('div', { className: 'continue-bar' });
+      var fill = h('div', { className: 'continue-bar-fill' });
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      card.appendChild(bar);
+      var metaTxt = en
+        ? ('Page ' + (p.page + 1) + (p.total ? (' / ' + p.total) : '') + (p.total ? (' \u00B7 ' + pct + '%') : ''))
+        : ((p.page + 1) + (p.total ? ('/' + p.total) : '') + '\u30DA\u30FC\u30B8' + (p.total ? (' \u30FB ' + pct + '%') : ''));
+      card.appendChild(h('div', { className: 'continue-meta' }, metaTxt));
+      row.appendChild(card);
+    });
+    sec.appendChild(row);
+    main.insertBefore(sec, main.firstChild);
+  }
+
+  // === 作品グリッドの状態表示（ローディング/空/エラー）===
+  function setGridState(kind) {
+    var grid = $('#works-grid');
+    if (!grid) return;
+    var en = _plang() === 'en';
+    grid.innerHTML = '';
+    if (kind === 'loading') {
+      for (var i = 0; i < 6; i++) {
+        grid.appendChild(h('div', { className: 'work-card skeleton-card' },
+          h('div', { className: 'card-banner' }),
+          h('div', { className: 'card-body' },
+            h('div', { className: 'sk sk-title' }),
+            h('div', { className: 'sk sk-line' }),
+            h('div', { className: 'sk sk-line short' })
+          )
+        ));
+      }
+    } else if (kind === 'empty') {
+      grid.appendChild(h('div', { className: 'grid-state' },
+        h('div', { className: 'grid-state-icon' }, '\uD83D\uDCDA'),
+        h('div', { className: 'grid-state-text' }, en ? 'No works published yet.' : '\u307E\u3060\u516C\u958B\u4F5C\u54C1\u304C\u3042\u308A\u307E\u305B\u3093\u3002')
+      ));
+    } else if (kind === 'error') {
+      var box = h('div', { className: 'grid-state' },
+        h('div', { className: 'grid-state-icon' }, '\u26A0\uFE0F'),
+        h('div', { className: 'grid-state-text' }, en ? 'Failed to load works.' : '\u4F5C\u54C1\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002')
+      );
+      var retry = h('button', { className: 'btn btn-ghost btn-sm' }, en ? 'Retry' : '\u518D\u8AAD\u307F\u8FBC\u307F');
+      retry.onclick = function() { location.reload(); };
+      box.appendChild(retry);
+      grid.appendChild(box);
+    }
+  }
+
   function init() {
     initTheme();
 
@@ -862,30 +992,37 @@
     });
 
     // カタログ読み込み＆描画
+    setGridState('loading');
     Promise.all([S.getCatalog(), S.getVotes()]).then(function(results) {
       var catalog = results[0];
       var votes = results[1];
+      // 英語モードでは作品タイトル等の英訳が揃ってから描画→表示
+      _translatePortalWorks(catalog.works, function() {
+        renderHeroStats(catalog);
 
-      renderHeroStats(catalog);
+        // 作品一覧（新着順にソート）
+        var grid = $('#works-grid');
+        if (grid) {
+          var sorted = (catalog.works || []).slice().sort(function(a, b) {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+          });
+          if (sorted.length === 0) {
+            setGridState('empty');
+          } else {
+            grid.innerHTML = '';
+            sorted.forEach(function(w) {
+              grid.appendChild(createWorkCard(w, votes));
+            });
+          }
+        }
 
-      // 作品一覧（新着順にソート）。青空文庫シリーズ（tags に「青空文庫」を含む）は別枠に分離。
-      function _isAozora(w){return (w.tags||[]).indexOf('青空文庫')>=0;}
-      var grid = $('#works-grid');
-      if (grid) {
-        var sorted = catalog.works.slice().sort(function(a, b) {
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-        sorted.filter(function(w){return !_isAozora(w);}).forEach(function(w) {
-          grid.appendChild(createWorkCard(w, votes));
-        });
-      }
-
-      // 青空文庫シリーズ コーナー（謝辞付き）
-      renderAozoraSeries(catalog.works.filter(_isAozora), votes);
-
-      // ランキング
-      renderRanking('votes');
-    });
+        // 続きから読む
+        _renderContinueReading(catalog);
+        // ランキング
+        renderRanking('votes');
+        _portalReveal();
+      });
+    }).catch(function(){ setGridState('error'); _portalReveal(); });
 
     // ランキングソートボタン
     $$('.ranking-sort-btn').forEach(function(btn) {
