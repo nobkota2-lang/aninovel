@@ -1,35 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AniNovel production build script
+# AniNovel production build script  (UTF-8 safe, permanent)
 # Location: scripts/build.sh
-# Run: bash scripts/build.sh
-#
-# Steps:
-#   1. Copy build artifacts into dist/
-#   2. Minify HTML/CSS/JS
-#   3. Obfuscate JS (optional - heavy, controlled by env var)
-#   4. Inject build ID (cache-busting)
-#   5. _headers, _redirects placed into dist
-#
-# Optional dev dependencies:
-#   npm install --no-save html-minifier-terser terser javascript-obfuscator clean-css-cli
-#
-# NOTE: This file is intentionally ASCII-only. Do NOT add non-ASCII characters
-#       (e.g. Japanese comments) - editing under a non-UTF-8 locale can corrupt
-#       the script and break the build.
 # =============================================================================
 set -eo pipefail
-
+export LC_ALL=C.UTF-8 2>/dev/null || true
+export LANG=C.UTF-8 2>/dev/null || true
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST="$ROOT/dist"
 SRC="$ROOT"
-
-# Build ID (Git commit SHA or timestamp)
 BUILD_ID="${GITHUB_SHA:-$(date -u +%Y%m%d_%H%M%S)}"
 BUILD_ID="${BUILD_ID:0:12}"
 echo "[build] BUILD_ID: $BUILD_ID"
-
-# Obfuscation toggle (OBFUSCATE=1 to enable; build time ~10x slower)
 OBFUSCATE="${OBFUSCATE:-0}"
 
 # ===== 1. Reset dist =====
@@ -39,7 +21,6 @@ mkdir -p "$DIST"
 
 # ===== 2. Copy static files =====
 echo "[build] Copying files..."
-# functions/ is handled directly by Cloudflare Pages, kept outside dist.
 cp -r "$SRC/css" "$DIST/" 2>/dev/null || true
 cp -r "$SRC/js" "$DIST/" 2>/dev/null || true
 cp -r "$SRC/data" "$DIST/" 2>/dev/null || true
@@ -53,12 +34,8 @@ cp "$SRC/sw.js" "$DIST/" 2>/dev/null || true
 cp "$SRC/robots.txt" "$DIST/" 2>/dev/null || true
 cp "$SRC/sitemap.xml" "$DIST/" 2>/dev/null || true
 cp "$SRC/og-image.svg" "$DIST/" 2>/dev/null || true
-
-# _headers, _redirects (Cloudflare Pages specific)
 cp "$SRC/_headers" "$DIST/" 2>/dev/null || true
 cp "$SRC/_redirects" "$DIST/" 2>/dev/null || true
-
-# Remove local-dev-only files
 rm -f "$DIST/start.bat" "$DIST/server.cjs" "$DIST/README_LOCAL.txt"
 
 # ===== 3. Inject build ID =====
@@ -72,13 +49,17 @@ if [ -f "$DIST/sw.js" ]; then
   rm -f "$DIST/sw.js.bak"
 fi
 
-# ===== 4. JS minify =====
+# ===== 4. JS minify (UTF-8 preserved; portal.js excluded) =====
 echo "[build] JS minify..."
 if command -v terser >/dev/null 2>&1; then
   find "$DIST/js" -name "*.js" -type f | while read -r f; do
+    case "$f" in
+      */portal.js) echo "  [skip minify] portal.js (preserve UTF-8)"; continue;;
+    esac
     terser "$f" \
       --compress passes=2,drop_console=false,drop_debugger=true \
       --mangle \
+      --format ascii_only=false \
       --output "$f.min"
     mv "$f.min" "$f"
   done
@@ -100,7 +81,8 @@ if [ "$OBFUSCATE" = "1" ] && command -v javascript-obfuscator >/dev/null 2>&1; t
       --rename-globals false \
       --string-array true --string-array-encoding base64 --string-array-threshold 0.6 \
       --self-defending true \
-      --transform-object-keys true
+      --transform-object-keys true \
+      --unicode-escape-sequence false
     mv "$f.obf" "$f"
   done
   echo "  [ok] core modules obfuscated"
@@ -118,7 +100,7 @@ else
   echo "  [skip] clean-css not installed"
 fi
 
-# ===== 7. HTML minify =====
+# ===== 7. HTML minify (UTF-8 preserved) =====
 echo "[build] HTML minify..."
 if command -v html-minifier-terser >/dev/null 2>&1; then
   find "$DIST" -name "*.html" -type f | while read -r f; do
@@ -130,7 +112,7 @@ if command -v html-minifier-terser >/dev/null 2>&1; then
       --remove-script-type-attributes \
       --use-short-doctype \
       --minify-css true \
-      --minify-js '{"compress":{"drop_console":false,"passes":2},"mangle":{"toplevel":false}}' || cp "$f" "$f.min"
+      --minify-js '{"compress":{"drop_console":false,"passes":2},"mangle":{"toplevel":false},"format":{"ascii_only":false}}' || cp "$f" "$f.min"
     mv "$f.min" "$f"
   done
   echo "  [ok] html-minifier-terser done"
