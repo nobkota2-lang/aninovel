@@ -90,8 +90,12 @@
         + '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>';
       sec.appendChild(ack);
 
-      var about = document.getElementById('about-section');
-      if (about && about.parentNode === main) main.insertBefore(sec, about);
+      var rankingSec = null;
+      var titles = main.querySelectorAll('.section-title');
+      for (var ri = 0; ri < titles.length; ri++) {
+        if ((titles[ri].textContent || '').indexOf('ランキング') !== -1) { rankingSec = titles[ri].parentElement; break; }
+      }
+      if (rankingSec && rankingSec.parentNode === main) main.insertBefore(sec, rankingSec);
       else main.appendChild(sec);
     } catch (err) {
       console.warn('[Aozora] render skipped:', err);
