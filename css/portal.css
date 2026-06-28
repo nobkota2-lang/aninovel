@@ -286,3 +286,22 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
   /* ようこそバナーの余白を少し詰める */
   .welcome-banner { padding: 16px 16px; }
 }
+/* === 横スクロール・レーン + ページャ === */
+.lane-host { display: block; }
+.lane-track {
+  display: flex; flex-wrap: nowrap; gap: 16px;
+  overflow-x: auto; overflow-y: hidden; padding-bottom: 8px;
+  scroll-behavior: smooth; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
+.lane-track > * { flex: 0 0 auto; width: 300px; max-width: 78vw; }
+.lane-track::-webkit-scrollbar { height: 8px; }
+.lane-track::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+.lane-pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 10px; }
+.lane-pager-label { font-size: 13px; color: var(--text-muted); min-width: 48px; text-align: center; }
+.lane-pager-btn {
+  width: 34px; height: 34px; border: 1px solid var(--border);
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border-radius: 8px; cursor: pointer; font-size: 18px; line-height: 1;
+}
+.lane-pager-btn:hover:not(:disabled) { background: var(--border); }
+.lane-pager-btn:disabled { opacity: .4; cursor: default; }

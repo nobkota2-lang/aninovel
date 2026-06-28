@@ -50,6 +50,53 @@
 
   // === 作品カードを生成 ===
   // === 青空文庫シリーズ コーナー（謝辞付き・完全分離） ===
+  // === 横スクロール・レーン + 10件ページ送り ===
+  function renderPagedLane(container, works, votes) {
+    try {
+      var PER = 10;
+      works = works || [];
+      var page = 0;
+      var pages = Math.max(1, Math.ceil(works.length / PER));
+      var lane = document.createElement('div');
+      lane.className = 'lane-track';
+      var pager = document.createElement('div');
+      pager.className = 'lane-pager';
+      var prev = document.createElement('button');
+      prev.className = 'lane-pager-btn'; prev.type = 'button'; prev.textContent = '\u2039';
+      var label = document.createElement('span');
+      label.className = 'lane-pager-label';
+      var next = document.createElement('button');
+      next.className = 'lane-pager-btn'; next.type = 'button'; next.textContent = '\u203A';
+      function draw() {
+        lane.innerHTML = '';
+        var start = page * PER;
+        var slice = works.slice(start, start + PER);
+        slice.forEach(function (w) {
+          try { lane.appendChild(createWorkCard(w, votes)); } catch (e) {}
+        });
+        label.textContent = (page + 1) + ' / ' + pages;
+        prev.disabled = (page <= 0);
+        next.disabled = (page >= pages - 1);
+        lane.scrollLeft = 0;
+      }
+      prev.onclick = function () { if (page > 0) { page--; draw(); } };
+      next.onclick = function () { if (page < pages - 1) { page++; draw(); } };
+      container.innerHTML = '';
+      container.classList.add('lane-host');
+      container.appendChild(lane);
+      if (pages > 1) {
+        pager.appendChild(prev); pager.appendChild(label); pager.appendChild(next);
+        container.appendChild(pager);
+      }
+      draw();
+    } catch (e) {
+      try {
+        container.innerHTML = '';
+        (works || []).forEach(function (w) { try { container.appendChild(createWorkCard(w, votes)); } catch (e2) {} });
+      } catch (e3) {}
+    }
+  }
+
   function renderAozoraSeries(works, votes) {
     try {
       var existing = document.getElementById('aozora-section');
@@ -904,9 +951,7 @@
         var regular = sorted;
         try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
         catch(e){ regular = sorted; }
-        regular.forEach(function(w) {
-          grid.appendChild(createWorkCard(w, votes));
-        });
+        renderPagedLane(grid, regular, votes);
       }
 
       // 青空文庫シリーズ コーナー（謝辞付き）。失敗しても本一覧に影響させない。
