@@ -91,8 +91,17 @@
       sec.appendChild(ack);
 
       var about = document.getElementById('about-section');
-      if (about && about.parentNode === main) main.insertBefore(sec, about);
-      else main.appendChild(sec);
+      var anchor = document.getElementById('ranking-section');
+      if (anchor && anchor.parentNode === main) {
+        var prev = anchor.previousElementSibling;
+        if (prev && prev.classList && prev.classList.contains('section-title')) {
+          main.insertBefore(sec, prev);
+        } else {
+          main.insertBefore(sec, anchor);
+        }
+      } else {
+        main.appendChild(sec);
+      }
     } catch (err) {
       console.warn('[Aozora] render skipped:', err);
     }
