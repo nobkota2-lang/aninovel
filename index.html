@@ -510,7 +510,35 @@
     worksTitle.parentNode.insertBefore(filterSection, worksTitle);
     
     // フィルタロジック
+    var _phase1Page = 0;
+    var _PHASE1_PER = 10;
+    function _renderPhase1Pager(pages) {
+      var grid = document.getElementById('works-grid');
+      if (!grid) return;
+      var pager = document.getElementById('phase1-pager');
+      if (pages <= 1) { if (pager) pager.remove(); return; }
+      if (!pager) {
+        pager = document.createElement('div');
+        pager.id = 'phase1-pager';
+        pager.className = 'phase1-pager';
+        grid.parentNode.insertBefore(pager, grid.nextSibling);
+      }
+      pager.innerHTML = '';
+      var prev = document.createElement('button');
+      prev.className = 'phase1-pager-btn'; prev.type = 'button'; prev.textContent = '\u2039';
+      prev.disabled = (_phase1Page <= 0);
+      prev.onclick = function(){ if (_phase1Page > 0) { _phase1Page--; applyFilter(); } };
+      var label = document.createElement('span');
+      label.className = 'phase1-pager-label';
+      label.textContent = (_phase1Page + 1) + ' / ' + pages;
+      var next = document.createElement('button');
+      next.className = 'phase1-pager-btn'; next.type = 'button'; next.textContent = '\u203A';
+      next.disabled = (_phase1Page >= pages - 1);
+      next.onclick = function(){ if (_phase1Page < pages - 1) { _phase1Page++; applyFilter(); } };
+      pager.appendChild(prev); pager.appendChild(label); pager.appendChild(next);
+    }
     function applyFilter() {
+      _phase1Page = _phase1Page || 0;
       var query = document.getElementById('phase1-search-input').value.toLowerCase().trim();
       var lengthFilter = document.getElementById('phase1-length-filter').value;
       var cards = worksGrid.querySelectorAll('.work-card');
@@ -530,12 +558,23 @@
         );
         
         if (matchesSearch && matchesLength) {
-          card.style.display = '';
+          card._p1match = true;
           visibleCount++;
         } else {
+          card._p1match = false;
           card.style.display = 'none';
         }
       });
+      // --- ページング: マッチしたカードを10件ずつ表示 ---
+      var matched = Array.prototype.filter.call(cards, function(c){ return c._p1match; });
+      var pages = Math.max(1, Math.ceil(matched.length / _PHASE1_PER));
+      if (_phase1Page >= pages) _phase1Page = pages - 1;
+      if (_phase1Page < 0) _phase1Page = 0;
+      matched.forEach(function(c, i){
+        var onPage = (i >= _phase1Page * _PHASE1_PER) && (i < (_phase1Page + 1) * _PHASE1_PER);
+        c.style.display = onPage ? '' : 'none';
+      });
+      _renderPhase1Pager(pages);
       
       // 統計表示
       var statsEl = document.getElementById('phase1-filter-stats');

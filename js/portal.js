@@ -951,7 +951,7 @@
         var regular = sorted;
         try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
         catch(e){ regular = sorted; }
-        renderPagedLane(grid, regular, votes);
+        regular.forEach(function(w) { grid.appendChild(createWorkCard(w, votes)); });
       }
 
       // 青空文庫シリーズ コーナー（謝辞付き）。失敗しても本一覧に影響させない。

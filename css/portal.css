@@ -305,3 +305,32 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 }
 .lane-pager-btn:hover:not(:disabled) { background: var(--border); }
 .lane-pager-btn:disabled { opacity: .4; cursor: default; }
+/* === 作品一覧/青空文庫: 1行横スクロール（10件/ページ） === */
+#works-grid, #aozora-grid {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+#works-grid > .work-card, #aozora-grid > .work-card {
+  flex: 0 0 auto;
+  width: 300px;
+  max-width: 78vw;
+}
+#works-grid::-webkit-scrollbar, #aozora-grid::-webkit-scrollbar { height: 8px; }
+#works-grid::-webkit-scrollbar-thumb, #aozora-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+.phase1-pager {
+  display: flex; align-items: center; justify-content: center; gap: 12px; margin: 14px 0 4px;
+}
+.phase1-pager-label { font-size: 13px; color: var(--text-muted); min-width: 48px; text-align: center; }
+.phase1-pager-btn {
+  width: 36px; height: 36px; border: 1px solid var(--border);
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border-radius: 8px; cursor: pointer; font-size: 18px; line-height: 1;
+}
+.phase1-pager-btn:hover:not(:disabled) { background: var(--border); }
+.phase1-pager-btn:disabled { opacity: .4; cursor: default; }
