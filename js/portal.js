@@ -76,9 +76,9 @@
       var grid = document.createElement('div');
       grid.className = 'works-grid';
       grid.id = 'aozora-grid';
-      works.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); })
+      works.slice().sort(function (a, b) { return ((Date.parse(b&&b.createdAt)||0) - (Date.parse(a&&a.createdAt)||0)); })
         .forEach(function (w) {
-          try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { /* 1枚失敗しても継続 */ }
+          try { try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { console.warn('[works] card skipped:', w && w.id, e); } } catch (e) { /* 1枚失敗しても継続 */ }
         });
       sec.appendChild(grid);
 
@@ -904,13 +904,15 @@
       var grid = $('#works-grid');
       if (grid) {
         var sorted = catalog.works.slice().sort(function(a, b) {
-          return new Date(b.createdAt) - new Date(a.createdAt);
+          var ta = Date.parse(a && a.createdAt); if (isNaN(ta)) ta = 0;
+          var tb = Date.parse(b && b.createdAt); if (isNaN(tb)) tb = 0;
+          return tb - ta;
         });
         var regular = sorted;
         try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
         catch(e){ regular = sorted; }
         regular.forEach(function(w) {
-          grid.appendChild(createWorkCard(w, votes));
+          try { try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { console.warn('[works] card skipped:', w && w.id, e); } } catch (e) { console.warn('[works] card skipped:', w && w.id, e); }
         });
       }
 
