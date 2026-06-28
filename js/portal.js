@@ -128,7 +128,7 @@
     body.appendChild(stats);
 
     var tags = h('div', { className: 'card-tags' });
-    work.tags.forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
+    (work.tags || []).forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
     body.appendChild(tags);
 
     var footer = h('div', { className: 'card-footer' });
