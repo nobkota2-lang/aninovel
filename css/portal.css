@@ -334,3 +334,22 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 }
 .phase1-pager-btn:hover:not(:disabled) { background: var(--border); }
 .phase1-pager-btn:disabled { opacity: .4; cursor: default; }
+/* === 作品カードの表紙 === */
+.card-banner {
+  height: 160px;
+  border-radius: 12px 12px 0 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.card-banner-title {
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+  text-align: center;
+  padding: 12px 16px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  line-height: 1.4;
+}

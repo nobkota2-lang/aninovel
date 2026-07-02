@@ -113,7 +113,15 @@
     card.onclick = function() { openWork(work.id); };
 
     var banner = h('div', { className: 'card-banner' });
-    banner.style.background = work.coverColor;
+    if (work.coverImage) {
+      banner.style.backgroundImage = 'url(' + work.coverImage + ')';
+      banner.style.backgroundSize = 'cover';
+      banner.style.backgroundPosition = 'center';
+    } else {
+      banner.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
+      var bt = h('div', { className: 'card-banner-title' }, work.title || '');
+      banner.appendChild(bt);
+    }
     card.appendChild(banner);
 
     var body = h('div', { className: 'card-body' });
