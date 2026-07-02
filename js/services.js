@@ -91,8 +91,14 @@
         function addEntry(entry) {
           if (!entry || !entry.id) return;
           if (susp[entry.id]) return; // 公開停止中はカタログに含めない
-          if (data.works.some(function(w) { return w.id === entry.id; })) return;
-          data.works.push(entry);
+          var idx = -1;
+          for (var _k = 0; _k < data.works.length; _k++) { if (data.works[_k].id === entry.id) { idx = _k; break; } }
+          if (idx >= 0) {
+            // 既存（静的カタログ等）があれば、サーバー/新しい版で上書きマージ（coverImage等の新フィールドを反映）
+            data.works[idx] = Object.assign({}, data.works[idx], entry);
+          } else {
+            data.works.push(entry);
+          }
         }
         // サーバー投稿作品をマージ
         (server.works || []).forEach(addEntry);
