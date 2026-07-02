@@ -111,45 +111,37 @@
     var v = votes[work.id] || { total: 0, userVoted: false };
     var card = h('div', { className: 'work-card anim-slide' });
     card.onclick = function() { openWork(work.id); };
-
-    var banner = h('div', { className: 'card-banner' });
+    var top = h('div', { className: 'card-top' });
+    var cover = h('div', { className: 'card-cover' });
     if (work.coverImage) {
-      banner.style.backgroundImage = 'url(' + work.coverImage + ')';
-      banner.style.backgroundSize = 'cover';
-      banner.style.backgroundPosition = 'center';
+      cover.style.backgroundImage = 'url(' + work.coverImage + ')';
+      cover.style.backgroundSize = 'cover';
+      cover.style.backgroundPosition = 'center';
     } else {
-      banner.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
-      var bt = h('div', { className: 'card-banner-title' }, work.title || '');
-      banner.appendChild(bt);
+      cover.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
+      cover.appendChild(h('div', { className: 'card-cover-title' }, work.title || ''));
     }
-    card.appendChild(banner);
-
-    var body = h('div', { className: 'card-body' });
-    body.appendChild(h('div', { className: 'card-title' }, work.title));
-    body.appendChild(h('div', { className: 'card-author' }, work.author));
-    body.appendChild(h('div', { className: 'card-description' }, work.description));
-
+    top.appendChild(cover);
+    var head = h('div', { className: 'card-head' });
+    head.appendChild(h('div', { className: 'card-title' }, work.title));
+    head.appendChild(h('div', { className: 'card-author' }, work.author));
     var stats = h('div', { className: 'card-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + '字' }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + '人' }));
-    body.appendChild(stats);
-
+    head.appendChild(stats);
     var tags = h('div', { className: 'card-tags' });
     (work.tags || []).forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
-    body.appendChild(tags);
-
+    head.appendChild(tags);
+    top.appendChild(head);
+    card.appendChild(top);
+    card.appendChild(h('div', { className: 'card-description' }, work.description || ''));
     var footer = h('div', { className: 'card-footer' });
-    var date = h('span', { style: 'font-size:12px;color:var(--text-muted)' }, formatDate(work.createdAt));
-    var voteBtn = createVoteBtn(work.id, v);
-    footer.appendChild(date);
-    footer.appendChild(voteBtn);
-    body.appendChild(footer);
-
-    card.appendChild(body);
+    footer.appendChild(h('span', { style: 'font-size:12px;color:var(--text-muted)' }, formatDate(work.createdAt)));
+    footer.appendChild(createVoteBtn(work.id, v));
+    card.appendChild(footer);
     return card;
   }
-
   // === 投票ボタン ===
   function createVoteBtn(workId, v) {
     var btn = h('button', {
