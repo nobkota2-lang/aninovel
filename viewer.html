@@ -3507,7 +3507,7 @@ async function publishMyWork(){
         if(_aFail2>0)console.warn('音声'+_aFail2+'件のサーバー保存に失敗');
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
-      var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',pageCount:(state.content||[]).length,charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true};
+      var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true};
       var _up2=await fetch('/api/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
       if(!_up2.ok){var _ue2=await _up2.json().catch(function(){return{};});throw new Error(_ue2.error||('HTTP '+_up2.status));}
       console.info('[Publish-Owner] サーバーへ上書き公開完了:',_workParam);
