@@ -404,4 +404,4 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .work-card .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
 /* 青空文庫グリッドの左端を作品一覧(works-grid)と揃える */
 #aozora-section { padding-left: 0 !important; padding-right: 0 !important; }
-#aozora-section .section-title, #aozora-section > p, #aozora-section > div:not(#aozora-grid) { padding-left: 24px; }
+#aozora-section > p, #aozora-section > div:not(#aozora-grid):not(.section-title) { padding-left: 24px; }
