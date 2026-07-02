@@ -337,7 +337,7 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 /* === 作品カードの表紙（縦長・文庫本風） === */
 .card-banner {
   width: 100%;
-  aspect-ratio: 2 / 3;   /* 文庫本比率。縦長表紙 */
+  height: 260px !important;   /* 縦長表紙（8px指定を上書き） */
   border-radius: 12px 12px 0 0;
   position: relative;
   display: flex;
