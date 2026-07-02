@@ -91,7 +91,7 @@
       sec.appendChild(ack);
 
       var about = document.getElementById('about-section');
-      var anchor = document.getElementById('ranking-section');
+      var anchor = document.querySelector('.ranking-section');
       if (anchor && anchor.parentNode === main) {
         var prev = anchor.previousElementSibling;
         if (prev && prev.classList && prev.classList.contains('section-title')) {
@@ -203,7 +203,7 @@
       // 順序確定: 青空文庫をランキング(見出し)の前へ移動する
       try {
         var _az = document.getElementById('aozora-section');
-        var _rk = document.getElementById('ranking-section');
+        var _rk = document.querySelector('.ranking-section');
         if (_az && _rk && _rk.parentNode) {
           var _rkTitle = _rk.previousElementSibling;
           var _before = (_rkTitle && _rkTitle.classList && _rkTitle.classList.contains('section-title')) ? _rkTitle : _rk;
