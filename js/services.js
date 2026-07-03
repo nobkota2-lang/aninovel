@@ -102,10 +102,12 @@
         }
         // サーバー投稿作品をマージ
         (server.works || []).forEach(addEntry);
-        // ローカル投稿作品をマージ (サーバー未反映分のフォールバック)
+        // ローカル投稿作品をマージ (サーバー未反映分のフォールバックのみ。サーバーに存在するIDは上書きしない)
+        var _serverIds = {};
+        (server.works || []).forEach(function(w){ if(w && w.id) _serverIds[w.id] = true; });
         Object.keys(pub).forEach(function(pid) {
           var p = pub[pid];
-          if (p && p.catalogEntry) addEntry(p.catalogEntry);
+          if (p && p.catalogEntry && !_serverIds[p.catalogEntry.id]) addEntry(p.catalogEntry);
         });
         return data;
       });
