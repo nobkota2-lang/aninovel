@@ -3521,7 +3521,7 @@ async function publishMyWork(){
         }catch(e){console.warn('[Publish] 音声複製/アップロードエラー:',e);}
         try{
           var _wp={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
-          console.log('[isMyフロー] publishedId=', res.publishedId, '| catalogEntry.title=', (res.catalogEntry&&res.catalogEntry.title), '| state.novel.title=', (state.novel&&state.novel.title));var _up=await fetch('/api/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp,meta:res.catalogEntry})});
+          var _up=await fetch('/api/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp,meta:res.catalogEntry})});
           if(!_up.ok){var _ue=await _up.json().catch(function(){return{};});throw new Error(_ue.error||('HTTP '+_up.status));}
           console.info('[Publish] サーバーへアップロード完了:',res.publishedId);
         }catch(e){console.error('[Publish] サーバーアップロード失敗:',e);alert('投稿はこの端末に保存されましたが、サーバーへの公開に失敗しました。\n'+e.message+'\n\n他の人が閲覧できるようにするには、もう一度「投稿」してください。');return;}
@@ -3557,7 +3557,7 @@ async function publishMyWork(){
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
       var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',coverImage:_nn.coverImage||'',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true};
-      console.log('[公開保存デバッグ] 保存先ID=', _workParam, '| _meta.title=', _meta.title, '| state.novel.title=', (state.novel&&state.novel.title));var _up2=await fetch('/api/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
+      var _up2=await fetch('/api/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
       if(!_up2.ok){var _ue2=await _up2.json().catch(function(){return{};});throw new Error(_ue2.error||('HTTP '+_up2.status));}
       console.info('[Publish-Owner] サーバーへ上書き公開完了:',_workParam);
       alert('公開保存しました！\n作品ID: '+_workParam);
