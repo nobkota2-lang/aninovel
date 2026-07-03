@@ -36,7 +36,7 @@
   // 作品保存
   // ========================================
   function getWorkPayload(){ var st=window.state; if(st&&Array.isArray(st.content)) return { novel:st.novel, chapters:st.chapters, characters:st.characters, content:st.content, displaySettings:st.displaySettings, version:'2.2' }; return null; }
-  function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pw=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}'); if(pw[w]) return pw[w].catalogEntry||null; } catch(e){} return null; }
+  function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pl=getWorkPayload(); if(!w||!pl||!pl.novel) return null; var nv=pl.novel; var content=Array.isArray(pl.content)?pl.content:[]; var chars=Array.isArray(pl.characters)?pl.characters:[]; var cc=content.reduce(function(s,it){return s+(((it.text||it.html||'')+'').length);},0); var pg=content.filter(function(x){return x&&(x.type==='pageBreak'||x.type==='page'||x.type==='chapter');}).length; return { id:w, title:nv.title||'無題', author:nv.author||'', description:nv.description||'', coverColor:nv.coverColor||'#6366F1', coverImage:nv.coverImage||'', pageCount:(pg>0?pg:1), charCount:cc, characterCount:chars.length, tags:(Array.isArray(nv.tags)?nv.tags:[]), createdAt:nv.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString() }; } catch(e){ return null; } }
   function ensurePublishedWorksEntry(){
     var workId = getCurrentWorkId();
     if(!workId || workId.indexOf('pub_') !== 0) return;
