@@ -52,9 +52,15 @@ export async function onRequestPost(context){
   }
   try {
     if (!res) throw (lastErr || new Error('all models failed'));
-    const text = (res && (res.response||res.result||'')) + '';
+    let text = '';
+    if (res) {
+      if (typeof res === 'string') text = res;
+      else if (typeof res.response === 'string') text = res.response;
+      else if (res.result && typeof res.result.response === 'string') text = res.result.response;
+      else text = JSON.stringify(res);
+    }
     const m = text.match(/\{[\s\S]*\}/);
-    if(!m) return json({ok:false, reason:'no_json'});
+    if(!m) return json({ok:false, reason:'no_json', raw: text.slice(0,300)});
     let parsed;
     try { parsed = JSON.parse(m[0]); } catch(e){ return json({ok:false, reason:'parse_fail'}); }
     let speakers = Array.isArray(parsed.speakers) ? parsed.speakers : null;
