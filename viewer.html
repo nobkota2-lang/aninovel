@@ -2520,13 +2520,18 @@ function _extractSpeaker(line,dl){
   var m;
   m=before.match(/^\s*([\u4E00-\u9FFF\u3041-\u3096\u30A1-\u30FAA-Za-z]{1,10})(?:は|が|も)?[、,：:]?\s*$/);
   if(m&&_isValidName(m[1]))return m[1];
+  m=before.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が)[、,]?\s*$/);
+  if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{1,10}?)(?:は|が|も)[、,]?/);
   if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})[。\s]*$/);
   if(m&&_isValidName(m[1]))return m[1];
-  m=before.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が)[^「」]{0,15}$/);
-  if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が|も)[^。]{0,8}(?:云|言|叫|答|尋|呼|返|囁|怒鳴|仰|訊|続け|話し|申し|呟|問)/);
+  if(m&&_isValidName(m[1]))return m[1];
+  return null;
+}
+function _tailSpeaker(line){
+  var m=line.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:が|は)[、,]?\s*$/);
   if(m&&_isValidName(m[1]))return m[1];
   return null;
 }
@@ -2536,7 +2541,7 @@ function parseText(text){
   state.characters=nar?[nar]:[state.characters[state.characters.length-1]];
   var lines=text.split('\n').filter(function(l){return l.trim()});
   var order=0;var det=new Set();
-  var lastSpeaker=null,prevSpeaker=null,lastWasDialogue=false;
+  var lastSpeaker=null,prevSpeaker=null,lastWasDialogue=false,pendingSpeaker=null;
   function findChar(nm){
     var c=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===nm||x.shortName===nm)});
     if(c)return c;
@@ -2549,17 +2554,19 @@ function parseText(text){
     if(!line)return;
     if(/^[一二三四五六七八九十百]+[、，.．]/.test(line)||/^第?[一二三四五六七八九十百0-9０-９]+[章節話]/.test(line)){
       state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line.replace(/[「」]/g,''),order:order++});
-      lastWasDialogue=false;lastSpeaker=null;prevSpeaker=null;
+      lastWasDialogue=false;lastSpeaker=null;prevSpeaker=null;pendingSpeaker=null;
       return;
     }
     var qm=line.match(/「(.+?)」/);
     if(qm){
       var dl=qm[1];
       var sp=_extractSpeaker(line,dl);
+      if(!sp&&pendingSpeaker){sp=pendingSpeaker;}
       if(!sp){
         if(lastWasDialogue&&prevSpeaker&&prevSpeaker!==lastSpeaker){sp=prevSpeaker;}
         else if(lastSpeaker){sp=lastSpeaker;}
       }
+      pendingSpeaker=null;
       if(sp){
         var ch=findChar(sp);
         if(!ch){
@@ -2579,6 +2586,7 @@ function parseText(text){
     }else{
       state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
       lastWasDialogue=false;
+      pendingSpeaker=_tailSpeaker(line);
     }
   });
   state.currentPage=0;render();
