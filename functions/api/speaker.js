@@ -30,14 +30,28 @@ export async function onRequestPost(context){
     '回答は次のJSON形式のみ。他の文章は一切書かない:\n' +
     '{"speakers":["人物名1","人物名2",...]}';
 
+  const MODELS = [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/meta/llama-4-scout-17b-16e-instruct',
+    '@cf/google/gemma-3-12b-it',
+    '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    '@cf/meta/llama-3.2-3b-instruct'
+  ];
+  let res = null, lastErr = null;
+  for (const model of MODELS) {
+    try {
+      res = await env.AI.run(model, {
+        messages: [
+          { role: 'system', content: 'あなたは日本語小説の話者特定を行う。回答はJSONのみ。' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 800
+      });
+      if (res) break;
+    } catch(e) { lastErr = e; res = null; }
+  }
   try {
-    const res = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: [
-        { role: 'system', content: 'あなたは日本語小説の話者特定を行う。回答はJSONのみ。' },
-        { role: 'user', content: prompt }
-      ],
-      max_tokens: 800
-    });
+    if (!res) throw (lastErr || new Error('all models failed'));
     const text = (res && (res.response||res.result||'')) + '';
     const m = text.match(/\{[\s\S]*\}/);
     if(!m) return json({ok:false, reason:'no_json'});
