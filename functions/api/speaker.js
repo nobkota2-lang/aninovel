@@ -63,8 +63,27 @@ export async function onRequestPost(context){
     if(!m) return json({ok:false, reason:'no_json', raw: text.slice(0,300)});
     let parsed;
     try { parsed = JSON.parse(m[0]); } catch(e){ return json({ok:false, reason:'parse_fail'}); }
-    let speakers = Array.isArray(parsed.speakers) ? parsed.speakers : null;
-    if(!speakers) return json({ok:false, reason:'no_speakers'});
+    let speakers = null;
+    if (Array.isArray(parsed.speakers)) speakers = parsed.speakers;
+    else if (Array.isArray(parsed)) speakers = parsed;
+    else {
+      // {"話者":[...]} や {"answers":[...]} など、最初に見つかった配列を採用
+      for (const k in parsed) {
+        if (Array.isArray(parsed[k])) { speakers = parsed[k]; break; }
+      }
+      // {"1":"先生","2":"ジョバンニ"} 形式（数字キーのオブジェクト）
+      if (!speakers) {
+        const keys = Object.keys(parsed);
+        if (keys.length && keys.every(k=>/^\d+$/.test(k))) {
+          speakers = keys.sort((a,b)=>a-b).map(k=>parsed[k]);
+        }
+      }
+      // 値がオブジェクトの配列 [{speaker:"先生"},...] への対応
+      if (speakers && speakers.length && typeof speakers[0]==='object' && speakers[0]!==null) {
+        speakers = speakers.map(x=>x.speaker||x.name||x.話者||JSON.stringify(x));
+      }
+    }
+    if(!speakers) return json({ok:false, reason:'no_speakers', raw: m[0].slice(0,300)});
     speakers = speakers.slice(0, dialogues.length).map(s=>String(s||'不明').trim().slice(0,10));
     while(speakers.length < dialogues.length) speakers.push('不明');
     return json({ok:true, speakers: speakers});
