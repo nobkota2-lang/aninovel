@@ -52,18 +52,20 @@ export async function onRequestPost(context){
   }
   try {
     if (!res) throw (lastErr || new Error('all models failed'));
-    function digText(o, depth){
-      if (depth > 4 || o == null) return '';
+    function pickText(o){
+      if (o == null) return '';
       if (typeof o === 'string') return o;
-      if (typeof o !== 'object') return '';
-      var keys = ['response','result','text','content','output_text','generated_text','message','answer'];
-      for (var i=0;i<keys.length;i++){
-        if (o[keys[i]] != null){ var v = digText(o[keys[i]], depth+1); if (v) return v; }
-      }
-      if (Array.isArray(o)) { for (var j=0;j<o.length;j++){ var w=digText(o[j],depth+1); if(w) return w; } }
+      // OpenAI互換: choices[0].message.content
+      try { var c = o.choices && o.choices[0] && o.choices[0].message && o.choices[0].message.content; if (typeof c === 'string' && c) return c; } catch(e){}
+      // choices[0].text (completion形式)
+      try { var ct = o.choices && o.choices[0] && o.choices[0].text; if (typeof ct === 'string' && ct) return ct; } catch(e){}
+      if (typeof o.response === 'string' && o.response) return o.response;
+      if (o.result) return pickText(o.result);
+      if (typeof o.text === 'string' && o.text) return o.text;
+      if (typeof o.content === 'string' && o.content) return o.content;
       return '';
     }
-    let text = digText(res, 0);
+    let text = pickText(res);
     if (!text) return json({ok:false, reason:'no_text', shape: JSON.stringify(res).slice(0,300)});
     const m = text.match(/\{[\s\S]*\}/);
     if(!m) return json({ok:false, reason:'no_json', raw: text.slice(0,300)});
