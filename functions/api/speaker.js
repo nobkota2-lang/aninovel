@@ -52,13 +52,19 @@ export async function onRequestPost(context){
   }
   try {
     if (!res) throw (lastErr || new Error('all models failed'));
-    let text = '';
-    if (res) {
-      if (typeof res === 'string') text = res;
-      else if (typeof res.response === 'string') text = res.response;
-      else if (res.result && typeof res.result.response === 'string') text = res.result.response;
-      else text = JSON.stringify(res);
+    function digText(o, depth){
+      if (depth > 4 || o == null) return '';
+      if (typeof o === 'string') return o;
+      if (typeof o !== 'object') return '';
+      var keys = ['response','result','text','content','output_text','generated_text','message','answer'];
+      for (var i=0;i<keys.length;i++){
+        if (o[keys[i]] != null){ var v = digText(o[keys[i]], depth+1); if (v) return v; }
+      }
+      if (Array.isArray(o)) { for (var j=0;j<o.length;j++){ var w=digText(o[j],depth+1); if(w) return w; } }
+      return '';
     }
+    let text = digText(res, 0);
+    if (!text) return json({ok:false, reason:'no_text', shape: JSON.stringify(res).slice(0,300)});
     const m = text.match(/\{[\s\S]*\}/);
     if(!m) return json({ok:false, reason:'no_json', raw: text.slice(0,300)});
     let parsed;
