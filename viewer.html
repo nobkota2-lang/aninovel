@@ -2497,9 +2497,92 @@ async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!co
 async function detEnc(file){return new Promise(function(r){var rd=new FileReader;rd.onload=function(e){var a=new Uint8Array(e.target.result);if(a.length>=3&&a[0]===0xEF&&a[1]===0xBB&&a[2]===0xBF)return r('UTF-8');r('UTF-8')};rd.readAsArrayBuffer(file)})}
 async function rdTxt(f,e){return new Promise(function(r,j){var rd=new FileReader;rd.onload=function(ev){r(ev.target.result)};rd.onerror=j;rd.readAsText(f,e||'UTF-8')})}
 function detGender(n){if(/[子美香織恵愛花里奈沙菜実梨彩由佳理代紀]/.test(n))return'female';if(/[郎太介助男雄彦司夫治朗]/.test(n))return'male';return'male'}
-function _isValidName(n){if(!n)return false;n=n.trim();if(n.length<1||n.length>12)return false;if(/^(?:彼|彼女|彼等|彼ら|私|僕|俺|君|貴方|あなた|我々|お前|自分|皆|みんな|二人|三人|一人|そこ|ここ|それ|これ|あれ|又|また|そして|しかし|でも|だが)$/.test(n))return false;if(/^(?:京都|東京|江戸|大阪|奈良|鎌倉|武蔵|山|川|海|町|村|家|店|扉|部屋|廊下|道)$/.test(n))return false;if(/(?:云|言|思|聞|見|叫|答|尋|呼|返|怒|嘆|笑|泣|続|歩|走|立|座|入|出)[ぁ-ん]/.test(n))return false;if(/[。、！？「」『』（）\s]/.test(n))return false;return true}
-function _extractSpeaker(line,dl){var before='';var qi=line.indexOf('「');if(qi>0)before=line.substring(0,qi);var after='';var qe=line.lastIndexOf('」');if(qe>=0&&qe<line.length-1)after=line.substring(qe+1);var m;m=before.match(/([一-龯ぁ-んァ-ヶA-Za-z]{1,12})(?:は|が|も|の|、)?$/);if(m&&_isValidName(m[1]))return m[1];m=after.match(/と[、,]?\s*([一-龯ぁ-んァ-ヶ]{1,12})(?:は|が|も)?(?:云|言|叫|答|尋|呼|返|囁|怒鳴|おっしゃ|仰|訊|続け|話し|口)/);if(m&&_isValidName(m[1]))return m[1];m=after.match(/([一-龯ぁ-んァ-ヶ]{1,12})(?:は|が|も)(?:云|言|叫|答|尋|呼|返|囁|怒鳴|おっしゃ|仰|訊|続け|話し)/);if(m&&_isValidName(m[1]))return m[1];return null}
-function parseText(text){state.content=[];var nar=state.characters.find(function(c){return c.id==='narrator'});state.characters=nar?[nar]:[state.characters[state.characters.length-1]];var lines=text.split('\n').filter(function(l){return l.trim()});var order=0;var det=new Set();var lastSpeaker=null;lines.forEach(function(line,idx){line=line.trim();if(!line)return;var qm=line.match(/「(.+?)」/);if(qm){var dl=qm[1];var sp=_extractSpeaker(line,dl);if(!sp&&lastSpeaker)sp=lastSpeaker;if(sp){lastSpeaker=sp;var ch=state.characters.find(function(c){return c.id!=='narrator'&&(c.name===sp||c.shortName===sp)});if(!ch){var g=detGender(sp);var pr=(CP[g]||CP.male)[det.size%5];ch={id:'char'+Date.now()+idx,name:sp,shortName:sp.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};state.characters.push(ch);det.add(sp)}state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:ch.id,order:order++})}else{state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++})}}else{state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++})}});state.currentPage=0;render()}
+function _isValidName(n){
+  if(!n)return false;
+  n=n.trim();
+  if(n.length<1||n.length>10)return false;
+  if(/^(?:彼|彼女|彼等|彼ら|私|僕|俺|君|貴方|あなた|我々|お前|自分|皆|みんな|二人|三人|一人|両人|一同|その人|この人|あの人|そこ|ここ|それ|これ|あれ|又|また|そして|しかし|でも|だが|やがて|すると|それから|それでも|たちまち|まもなく)$/.test(n))return false;
+  if(/^(?:京都|東京|江戸|大阪|奈良|鎌倉|武蔵|山|川|海|町|村|家|店|扉|部屋|廊下|道|空|窓|汽車|車|席|手|声|音|風|涙|心|体|顔|目|口|足|頭|胸|息|気|水|火|光|闇|夜|朝|雨|雪|星|月|日)$/.test(n))return false;
+  if(/(?:云|言|思|聞|見|叫|答|尋|呼|返|怒|嘆|笑|泣|続|歩|走|立|座|入|出)[\u3041-\u3096]/.test(n))return false;
+  if(/[。、！？「」『』（）\s]/.test(n))return false;
+  if(/^[をにでへとやのもはが]/.test(n))return false;
+  if(/(?:して|んで|いで|えて|きて|って|ちて|ながら|ように|そうに|まま|とき)$/.test(n))return false;
+  if(/[てで]$/.test(n))return false;
+  if(/[をにへとはがも]$/.test(n))return false;
+  if(/^[\u3041-\u3096]{1,2}$/.test(n))return false;
+  return true;
+}
+function _extractSpeaker(line,dl){
+  var qi=line.indexOf('「');
+  var before=qi>0?line.substring(0,qi):'';
+  var qe=line.lastIndexOf('」');
+  var after=(qe>=0&&qe<line.length-1)?line.substring(qe+1):'';
+  var m;
+  m=before.match(/^\s*([\u4E00-\u9FFF\u3041-\u3096\u30A1-\u30FAA-Za-z]{1,10})(?:は|が|も)?[、,：:]?\s*$/);
+  if(m&&_isValidName(m[1]))return m[1];
+  m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{1,10}?)(?:は|が|も)[、,]?/);
+  if(m&&_isValidName(m[1]))return m[1];
+  m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})[。\s]*$/);
+  if(m&&_isValidName(m[1]))return m[1];
+  m=before.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が)[^「」]{0,15}$/);
+  if(m&&_isValidName(m[1]))return m[1];
+  m=after.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が|も)[^。]{0,8}(?:云|言|叫|答|尋|呼|返|囁|怒鳴|仰|訊|続け|話し|申し|呟|問)/);
+  if(m&&_isValidName(m[1]))return m[1];
+  return null;
+}
+function parseText(text){
+  state.content=[];
+  var nar=state.characters.find(function(c){return c.id==='narrator'});
+  state.characters=nar?[nar]:[state.characters[state.characters.length-1]];
+  var lines=text.split('\n').filter(function(l){return l.trim()});
+  var order=0;var det=new Set();
+  var lastSpeaker=null,prevSpeaker=null,lastWasDialogue=false;
+  function findChar(nm){
+    var c=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===nm||x.shortName===nm)});
+    if(c)return c;
+    return state.characters.find(function(x){return x.id!=='narrator'&&x.name&&x.name.length>=2&&nm.length>=2&&(nm.indexOf(x.name)===0||x.name.indexOf(nm)===0)})||null;
+  }
+  lines.forEach(function(line,idx){
+    line=line.trim();
+    if(!line)return;
+    line=line.replace(/《[^》]*》/g,'').replace(/｜/g,'').replace(/［＃[^］]*］/g,'');
+    if(!line)return;
+    if(/^[一二三四五六七八九十百]+[、，.．]/.test(line)||/^第?[一二三四五六七八九十百0-9０-９]+[章節話]/.test(line)){
+      state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line.replace(/[「」]/g,''),order:order++});
+      lastWasDialogue=false;lastSpeaker=null;prevSpeaker=null;
+      return;
+    }
+    var qm=line.match(/「(.+?)」/);
+    if(qm){
+      var dl=qm[1];
+      var sp=_extractSpeaker(line,dl);
+      if(!sp){
+        if(lastWasDialogue&&prevSpeaker&&prevSpeaker!==lastSpeaker){sp=prevSpeaker;}
+        else if(lastSpeaker){sp=lastSpeaker;}
+      }
+      if(sp){
+        var ch=findChar(sp);
+        if(!ch){
+          var g=(/男/.test(sp))?'male':((/女|母|姉|妹|娘|婆/.test(sp))?'female':detGender(sp));
+          var pr=(CP[g]||CP.male)[det.size%5];
+          ch={id:'char'+Date.now()+idx,name:sp,shortName:sp.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};
+          state.characters.push(ch);det.add(sp);
+        }
+        var canonical=ch.name;
+        if(canonical!==lastSpeaker){prevSpeaker=lastSpeaker;lastSpeaker=canonical;}
+        state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:ch.id,order:order++});
+        lastWasDialogue=true;
+      }else{
+        state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
+        lastWasDialogue=false;
+      }
+    }else{
+      state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
+      lastWasDialogue=false;
+    }
+  });
+  state.currentPage=0;render();
+}
 
 async function uploadInlineVideo(file){
   if(!file) return;
