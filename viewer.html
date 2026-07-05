@@ -2696,6 +2696,7 @@ async function _aiRefineSpeakers(){
   }
 }
 function parseText(text){
+  try{ var _mi=text.search(/(^|\n)[ 　]*底本[:：]/); if(_mi>0) text=text.substring(0,_mi); }catch(e){}
   state.content=[];
   var nar=state.characters.find(function(c){return c.id==='narrator'});
   state.characters=nar?[nar]:[state.characters[state.characters.length-1]];
