@@ -2586,14 +2586,28 @@ function _pickIconGroup(gender,age,usedGroups){
   if(any.length)return any[Math.floor(Math.random()*any.length)];
   return g.length?g[0]:null;
 }
+function _authorGender(){
+  try{
+    if(state.novel && (state.novel.authorGender==='male'||state.novel.authorGender==='female')) return state.novel.authorGender;
+    var a=(state.novel&&state.novel.author||'').replace(/\s/g,'');
+    if(!a) return 'male';
+    var F={'樋口一葉':1,'与謝野晶子':1,'清少納言':1,'紫式部':1,'岡本かの子':1,'宮本百合子':1,'野上弥生子':1,'林芙美子':1,'金子みすゞ':1,'吉屋信子':1,'田村俊子':1,'尾崎翠':1,'平塚らいてう':1,'網野菊':1,'幸田文':1};
+    var M={'宮沢賢治':1,'夏目漱石':1,'芥川龍之介':1,'太宰治':1,'森鴎外':1,'森鷗外':1,'志賀直哉':1,'川端康成':1,'谷崎潤一郎':1,'江戸川乱歩':1,'小泉八雲':1,'中島敦':1,'梶井基次郎':1,'国木田独歩':1,'坂口安吾':1,'菊池寛':1,'泉鏡花':1,'島崎藤村':1,'田山花袋':1,'有島武郎':1,'石川啄木':1,'正岡子規':1,'二葉亭四迷':1,'幸田露伴':1,'樋口葉':0};
+    if(F[a]) return 'female';
+    if(M[a]) return 'male';
+    if(/(子|美|恵|枝|香|代|奈|菜|花|絵|里|梨|沙|紗|舞|愛|優|礼|玲|麗)$/.test(a)) return 'female';
+    return 'male';
+  }catch(e){ return 'male'; }
+}
 function _autoAssignIcons(){
   return _loadGalleryManifest().then(function(){
     if(!_galleryManifest||!_galleryManifest.length)return;
-    var chars=(state.characters||[]).filter(function(c){return c.id!=='narrator'&&!c.iconImage;});
+    var chars=(state.characters||[]).filter(function(c){return !c.iconImage;});
     var usedGroups=[];var usedImgs={};
     chars.forEach(function(c){
-      var gender=(c.gender==='female')?'female':'male';
-      var age=_guessAge(c.name);
+      var isNar=(c.id==='narrator');
+      var gender=isNar?_authorGender():((c.gender==='female')?'female':'male');
+      var age=isNar?'MiddleAge':_guessAge(c.name);
       var grp=_pickIconGroup(gender,age,usedGroups);
       if(!grp||!grp.items||!grp.items.length)return;
       usedGroups.push(grp.id);
