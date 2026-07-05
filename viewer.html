@@ -2749,7 +2749,7 @@ function parseText(text){
       pendingSpeaker=_tailSpeaker(line);
     }
   });
-  state.currentPage=0;render();_aiRefineSpeakers();
+  state.currentPage=0;render();_autoAssignIcons();_aiRefineSpeakers();
 }
 
 async function uploadInlineVideo(file){
