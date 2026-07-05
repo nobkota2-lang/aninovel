@@ -2502,7 +2502,7 @@ function _isValidName(n){
   n=n.trim();
   if(n.length<1||n.length>10)return false;
   if(/^(?:彼|彼女|彼等|彼ら|私|僕|俺|君|貴方|あなた|我々|お前|自分|皆|みんな|二人|三人|一人|両人|一同|その人|この人|あの人|そこ|ここ|それ|これ|あれ|又|また|そして|しかし|でも|だが|やがて|すると|それから|それでも|たちまち|まもなく)$/.test(n))return false;
-  if(/^(?:底本|初出|入力|校正|青空文庫|ファイル|テキスト|注|訳|編|著|作|出典|表題|副題|奥付|凡例|序|跋|目次|挿絵|口絵|装丁|印刷|発行|発売|定価|検印|昭和|大正|明治|平成|令和)$/.test(n))return false;
+  if(/^(?:底本の親本|底本|親本|初出|入力|校正|青空文庫|ファイル|テキスト|注|訳|編|著|作|出典|表題|副題|奥付|凡例|序|跋|目次|挿絵|口絵|装丁|印刷|発行|発売|定価|検印|昭和|大正|明治|平成|令和)$/.test(n))return false;
   if(/^(?:京都|東京|江戸|大阪|奈良|鎌倉|武蔵|山|川|海|町|村|家|店|扉|部屋|廊下|道|空|窓|汽車|車|席|手|声|音|風|涙|心|体|顔|目|口|足|頭|胸|息|気|水|火|光|闇|夜|朝|雨|雪|星|月|日)$/.test(n))return false;
   if(/(?:云|言|思|聞|見|叫|答|尋|呼|返|怒|嘆|笑|泣|続|歩|走|立|座|入|出)[\u3041-\u3096]/.test(n))return false;
   if(/[。、！？「」『』（）\s]/.test(n))return false;
@@ -2696,7 +2696,7 @@ async function _aiRefineSpeakers(){
   }
 }
 function parseText(text){
-  try{ var _mi=text.search(/(^|\n)[ 　]*底本[:：]/); if(_mi>0) text=text.substring(0,_mi); }catch(e){}
+  try{ var _mi=text.search(/(^|\n)[ 　]*(?:底本の親本|底本|親本|入力|校正)[:：]/); if(_mi>0) text=text.substring(0,_mi); }catch(e){}
   state.content=[];
   var nar=state.characters.find(function(c){return c.id==='narrator'});
   state.characters=nar?[nar]:[state.characters[state.characters.length-1]];
