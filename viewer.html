@@ -2613,7 +2613,7 @@ async function _aiRefineSpeakers(){
       if(it.type==='dialogue'){targets.push(i);}
       else if(it.type==='narration'&&/「.+?」/.test(it.text||'')){targets.push(i);}
     });
-    if(targets.length===0){_autoAssignIcons();return;}
+    if(targets.length===0){await _autoAssignIcons();return;}
     var chunks=[];var cur=[];
     targets.forEach(function(i){cur.push(i);if(cur.length>=12){chunks.push(cur);cur=[]}});
     if(cur.length)chunks.push(cur);
@@ -2673,7 +2673,7 @@ async function _aiRefineSpeakers(){
     if(failed){
       alert('AIでの話者特定機能は現在停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が悪いと感じた場合は、ご自分で直すか、後日再読み込みをしてください。');
     }
-    _autoAssignIcons();render();
+    await _autoAssignIcons();render();
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
