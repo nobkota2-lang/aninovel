@@ -2535,6 +2535,76 @@ function _tailSpeaker(line){
   if(m&&_isValidName(m[1]))return m[1];
   return null;
 }
+var _galleryManifest=null;
+function _loadGalleryManifest(){
+  if(_galleryManifest!==null)return Promise.resolve(_galleryManifest);
+  return fetch('/data/gallery-manifest.json?nc='+Date.now()).then(function(r){return r.json();}).then(function(m){
+    _galleryManifest=(m&&m.groups)||[];return _galleryManifest;
+  }).catch(function(){_galleryManifest=[];return [];});
+}
+function _guessAge(name){
+  var n=name||'';
+  if(/(赤ん坊|赤ちゃん|乳児)/.test(n))return 'Baby';
+  if(/(老人|老婆|老爺|翁|媼|婆|爺|おじいさん|おばあさん|じいさん|ばあさん)/.test(n))return 'Senior';
+  if(/(先生|博士|父|母|夫人|おじ|おば|おじさん|おばさん|旦那|女将|主人|店主|校長|教授|大人|紳士|婦人)/.test(n))return 'MiddleAge';
+  if(/(少年|少女|坊|嬢|娘|息子|子供|こども|生徒|学生|童)/.test(n))return 'Teen';
+  if(/(ちゃん|くん)$/.test(n))return 'Child';
+  return 'YoungAdult';
+}
+function _ageNeighbors(age){
+  var order=['Baby','Child','Teen','YoungAdult','Adult','MiddleAge','Senior'];
+  var i=order.indexOf(age);if(i<0)i=3;
+  var res=[age];
+  for(var d=1;d<order.length;d++){
+    if(i-d>=0)res.push(order[i-d]);
+    if(i+d<order.length)res.push(order[i+d]);
+  }
+  return res;
+}
+function _pickIconGroup(gender,age,usedGroups){
+  var g=_galleryManifest||[];
+  var G=gender==='female'?'Female':'Male';
+  var races=['Japanese','Asian','White','Hispanic','MiddleEastern','SouthAsian','Black'];
+  var types=['Anime','AnimeGen','Pastel','Watercolor','Painterly','RetroMangaGen','RetroManga','PhotoGen','Photo'];
+  var ages=_ageNeighbors(age);
+  // 完全一致から緩和: age近傍 × race優先 × type優先
+  for(var ai=0;ai<ages.length;ai++){
+    for(var ri=0;ri<races.length;ri++){
+      for(var ti=0;ti<types.length;ti++){
+        var hit=g.filter(function(x){
+          return x.gender===G && x.age===ages[ai] && x.race===races[ri] && (x.type===types[ti]||x.style===types[ti]);
+        });
+        // 未使用グループ優先
+        var fresh=hit.filter(function(x){return usedGroups.indexOf(x.id)<0;});
+        var pool=fresh.length?fresh:hit;
+        if(pool.length)return pool[0];
+      }
+    }
+  }
+  // それでも無ければ性別だけ合わせる
+  var any=g.filter(function(x){return x.gender===G;});
+  if(any.length)return any[Math.floor(Math.random()*any.length)];
+  return g.length?g[0]:null;
+}
+function _autoAssignIcons(){
+  return _loadGalleryManifest().then(function(){
+    if(!_galleryManifest||!_galleryManifest.length)return;
+    var chars=(state.characters||[]).filter(function(c){return c.id!=='narrator'&&!c.iconImage;});
+    var usedGroups=[];var usedImgs={};
+    chars.forEach(function(c){
+      var gender=(c.gender==='female')?'female':'male';
+      var age=_guessAge(c.name);
+      var grp=_pickIconGroup(gender,age,usedGroups);
+      if(!grp||!grp.items||!grp.items.length)return;
+      usedGroups.push(grp.id);
+      var used=usedImgs[grp.id]||0;
+      var item=grp.items[used%grp.items.length];
+      usedImgs[grp.id]=used+1;
+      if(item&&item.p){c.iconImage=item.p;}
+    });
+    render();
+  });
+}
 async function _aiRefineSpeakers(){
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
@@ -2543,7 +2613,7 @@ async function _aiRefineSpeakers(){
       if(it.type==='dialogue'){targets.push(i);}
       else if(it.type==='narration'&&/「.+?」/.test(it.text||'')){targets.push(i);}
     });
-    if(targets.length===0)return;
+    if(targets.length===0){_autoAssignIcons();return;}
     var chunks=[];var cur=[];
     targets.forEach(function(i){cur.push(i);if(cur.length>=12){chunks.push(cur);cur=[]}});
     if(cur.length)chunks.push(cur);
@@ -2603,7 +2673,7 @@ async function _aiRefineSpeakers(){
     if(failed){
       alert('AIでの話者特定機能は現在停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が悪いと感じた場合は、ご自分で直すか、後日再読み込みをしてください。');
     }
-    render();
+    _autoAssignIcons();render();
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
