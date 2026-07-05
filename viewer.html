@@ -2721,10 +2721,10 @@ function parseText(text){
     var qm=line.match(/「(.+?)」/);
     if(qm){
       var dl=qm[1];
-      var sp=_extractSpeaker(line,dl);
+      var sp=_extractSpeaker(line,dl);var addressee=null;var am=dl.match(/^([\u4E00-\u9FFF\u30A1-\u30FA]{2,8})(?:\u3055\u3093|\u69d8|\u3061\u3083\u3093|\u304f\u3093|\u541b)?[\u3002\u3001\uff01\uff1f]/);if(am&&_isValidName(am[1])){var ac=findChar(am[1]);addressee=ac?ac.name:am[1];}
       if(!sp&&pendingSpeaker){sp=pendingSpeaker;}
       if(!sp){
-        if(lastWasDialogue&&prevSpeaker&&prevSpeaker!==lastSpeaker){sp=prevSpeaker;}
+        var known2=state.characters.filter(function(x){return x.id!=='narrator';}).map(function(x){return x.name;});if(addressee){if(lastSpeaker&&lastSpeaker!==addressee){sp=lastSpeaker;}else if(prevSpeaker&&prevSpeaker!==addressee){sp=prevSpeaker;}else{var _o=known2.filter(function(nm){return nm!==addressee;});if(_o.length)sp=_o[_o.length-1];}}if(!sp&&lastWasDialogue&&prevSpeaker&&prevSpeaker!==lastSpeaker){sp=prevSpeaker;}else if(!sp&&lastWasDialogue&&known2.length===2&&lastSpeaker){sp=known2.filter(function(nm){return nm!==lastSpeaker;})[0]||lastSpeaker;}
         else if(lastSpeaker){sp=lastSpeaker;}
       }
       pendingSpeaker=null;
