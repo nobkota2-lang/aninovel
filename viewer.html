@@ -2636,7 +2636,7 @@ async function _aiRefineSpeakers(){
     ov.id='ai-speaker-progress';
     ov.style.cssText='position:fixed;bottom:20px;right:20px;background:#fff;color:#333;border:1px solid #ccc;border-radius:8px;padding:10px 16px;z-index:9999;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,0.25)';
     document.body.appendChild(ov);
-    var failed=false;
+    var failed=false;var quotaHit=false;
     for(var c=0;c<chunks.length;c++){
       ov.textContent='AIが話者を特定中… '+(c+1)+'/'+chunks.length;
       var idxs=chunks[c];
@@ -2656,7 +2656,7 @@ async function _aiRefineSpeakers(){
         var r=await fetch('/api/speaker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chunk:chunkText,dialogues:dialogues,known:known})});
         j=await r.json();
       }catch(e){j={ok:false,reason:'network'};}
-      if(!j||!j.ok){failed=true;break;}
+      if(!j||!j.ok){failed=true;if(j&&j.reason==='quota'){quotaHit=true;try{var _prev=localStorage.getItem('aninovel_ai_quota_hit');var _now=new Date();if(_prev){var _pd=new Date(_prev);if(Math.floor(_now.getTime()/86400000)>Math.floor(_pd.getTime()/86400000)){console.warn('[AI-quota] リセット未確認: 前回quota='+_prev+' 今回='+_now.toISOString()+' → 00:00 UTC(日本時間午前9時)を跨いだのに再びquota。24時間ローリングの可能性。案内文の見直しを検討。');}}localStorage.setItem('aninovel_ai_quota_hit',_now.toISOString());}catch(e){}}break;}
       j.speakers.forEach(function(sp,n){
         sp=(sp||'').trim();
         if(!sp||sp==='不明'||sp==='ナレーター'||sp==='語り手')return;
@@ -2686,7 +2686,7 @@ async function _aiRefineSpeakers(){
     var all=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
     all.forEach(function(it5,i5){it5.order=i5;});
     if(failed){
-      alert('AIでの話者特定機能は現在停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が悪いと感じた場合は、ご自分で直すか、後日再読み込みをしてください。');
+      if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
     await _autoAssignIcons();render();
   }catch(e){
