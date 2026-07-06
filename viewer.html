@@ -2657,7 +2657,6 @@ async function _aiRefineSpeakers(){
         j=await r.json();
       }catch(e){j={ok:false,reason:'network'};}
       if(!j||!j.ok){failed=true;if(j&&j.reason==='quota'){quotaHit=true;try{var _prev=localStorage.getItem('aninovel_ai_quota_hit');var _now=new Date();if(_prev){var _pd=new Date(_prev);if(Math.floor(_now.getTime()/86400000)>Math.floor(_pd.getTime()/86400000)){console.warn('[AI-quota] リセット未確認: 前回quota='+_prev+' 今回='+_now.toISOString()+' → 00:00 UTC(日本時間午前9時)を跨いだのに再びquota。24時間ローリングの可能性。案内文の見直しを検討。');}}localStorage.setItem('aninovel_ai_quota_hit',_now.toISOString());}catch(e){}}break;}
-      if(!Array.isArray(j.speakers)||j.speakers.length!==dialogues.length){console.warn('[AIspeaker] 返答数不一致のためこのチャンクはregex結果を保持: speakers='+((j.speakers||[]).length)+' dialogues='+dialogues.length);continue;}
       j.speakers.forEach(function(sp,n){
         sp=(sp||'').trim();
         if(!sp||sp==='不明'||sp==='ナレーター'||sp==='語り手')return;
@@ -2687,7 +2686,7 @@ async function _aiRefineSpeakers(){
     var all=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
     all.forEach(function(it5,i5){it5.order=i5;});
     if(failed){
-      alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');
+      if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
     await _autoAssignIcons();render();
   }catch(e){
@@ -2742,8 +2741,8 @@ function parseText(text){
         state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:ch.id,order:order++});
         lastWasDialogue=true;
       }else{
-        state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
-        lastWasDialogue=false;
+        var _ukSp=lastSpeaker||prevSpeaker||null;
+        if(_ukSp){var _uch=findChar(_ukSp);if(_uch){state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:_uch.id,order:order++});lastWasDialogue=true;}else{state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});lastWasDialogue=false;}}else{var _unk=state.characters.find(function(x){return x.name==='不明';});if(!_unk){var _upr=(CP.male)[det.size%5];_unk={id:'char'+Date.now()+idx+'u',name:'不明',shortName:'？',gender:'male',description:'',bubbleColor:_upr.bubble,iconColor:_upr.icon,iconImage:null};state.characters.push(_unk);det.add('不明');}state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:_unk.id,order:order++});lastWasDialogue=true;}
       }
     }else{
       state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
