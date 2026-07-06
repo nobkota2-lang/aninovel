@@ -2604,7 +2604,7 @@ function _autoAssignIcons(){
   return _loadGalleryManifest().then(function(){
     if(!_galleryManifest||!_galleryManifest.length)return;
     var chars=(state.characters||[]).filter(function(c){return !c.iconImage;});
-    var usedGroups=[];var usedImgs={};
+    var usedGroups=[];var usedImgs={};var usedImgPaths=[];
     chars.forEach(function(c){
       var isNar=(c.id==='narrator');
       var gender=isNar?_authorGender():((c.gender==='female')?'female':'male');
@@ -2613,9 +2613,11 @@ function _autoAssignIcons(){
       if(!grp||!grp.items||!grp.items.length)return;
       usedGroups.push(grp.id);
       var used=usedImgs[grp.id]||0;
-      var item=grp.items[used%grp.items.length];
+      var item=null;
+      for(var _t=0;_t<grp.items.length;_t++){var _cand=grp.items[(used+_t)%grp.items.length];if(_cand&&_cand.p&&usedImgPaths.indexOf(_cand.p)<0){item=_cand;used=used+_t;break;}}
+      if(!item){item=grp.items[used%grp.items.length];}
       usedImgs[grp.id]=used+1;
-      if(item&&item.p){c.iconImage=item.p;}
+      if(item&&item.p){c.iconImage=item.p;usedImgPaths.push(item.p);}
     });
     render();
   });
