@@ -2604,7 +2604,7 @@ function _autoAssignIcons(){
   return _loadGalleryManifest().then(function(){
     if(!_galleryManifest||!_galleryManifest.length)return;
     var chars=(state.characters||[]).filter(function(c){return !c.iconImage;});
-    var usedGroups=[];var usedImgs={};var usedImgPaths=[];
+    var usedGroups=[];var usedImgs={};var usedImgPaths=(state.characters||[]).filter(function(x){return x.iconImage;}).map(function(x){return x.iconImage;});
     chars.forEach(function(c){
       var isNar=(c.id==='narrator');
       var gender=isNar?_authorGender():((c.gender==='female')?'female':'male');
