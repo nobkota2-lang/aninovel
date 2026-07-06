@@ -2727,7 +2727,6 @@ function parseText(text){
         else if(lastSpeaker){sp=lastSpeaker;}
       }
       pendingSpeaker=null;
-      
       if(sp){
         var ch=findChar(sp);
         if(!ch){
@@ -2741,8 +2740,8 @@ function parseText(text){
         state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:ch.id,order:order++});
         lastWasDialogue=true;
       }else{
-        var _ukSp=lastSpeaker||prevSpeaker||null;
-        if(_ukSp){var _uch=findChar(_ukSp);if(_uch){state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:_uch.id,order:order++});lastWasDialogue=true;}else{state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});lastWasDialogue=false;}}else{var _unk=state.characters.find(function(x){return x.name==='不明';});if(!_unk){var _upr=(CP.male)[det.size%5];_unk={id:'char'+Date.now()+idx+'u',name:'不明',shortName:'？',gender:'male',description:'',bubbleColor:_upr.bubble,iconColor:_upr.icon,iconImage:null};state.characters.push(_unk);det.add('不明');}state.content.push({id:'imp'+Date.now()+idx,type:'dialogue',text:dl,characterId:_unk.id,order:order++});lastWasDialogue=true;}
+        state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
+        lastWasDialogue=false;
       }
     }else{
       state.content.push({id:'imp'+Date.now()+idx,type:'narration',text:line,order:order++});
