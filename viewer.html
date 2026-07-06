@@ -2727,7 +2727,7 @@ function parseText(text){
         else if(lastSpeaker){sp=lastSpeaker;}
       }
       pendingSpeaker=null;
-      if(sp&&addressee&&sp===addressee){var _ka=state.characters.filter(function(x){return x.id!=='narrator'&&x.name!==addressee;}).map(function(x){return x.name;});if(lastSpeaker&&lastSpeaker!==addressee){sp=lastSpeaker;}else if(prevSpeaker&&prevSpeaker!==addressee){sp=prevSpeaker;}else if(_ka.length){sp=_ka[_ka.length-1];}}
+      
       if(sp){
         var ch=findChar(sp);
         if(!ch){
