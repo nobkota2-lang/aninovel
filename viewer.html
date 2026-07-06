@@ -2622,6 +2622,46 @@ function _autoAssignIcons(){
     render();
   });
 }
+function _rescueChapterSpeakers(){
+  try{
+    var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
+    var verb=/([\u4E00-\u9FFF\u30A1-\u30FA]{2,8})(?:さん|様)?(?:は|が)[^。]{0,12}(?:言|云|申|答|尋|問|叫|返|話|続|呼|囁|つぶや|きき|聞)/;
+    var verbTail=/[」』]?と(?:、)?([\u4E00-\u9FFF\u30A1-\u30FA]{2,8})(?:さん|様)?(?:は|が)/;
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      if(it.type!=='narration')continue;
+      var tx=(it.text||'').trim();
+      if(!/^「.+?」$/.test(tx))continue;
+      var name=null;
+      for(var d=1;d<=2&&!name;d++){
+        var after=items[i+d];
+        if(after&&after.type==='narration'){
+          var m=verb.exec(after.text||'')||verbTail.exec(after.text||'');
+          if(m&&_isValidName(m[1]))name=m[1];
+        }
+      }
+      if(!name){
+        for(var d2=1;d2<=2&&!name;d2++){
+          var before=items[i-d2];
+          if(before&&before.type==='narration'){
+            var m2=verb.exec(before.text||'');
+            if(m2&&_isValidName(m2[1]))name=m2[1];
+          }
+        }
+      }
+      if(!name)continue;
+      var ch=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===name||x.shortName===name);});
+      if(!ch){
+        var g=(/男/.test(name))?'male':((/女|母|姉|妹|娘|婆/.test(name))?'female':detGender(name));
+        var pr=(CP[g]||CP.male)[state.characters.length%5];
+        ch={id:'char'+Date.now()+'_rc'+i,name:name,shortName:name.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};
+        state.characters.push(ch);
+      }
+      var inner=tx.replace(/^「/,'').replace(/」$/,'');
+      it.type='dialogue';it.text=inner;it.characterId=ch.id;
+    }
+  }catch(e){console.warn('[rescue] 失敗:',e);}
+}
 async function _aiRefineSpeakers(){
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
@@ -2752,7 +2792,7 @@ function parseText(text){
       pendingSpeaker=_tailSpeaker(line);
     }
   });
-  state.currentPage=0;render();_autoAssignIcons();_aiRefineSpeakers();
+  state.currentPage=0;_rescueChapterSpeakers();render();_autoAssignIcons();_aiRefineSpeakers();
 }
 
 async function uploadInlineVideo(file){
