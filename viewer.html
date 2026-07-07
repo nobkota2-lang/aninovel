@@ -2523,6 +2523,8 @@ function _extractSpeaker(line,dl){
   if(m&&_isValidName(m[1]))return m[1];
   m=before.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が)[、,]?\s*$/);
   if(m&&_isValidName(m[1]))return m[1];
+  m=before.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:さん|様|君|くん|ちゃん)?(?:は|が)[^。「」]{0,10}(?:言った|云った|言いました|云いました|答えた|答えました|尋ねた|叫んだ|呟いた|続けた|訊いた|問うた|囁いた|申しました)[。、]?\s*$/);
+  if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{1,10}?)(?:は|が|も)[、,]?/);
   if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})[。\s]*$/);
@@ -2631,7 +2633,7 @@ function _rescueChapterSpeakers(){
       var it=items[i];
       if(it.type!=='narration')continue;
       var tx=(it.text||'').trim();
-      if(!/^「.+?」$/.test(tx)&&!/^『.+?』$/.test(tx))continue;
+      if(!/^「.+?」$/.test(tx))continue;
       var name=null;
       for(var d=1;d<=2&&!name;d++){
         var after=items[i+d];
@@ -2657,7 +2659,7 @@ function _rescueChapterSpeakers(){
         ch={id:'char'+Date.now()+'_rc'+i,name:name,shortName:name.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};
         state.characters.push(ch);
       }
-      var inner=tx.replace(/^[「『]/,'').replace(/[」』]$/,'');
+      var inner=tx.replace(/^「/,'').replace(/」$/,'');
       it.type='dialogue';it.text=inner;it.characterId=ch.id;
     }
   }catch(e){console.warn('[rescue] 失敗:',e);}
@@ -2668,7 +2670,7 @@ async function _aiRefineSpeakers(){
     var targets=[];
     items.forEach(function(it,i){
       if(it.type==='dialogue'){targets.push(i);}
-      else if(it.type==='narration'&&(/「.+?」/.test(it.text||'')||/『.+?』/.test(it.text||''))){targets.push(i);}
+      else if(it.type==='narration'&&/「.+?」/.test(it.text||'')){targets.push(i);}
     });
     if(targets.length===0){await _autoAssignIcons();return;}
     var chunks=[];var cur=[];
@@ -2678,24 +2680,26 @@ async function _aiRefineSpeakers(){
     ov.id='ai-speaker-progress';
     ov.style.cssText='position:fixed;bottom:20px;right:20px;background:#fff;color:#333;border:1px solid #ccc;border-radius:8px;padding:10px 16px;z-index:9999;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,0.25)';
     document.body.appendChild(ov);
-    var failed=false;var quotaHit=false;
+    var failed=false;var quotaHit=false;var lastResolved=null;
     for(var c=0;c<chunks.length;c++){
       ov.textContent='AIが話者を特定中… '+(c+1)+'/'+chunks.length;
       var idxs=chunks[c];
       var lo=Math.max(0,idxs[0]-3),hi=Math.min(items.length-1,idxs[idxs.length-1]+2);
+      var mark={};idxs.forEach(function(ii,n){mark[ii]='【'+(n+1)+'】';});
       var ctx=[];
-      for(var k=lo;k<=hi;k++){var it2=items[k];ctx.push(it2.text||'');}
+      for(var k=lo;k<=hi;k++){var it2=items[k];var t2=(it2.type==='dialogue')?('「'+(it2.text||'')+'」'):(it2.text||'');ctx.push((mark[k]||'')+t2);}
       var chunkText=ctx.join('\n').slice(0,5500);
       var dialogues=idxs.map(function(i){
         var it3=items[i];
         if(it3.type==='dialogue')return (it3.text||'').slice(0,80);
-        var q=((it3.text||'').match(/「(.+?)」/)||(it3.text||'').match(/『(.+?)』/));
+        var q=(it3.text||'').match(/「(.+?)」/);
         return q?q[1].slice(0,80):'';
       });
+      var hints=idxs.map(function(i){var it3b=items[i];if(it3b.type==='dialogue'&&it3b.characterId&&it3b.characterId!=='narrator'){var c0=state.characters.find(function(x){return x.id===it3b.characterId});return c0?c0.name:null;}return null;});
       var known=state.characters.filter(function(x){return x.id!=='narrator'}).map(function(x){return x.name});
       var j=null;
       try{
-        var r=await fetch('/api/speaker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chunk:chunkText,dialogues:dialogues,known:known})});
+        var r=await fetch('/api/speaker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chunk:chunkText,dialogues:dialogues,known:known,hints:hints,prevSpeaker:lastResolved})});
         j=await r.json();
       }catch(e){j={ok:false,reason:'network'};}
       if(!j||!j.ok){failed=true;if(j&&j.reason==='quota'){quotaHit=true;try{var _prev=localStorage.getItem('aninovel_ai_quota_hit');var _now=new Date();if(_prev){var _pd=new Date(_prev);if(Math.floor(_now.getTime()/86400000)>Math.floor(_pd.getTime()/86400000)){console.warn('[AI-quota] リセット未確認: 前回quota='+_prev+' 今回='+_now.toISOString()+' → 00:00 UTC(日本時間午前9時)を跨いだのに再びquota。24時間ローリングの可能性。案内文の見直しを検討。');}}localStorage.setItem('aninovel_ai_quota_hit',_now.toISOString());}catch(e){}}break;}
@@ -2713,7 +2717,7 @@ async function _aiRefineSpeakers(){
           state.characters.push(ch);
         }
         if(it4.type==='narration'){
-          var q2=((it4.text||'').match(/「(.+?)」/)||(it4.text||'').match(/『(.+?)』/));
+          var q2=(it4.text||'').match(/「(.+?)」/);
           if(q2){
             var rest=(it4.text||'').replace(q2[0],'').trim();
             it4.type='dialogue';it4.text=q2[1];it4.characterId=ch.id;
@@ -2722,6 +2726,7 @@ async function _aiRefineSpeakers(){
         }else{
           it4.characterId=ch.id;
         }
+        lastResolved=ch.name;
       });
     }
     ov.remove();
@@ -2760,10 +2765,10 @@ function parseText(text){
       lastWasDialogue=false;lastSpeaker=null;prevSpeaker=null;pendingSpeaker=null;
       return;
     }
-    var qm=line.match(/「(.+?)」/)||line.match(/『(.+?)』/);
+    var qm=line.match(/「(.+?)」/);
     if(qm){
       var dl=qm[1];
-      var sp=_extractSpeaker(line,dl);var addressee=null;var am=dl.match(/^([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{2,8}(?:\u3055\u3093|\u69d8|\u3061\u3083\u3093|\u304f\u3093|\u541b)?)[\u3002\u3001\uff01\uff1f]/);if(am){var _cand=am[1];var _kin=/^(?:\u304a\u6bcd\u3055\u3093|\u304a\u304b\u3042\u3055\u3093|\u6bcd\u3055\u3093|\u304a\u7236\u3055\u3093|\u304a\u3068\u3046\u3055\u3093|\u7236\u3055\u3093|\u304a\u5144\u3055\u3093|\u5144\u3055\u3093|\u306b\u3044\u3055\u3093|\u304a\u59c9\u3055\u3093|\u59c9\u3055\u3093|\u306d\u3048\u3055\u3093|\u304a\u3058\u3055\u3093|\u304a\u3070\u3055\u3093|\u304a\u3058\u3044\u3055\u3093|\u304a\u3070\u3042\u3055\u3093)$/;var _kc=findChar(_cand);if(!_kc&&_kin.test(_cand)){var _g=(/\u6bcd|\u59c9|\u306d\u3048|\u304a\u3070/.test(_cand))?'female':'male';var _pr=(CP[_g]||CP.male)[det.size%5];var _nc={id:'char'+Date.now()+idx+'a',name:_cand,shortName:_cand.substring(0,2),gender:_g,description:'',bubbleColor:_pr.bubble,iconColor:_pr.icon,iconImage:null};state.characters.push(_nc);det.add(_cand);addressee=_cand;}else if(_kc){addressee=_kc.name;}else if(_isValidName(_cand)){addressee=_cand;}}if(!sp&&pendingSpeaker){sp=pendingSpeaker;}
+      var sp=_extractSpeaker(line,dl);var addressee=null;var am=dl.match(/^([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{2,8})(\u3055\u3093|\u69d8|\u3061\u3083\u3093|\u304f\u3093|\u541b)?([\u3002\u3001\uff01\uff1f])/);if(am){var _cand=am[1]+(am[2]||'');var _hasHon=!!am[2];var _isComma=(am[3]==='\u3001');var _kin=/^(?:\u304a\u6bcd\u3055\u3093|\u304a\u304b\u3042\u3055\u3093|\u6bcd\u3055\u3093|\u304a\u7236\u3055\u3093|\u304a\u3068\u3046\u3055\u3093|\u7236\u3055\u3093|\u304a\u5144\u3055\u3093|\u5144\u3055\u3093|\u306b\u3044\u3055\u3093|\u304a\u59c9\u3055\u3093|\u59c9\u3055\u3093|\u306d\u3048\u3055\u3093|\u304a\u3058\u3055\u3093|\u304a\u3070\u3055\u3093|\u304a\u3058\u3044\u3055\u3093|\u304a\u3070\u3042\u3055\u3093)$/;var _kc=findChar(_cand);if(!_kc&&_kin.test(_cand)){var _g=(/\u6bcd|\u59c9|\u306d\u3048|\u304a\u3070/.test(_cand))?'female':'male';var _pr=(CP[_g]||CP.male)[det.size%5];var _nc={id:'char'+Date.now()+idx+'a',name:_cand,shortName:_cand.substring(0,2),gender:_g,description:'',bubbleColor:_pr.bubble,iconColor:_pr.icon,iconImage:null};state.characters.push(_nc);det.add(_cand);addressee=_cand;}else if(_kc){addressee=_kc.name;}else if((_hasHon||_isComma)&&_isValidName(_cand)){addressee=_cand;}}if(!sp&&pendingSpeaker){sp=pendingSpeaker;}
       if(!sp){
         var known2=state.characters.filter(function(x){return x.id!=='narrator';}).map(function(x){return x.name;});if(addressee){if(lastSpeaker&&lastSpeaker!==addressee){sp=lastSpeaker;}else if(prevSpeaker&&prevSpeaker!==addressee){sp=prevSpeaker;}else{var _o=known2.filter(function(nm){return nm!==addressee;});if(_o.length)sp=_o[_o.length-1];}}if(!sp&&lastWasDialogue&&prevSpeaker&&prevSpeaker!==lastSpeaker){sp=prevSpeaker;}else if(!sp&&lastWasDialogue&&known2.length===2&&lastSpeaker){sp=known2.filter(function(nm){return nm!==lastSpeaker;})[0]||lastSpeaker;}
         else if(lastSpeaker){sp=lastSpeaker;}
