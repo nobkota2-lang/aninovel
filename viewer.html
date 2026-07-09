@@ -2516,10 +2516,14 @@ function _isValidName(n){
 function _isNamingQuote(line){
   var qm2=line.match(/「(.+?)」/)||line.match(/『(.+?)』/);
   if(!qm2)return false;
+  var content=qm2[1];
   var qi2=line.indexOf(qm2[0]);
-  var bf2=line.substring(0,qi2);
   var af2=line.substring(qi2+qm2[0].length);
-  return /(?:名は|名を|との名|と名付け|と呼ばれ|という名)\s*$/.test(bf2)&&/^(?:である|と云う|という|と言う|だった|でした|です)/.test(af2);
+  // 話し言葉らしい語尾(だ/です/よ/ね等)を持つ場合は実際のセリフとみなす(長さでは判定しない、ことわざの引用は長いこともあるため)。
+  var looksLikeSpeech=/(?:だ|です|ます|よ|ね|わ|の|か|さ|ぞ|ぜ|な|かしら|でしょう|でした|ました|ください|なさい)[。、！？]?$/.test(content);
+  if(looksLikeSpeech)return false;
+  // 直後が「である/という/として/と呼ば/だった」等の説明・引用構文なら、名前・呼称・ことわざの引用でありセリフではない。
+  return /^(?:である|であった|でした|です|という|と言う|と云う|として|と呼ば|と称|とは|との|だった)/.test(af2);
 }
 function _extractSpeaker(line,dl){
   var _q1=line.indexOf('「');var _q2=line.indexOf('『');
