@@ -2513,6 +2513,14 @@ function _isValidName(n){
   if(/^[\u3041-\u3096]{1,2}$/.test(n))return false;
   return true;
 }
+function _isNamingQuote(line){
+  var qm2=line.match(/「(.+?)」/)||line.match(/『(.+?)』/);
+  if(!qm2)return false;
+  var qi2=line.indexOf(qm2[0]);
+  var bf2=line.substring(0,qi2);
+  var af2=line.substring(qi2+qm2[0].length);
+  return /(?:名は|名を|との名|と名付け|と呼ばれ|という名)\s*$/.test(bf2)&&/^(?:である|と云う|という|と言う|だった|でした|です)/.test(af2);
+}
 function _extractSpeaker(line,dl){
   var _q1=line.indexOf('「');var _q2=line.indexOf('『');
   var qi=(_q1<0)?_q2:((_q2<0)?_q1:Math.min(_q1,_q2));
@@ -2530,7 +2538,7 @@ function _extractSpeaker(line,dl){
   if(m&&_isValidName(m[1]))return m[1];
   m=after.match(/^[。、,\s]*と[、,]?\s*([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})[。\s]*$/);
   if(m&&_isValidName(m[1]))return m[1];
-  m=after.match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が|も)[^。]{0,8}(?:云|言|叫|答|尋|呼|返|囁|怒鳴|仰|訊|続け|話し|申し|呟|問)/);
+  m=after.slice(0,20).match(/([\u4E00-\u9FFF\u30A1-\u30FA]{2,10})(?:は|が|も)[^。]{0,8}(?:云|言|叫|答|尋|呼|返|囁|怒鳴|仰|訊|続け|話し|申し|呟|問)/);
   if(m&&_isValidName(m[1]))return m[1];
   return null;
 }
@@ -2678,7 +2686,7 @@ async function _aiRefineSpeakers(){
     var targets=[];
     items.forEach(function(it,i){
       if(it.type==='dialogue'){targets.push(i);}
-      else if(it.type==='narration'&&(/「.+?」/.test(it.text||'')||/『.+?』/.test(it.text||''))){targets.push(i);}
+      else if(it.type==='narration'&&(/「.+?」/.test(it.text||'')||/『.+?』/.test(it.text||''))&&!_isNamingQuote(it.text||'')){targets.push(i);}
     });
     if(targets.length===0){await _autoAssignIcons();return;}
     var chunks=[];var cur=[];
@@ -2808,6 +2816,7 @@ function parseText(text){
       return;
     }
     var qm=line.match(/「(.+?)」/)||line.match(/『(.+?)』/);
+    if(qm&&_isNamingQuote(line)){qm=null;}
     if(qm){
       var dl=qm[1];
       var sp=_extractSpeaker(line,dl);var addressee=null;var am=dl.match(/^([\u4E00-\u9FFF\u30A1-\u30FA\u3041-\u3096]{2,8})(\u3055\u3093|\u69d8|\u3061\u3083\u3093|\u304f\u3093|\u541b)?([\u3002\u3001\uff01\uff1f])/);if(am){var _cand=am[1]+(am[2]||'');var _hasHon=!!am[2];var _isComma=(am[3]==='\u3001');var _allHira=/^[\u3041-\u3096\u30FC]+$/.test(am[1]);var _kin=/^(?:\u304a\u6bcd\u3055\u3093|\u304a\u304b\u3042\u3055\u3093|\u6bcd\u3055\u3093|\u304a\u7236\u3055\u3093|\u304a\u3068\u3046\u3055\u3093|\u7236\u3055\u3093|\u304a\u5144\u3055\u3093|\u5144\u3055\u3093|\u306b\u3044\u3055\u3093|\u304a\u59c9\u3055\u3093|\u59c9\u3055\u3093|\u306d\u3048\u3055\u3093|\u304a\u3058\u3055\u3093|\u304a\u3070\u3055\u3093|\u304a\u3058\u3044\u3055\u3093|\u304a\u3070\u3042\u3055\u3093)$/;var _kc=findChar(_cand);if(!_kc&&_kin.test(_cand)){var _g=(/\u6bcd|\u59c9|\u306d\u3048|\u304a\u3070/.test(_cand))?'female':'male';var _pr=(CP[_g]||CP.male)[det.size%5];var _nc={id:'char'+Date.now()+idx+'a',name:_cand,shortName:_cand.substring(0,2),gender:_g,description:'',bubbleColor:_pr.bubble,iconColor:_pr.icon,iconImage:null};state.characters.push(_nc);det.add(_cand);addressee=_cand;}else if(_kc){addressee=_kc.name;}else if((_hasHon||_isComma)&&!_allHira&&_isValidName(_cand)){addressee=_cand;}}if(!sp&&pendingSpeaker){sp=pendingSpeaker;}
