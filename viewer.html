@@ -2709,7 +2709,7 @@ async function _aiRefineSpeakers(){
       var mark={};idxs.forEach(function(ii,n){mark[ii]='【'+(n+1)+'】';});
       var ctx=[];
       for(var k=lo;k<=hi;k++){var it2=items[k];var t2=(it2.type==='dialogue')?('「'+(it2.text||'')+'」'):(it2.text||'');ctx.push((mark[k]||'')+t2);}
-      var chunkText=ctx.join('\n').slice(0,5500);
+      var _ttl=(state.novel&&state.novel.title)||'';var _ath=(state.novel&&state.novel.author)||'';var chunkText=(_ttl?('作品: '+_ttl+(_ath?('　作者: '+_ath):'')+'\n'):'')+ctx.join('\n');chunkText=chunkText.slice(0,5500);
       var dialogues=idxs.map(function(i){
         var it3=items[i];
         if(it3.type==='dialogue')return (it3.text||'').slice(0,80);
