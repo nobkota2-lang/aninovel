@@ -2505,6 +2505,7 @@ function _isValidName(n){
   if(/^(?:彼|彼女|彼等|彼ら|私|僕|俺|君|貴方|あなた|我々|お前|自分|皆|みんな|二人|三人|一人|両人|一同|その人|この人|あの人|そこ|ここ|それ|これ|あれ|又|また|そして|しかし|でも|だが|やがて|すると|それから|それでも|たちまち|まもなく)$/.test(n))return false;
   if(/^(?:底本の親本|底本|親本|初出|入力|校正|青空文庫|ファイル|テキスト|注|訳|編|著|作|出典|表題|副題|奥付|凡例|序|跋|目次|挿絵|口絵|装丁|印刷|発行|発売|定価|検印|昭和|大正|明治|平成|令和)$/.test(n))return false;
   if(/^(?:京都|東京|江戸|大阪|奈良|鎌倉|武蔵|山|川|海|町|村|家|店|扉|部屋|廊下|道|空|窓|汽車|車|席|手|声|音|風|涙|心|体|顔|目|口|足|頭|胸|息|気|水|火|光|闇|夜|朝|雨|雪|星|月|日)$/.test(n))return false;
+  if(/^(?:仕方|月並|今度|最初|近頃|語弊|冗談|造作|増加|御馳走|前足|後足|教師|野蛮人|実業家|巡査|下女|人間|大丈夫|突然|勿論|多分|随分|大変|一体|何分|何時|沢山|皆さん|諸君|世間|時分|問題|事件|様子|評判|返事|挨拶|議論|勉強|商売|世話|心配|安心|遠慮|失礼|大事|大切)$/.test(n))return false;
   if(/(?:云|言|思|聞|見|叫|答|尋|呼|返|怒|嘆|笑|泣|続|歩|走|立|座|入|出)[\u3041-\u3096]/.test(n))return false;
   if(/[。、！？「」『』（）\s]/.test(n))return false;
   if(/^[をにでへとやのもはが]/.test(n))return false;
@@ -2512,6 +2513,7 @@ function _isValidName(n){
   if(/[てで]$/.test(n))return false;
   if(/[をにへとはがも]$/.test(n))return false;
   if(/^[\u3041-\u3096]{1,2}$/.test(n))return false;
+  if(n.length>=6&&(n.match(/[\u3041-\u3096]/g)||[]).length>=3)return false;
   return true;
 }
 function _isNamingQuote(line){
@@ -2640,6 +2642,31 @@ function _autoAssignIcons(){
     render();
   });
 }
+function _pruneWeakCharacters(){
+  try{
+    var counts={};
+    (state.content||[]).forEach(function(it){if(it.type==='dialogue'&&it.characterId){counts[it.characterId]=(counts[it.characterId]||0)+1;}});
+    var removed=[];
+    var keep=[];
+    (state.characters||[]).forEach(function(c){
+      if(c.id==='narrator'){keep.push(c);return;}
+      var n=counts[c.id]||0;
+      var hira=(c.name.match(/[\u3041-\u3096]/g)||[]).length;
+      var weak=(n<=1)&&(c.name.length>=5||hira>=2);
+      if(weak){removed.push(c.id);}else{keep.push(c);}
+    });
+    if(!removed.length)return;
+    var unk=keep.find(function(c){return c.name==='不明';});
+    (state.content||[]).forEach(function(it){
+      if(it.type==='dialogue'&&removed.indexOf(it.characterId)>=0){
+        if(unk){it.characterId=unk.id;}
+        else{it.type='narration';it.text='「'+(it.text||'')+'」';}
+      }
+    });
+    state.characters=keep;
+    console.info('[prune] 信頼度の低いキャラを除去:', removed.length, '件');
+  }catch(e){console.warn('[prune] 失敗:',e);}
+}
 function _rescueChapterSpeakers(){
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
@@ -2759,7 +2786,7 @@ async function _aiRefineSpeakers(){
     if(failed){
       if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
-    _rescueChapterSpeakers();await _autoAssignIcons();render();
+    _rescueChapterSpeakers();_pruneWeakCharacters();await _autoAssignIcons();render();
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
