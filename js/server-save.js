@@ -57,7 +57,7 @@
     if(!isAuthorMode()){ if(!silent) alert(_t('公開保存は作者モードのみ','Publishing is available in Author mode only')); return false; }
     var w=getCurrentWorkId();
     if(!w || w.indexOf('pub_')!==0){ if(!silent) alert(_t('公開作品のみ可能','Published works only')); return false; }
-    var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
+    // 表紙が my_ パスのままなら実体を pub_ へコピーしてパスを書き換える\r\n    try{\r\n      var _ci=(window.state&&state.novel&&state.novel.coverImage)||'';\r\n      var _mm=_ci.match(/\/api\/cover\/(my_[A-Za-z0-9_]+)/);\r\n      if(_mm){\r\n        var _res=await fetch('/api/cover/'+_mm[1]);\r\n        if(_res.ok){var _bl=await _res.blob();var _pr=await fetch('/api/cover/'+w,{method:'PUT',headers:{'Content-Type':_bl.type||'image/png'},body:_bl});if(_pr.ok){state.novel.coverImage='/api/cover/'+w+'?t='+Date.now();console.info('[Publish] 表紙をmy_→pub_へコピー');}}\r\n      }\r\n    }catch(_e){console.warn('[Publish] 表紙コピー失敗:',_e);}\r\n    var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
     var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
     if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
@@ -65,7 +65,7 @@
       var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m) body.meta=m;
       var r=await fetch('/api/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
-      if(r.ok && d.ok){ if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
+      if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
       else { if(!silent) alert('❌ '+(d.error||r.status)); return false; }
     } catch(e){ if(!silent) alert('❌ '+e.message); return false; }
     finally { if(btn){ btn.textContent=orig||_t('📤 公開保存','📤 Publish'); btn.disabled=false; } }

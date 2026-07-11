@@ -4083,7 +4083,7 @@ window.onload=function(){
         window.location.replace('index.html');
         return;
     }
-    setInterval(function(){if(state.isAuthorMode)saveData(true)},60000);/* 60秒・無音・再描画/カーソル/スクロール変更なし */
+    setInterval(function(){if(state.isAuthorMode)saveData(true)},180000);/* 180秒(3分)・無音・再描画/カーソル/スクロール変更なし */
     window.addEventListener('beforeunload',function(){try{_saveProgress()}catch(e){}});
 };
 
