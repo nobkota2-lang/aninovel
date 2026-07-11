@@ -57,7 +57,16 @@
     if(!isAuthorMode()){ if(!silent) alert(_t('公開保存は作者モードのみ','Publishing is available in Author mode only')); return false; }
     var w=getCurrentWorkId();
     if(!w || w.indexOf('pub_')!==0){ if(!silent) alert(_t('公開作品のみ可能','Published works only')); return false; }
-    // 表紙が my_ パスのままなら実体を pub_ へコピーしてパスを書き換える\r\n    try{\r\n      var _ci=(window.state&&state.novel&&state.novel.coverImage)||'';\r\n      var _mm=_ci.match(/\/api\/cover\/(my_[A-Za-z0-9_]+)/);\r\n      if(_mm){\r\n        var _res=await fetch('/api/cover/'+_mm[1]);\r\n        if(_res.ok){var _bl=await _res.blob();var _pr=await fetch('/api/cover/'+w,{method:'PUT',headers:{'Content-Type':_bl.type||'image/png'},body:_bl});if(_pr.ok){state.novel.coverImage='/api/cover/'+w+'?t='+Date.now();console.info('[Publish] 表紙をmy_→pub_へコピー');}}\r\n      }\r\n    }catch(_e){console.warn('[Publish] 表紙コピー失敗:',_e);}\r\n    var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
+    // 表紙が my_ パスのままなら実体を pub_ へコピーしてパスを書き換える
+    try{
+      var _ci=(window.state&&state.novel&&state.novel.coverImage)||'';
+      var _mm=_ci.match(/\/api\/cover\/(my_[A-Za-z0-9_]+)/);
+      if(_mm){
+        var _res=await fetch('/api/cover/'+_mm[1]);
+        if(_res.ok){var _bl=await _res.blob();var _pr=await fetch('/api/cover/'+w,{method:'PUT',headers:{'Content-Type':_bl.type||'image/png'},body:_bl});if(_pr.ok){state.novel.coverImage='/api/cover/'+w+'?t='+Date.now();console.info('[Publish] 表紙をmy_→pub_へコピー');}}
+      }
+    }catch(_e){console.warn('[Publish] 表紙コピー失敗:',_e);}
+    var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
     var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
     if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
