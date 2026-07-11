@@ -256,7 +256,7 @@ function saveData(silent){try{
     else{console.warn('[Save] _saveMyWork未定義');}
   }else if(wp&&wp.indexOf('pub_')===0){
     var pub=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}');
-    if(pub[wp]){pub[wp].data=payload;pub[wp].updatedAt=new Date().toISOString();localStorage.setItem('aninovel_published_works',JSON.stringify(pub));console.info('[Save] pub_ → aninovel_published_works に保存',wp);(function(){try{var ci=(state.novel&&state.novel.coverImage)||'';var mm=ci.match(/\/api\/cover\/(my_[A-Za-z0-9_]+)/);if(mm){var myId=mm[1];var pubPath='/api/cover/'+wp;fetch('/api/cover/'+myId).then(function(res){if(!res.ok)throw 0;return res.blob();}).then(function(bl){return fetch(pubPath,{method:'PUT',headers:{'Content-Type':bl.type||'image/png'},body:bl});}).then(function(){state.novel.coverImage=pubPath+'?t='+Date.now();console.info('[Save] 表紙をmy_→pub_へコピー');if(typeof saveToServer==='function')saveToServer(true);}).catch(function(){if(typeof saveToServer==='function')saveToServer(true);});}else{if(typeof saveToServer==='function')saveToServer(true);}}catch(e){console.warn('[Save] server連携エラー:',e);}})();}
+    if(pub[wp]){pub[wp].data=payload;pub[wp].updatedAt=new Date().toISOString();localStorage.setItem('aninovel_published_works',JSON.stringify(pub));console.info('[Save] pub_ → aninovel_published_works に保存',wp);}
     else{console.warn('[Save] pub_ エントリなし',wp);alert('保存先(pub_)が見つかりません: '+wp);}
   }else if(wp){
     // 同梱作品(リポジトリ配信のJSON)のオーバーライドを localStorage に保存
