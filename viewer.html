@@ -2717,6 +2717,40 @@ function _rescueChapterSpeakers(){
     }
   }catch(e){console.warn('[rescue] 失敗:',e);}
 }
+async function _aiCurateCharacters(){
+  try{
+    var list=(state.characters||[]).filter(function(c){return c.id!=='narrator';});
+    if(list.length<3)return;
+    var counts={};
+    (state.content||[]).forEach(function(it){if(it.type==='dialogue'&&it.characterId){counts[it.characterId]=(counts[it.characterId]||0)+1;}});
+    var names=list.map(function(c){return {name:c.name, count:counts[c.id]||0};});
+    var sample=(state.content||[]).slice(0,25).map(function(it){return it.text||'';}).join('\n').slice(0,2500);
+    var r=await fetch('/api/characters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:(state.novel&&state.novel.title)||'',author:(state.novel&&state.novel.author)||'',names:names,sample:sample})});
+    var j=await r.json();
+    if(!j||!j.ok||!Array.isArray(j.keep)){console.warn('[curate] AI監修スキップ:',j&&j.reason);return;}
+    var keepSet={};j.keep.forEach(function(n){keepSet[n]=true;});
+    var merge=j.merge||{};
+    var byName={};list.forEach(function(c){byName[c.name]=c;});
+    var unk=null;
+    function getUnk(){if(unk)return unk;unk=(state.characters||[]).find(function(c){return c.name==='不明';});if(!unk){var pr=(CP.male)[0];unk={id:'char_unk_'+Date.now(),name:'不明',shortName:'？',gender:'male',description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};state.characters.push(unk);}return unk;}
+    var removedIds=[];var remap={};
+    list.forEach(function(c){
+      var to=merge[c.name];
+      if(to&&byName[to]&&to!==c.name){remap[c.id]=byName[to].id;removedIds.push(c.id);return;}
+      if(!keepSet[c.name]&&!merge[c.name]){remap[c.id]=null;removedIds.push(c.id);}
+    });
+    if(!removedIds.length){console.info('[curate] 変更なし');return;}
+    (state.content||[]).forEach(function(it){
+      if(it.type==='dialogue'&&remap.hasOwnProperty(it.characterId)){
+        var to=remap[it.characterId];
+        it.characterId=to||getUnk().id;
+      }
+    });
+    state.characters=(state.characters||[]).filter(function(c){return removedIds.indexOf(c.id)<0;});
+    console.info('[curate] AI監修: 除外/統合',removedIds.length,'件 → 登場人物',(state.characters||[]).filter(function(c){return c.id!=='narrator';}).length,'人');
+    render();
+  }catch(e){console.warn('[curate] 失敗:',e);}
+}
 async function _aiRefineSpeakers(){
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
@@ -2791,7 +2825,7 @@ async function _aiRefineSpeakers(){
     if(failed){
       if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
-    _rescueChapterSpeakers();_pruneWeakCharacters();await _autoAssignIcons();render();
+    _rescueChapterSpeakers();_pruneWeakCharacters();if(!failed){await _aiCurateCharacters();}await _autoAssignIcons();render();
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
