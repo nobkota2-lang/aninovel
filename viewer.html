@@ -2651,9 +2651,12 @@ function _pruneWeakCharacters(){
     (state.characters||[]).forEach(function(c){
       if(c.id==='narrator'){keep.push(c);return;}
       var n=counts[c.id]||0;
+      if(n===0){removed.push(c.id);return;}
       var hira=(c.name.match(/[\u3041-\u3096]/g)||[]).length;
-      var weak=(n<=1)&&(c.name.length>=5||hira>=2);
-      if(weak){removed.push(c.id);}else{keep.push(c);}
+      var nameish=/(?:\u541b|\u3055\u3093|\u69d8|\u5148\u751f|\u592b\u4eba|\u3061\u3083\u3093)$/.test(c.name)||/^[\u30A1-\u30FA\u30FC]{2,}$/.test(c.name)||(/^[\u4E00-\u9FFF]{3,}$/.test(c.name)&&hira===0);
+      var core=/^(?:\u543e\u8f29|\u4e3b\u4eba|\u7d30\u541b|\u5993\u541b|\u5fa1\u4e09|\u59c9|\u8ff7\u4ead|\u82e6\u6c99\u5f25)$/.test(c.name);
+      var weak=(n<=1)&&!nameish&&!core;
+      if(weak||(c.name.length>=5&&hira>=3)){removed.push(c.id);}else{keep.push(c);}
     });
     if(!removed.length)return;
     var unk=keep.find(function(c){return c.name==='不明';});
