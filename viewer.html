@@ -2888,7 +2888,7 @@ function parseText(text){
       pendingSpeaker=_tailSpeaker(line);
     }
   });
-  state.currentPage=0;_rescueChapterSpeakers();render();_autoAssignIcons();_aiRefineSpeakers();
+  state.currentPage=0;_rescueChapterSpeakers();_pruneWeakCharacters();render();_autoAssignIcons();_aiRefineSpeakers();
 }
 
 async function uploadInlineVideo(file){
