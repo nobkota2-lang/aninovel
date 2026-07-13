@@ -119,11 +119,11 @@
       cover.style.backgroundPosition = 'center';
     } else {
       cover.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
-      cover.appendChild(h('div', { className: 'card-cover-title' }, work.title || ''));
+      cover.appendChild(h('div', { className: 'card-cover-title' }, _wEn(work,'title')));
     }
     top.appendChild(cover);
     var head = h('div', { className: 'card-head' });
-    head.appendChild(h('div', { className: 'card-title' }, work.title));
+    head.appendChild(h('div', { className: 'card-title' }, _wEn(work,'title')));
     head.appendChild(h('div', { className: 'card-author' }, work.author));
     var stats = h('div', { className: 'card-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
@@ -135,7 +135,7 @@
     head.appendChild(tags);
     top.appendChild(head);
     card.appendChild(top);
-    card.appendChild(h('div', { className: 'card-description' }, work.description || ''));
+    card.appendChild(h('div', { className: 'card-description' }, _wEn(work,'description')));
     var footer = h('div', { className: 'card-footer' });
     footer.appendChild(h('span', { style: 'font-size:12px;color:var(--text-muted)' }, formatDate(work.createdAt)));
     footer.appendChild(createVoteBtn(work.id, v));
@@ -170,7 +170,7 @@
 
     var num = h('div', { className: 'ranking-number' }, String(index + 1));
     var info = h('div', { className: 'ranking-info' });
-    info.appendChild(h('div', { className: 'ranking-title' }, work.title));
+    info.appendChild(h('div', { className: 'ranking-title' }, _wEn(work,'title')));
     info.appendChild(h('div', { className: 'ranking-author' }, work.author));
 
     var stats = h('div', { className: 'ranking-stats' });
@@ -726,7 +726,8 @@
   }
 
   // === ウェルカムバナー（ログイン後の表示切替） ===
-  function updateWelcomeBanner() {
+  function _wEn(w, f){ try{ var en=(localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; return (en && w && w[f+'En']) ? w[f+'En'] : (w?(w[f]||''):''); }catch(e){ return (w&&w[f])||''; } }
+function updateWelcomeBanner() {
     var hero = document.querySelector('.portal-hero');
     if (!hero) return;
     var existing = document.getElementById('welcome-banner');

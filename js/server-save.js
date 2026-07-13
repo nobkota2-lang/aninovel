@@ -71,7 +71,7 @@
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
     if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
     try {
-      var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m) body.meta=m;
+      var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m){ try{ var _tr=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:'en',title:m.title||'',author:m.author||'',items:[{id:'d',text:m.description||''}],characters:[]})}); if(_tr.ok){ var _tj=await _tr.json(); if(_tj){ if(_tj.title)m.titleEn=_tj.title; if(_tj.author)m.authorEn=_tj.author; if(_tj.items&&_tj.items[0]&&_tj.items[0].text)m.descriptionEn=_tj.items[0].text; console.info('[Publish] 英訳meta生成:',m.titleEn||'(なし)'); } } }catch(_te){console.warn('[Publish] 英訳生成スキップ:',_te);} body.meta=m; }
       var r=await fetch('/api/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
