@@ -124,7 +124,7 @@
     top.appendChild(cover);
     var head = h('div', { className: 'card-head' });
     head.appendChild(h('div', { className: 'card-title' }, _wEn(work,'title')));
-    head.appendChild(h('div', { className: 'card-author' }, work.author));
+    head.appendChild(h('div', { className: 'card-author' }, _wEn(work,'author')));
     var stats = h('div', { className: 'card-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + '字' }));
