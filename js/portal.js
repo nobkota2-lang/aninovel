@@ -733,17 +733,17 @@
     if (state.user && state.user.loggedIn) {
       var ar = roleOf(state.user);
       var rm = ROLE_META[ar] || ROLE_META.reader;
-      var rolesLabel = (state.user.roles || [ar]).map(function(r) { return (ROLE_META[r] || {}).label || r; }).join(' / ');
+      var _en = (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; var rolesLabel = (state.user.roles || [ar]).map(function(r) { var m=ROLE_META[r]||{}; return (_en?(m.labelEn||m.label):m.label) || r; }).join(' / ');
       var tips = ar === 'owner'
-        ? '\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。'
+        ? (_en?'\uD83D\uDC51 Manage users and works in the admin panel. ✏️ My Works and \uD83D\uDCCA Dashboard are also available.':'\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。')
         : ar === 'author'
-        ? 'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。'
-        : 'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。';
+        ? (_en?'Open ✏️ My Works (top-right) to create and edit, and check \uD83D\uDCCA Dashboard.':'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。')
+        : (_en?'Bookmarks, voting and character customization are available. Check \uD83D\uDCCA Dashboard.':'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。');
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
-      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + ' おかえりなさい、' + state.user.displayName + ' さん'));
-      banner.appendChild(h('div', { className: 'welcome-role' }, '現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'));
+      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_en?(' Welcome back, ' + state.user.displayName):(' おかえりなさい、' + state.user.displayName + ' さん'))));
+      banner.appendChild(h('div', { className: 'welcome-role' }, (_en?('Current mode: ' + (rm.labelEn||rm.label) + ' (roles: ' + rolesLabel + ')'):('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'))));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
