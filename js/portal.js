@@ -70,7 +70,7 @@
 
       var lead = document.createElement('p');
       lead.style.cssText = 'color:var(--text-secondary);font-size:14px;line-height:1.7;margin:4px 0 16px';
-      lead.textContent = '著作権の保護期間が満了した名作を、アニメ風の語りでお楽しみいただけます。';
+      lead.textContent = _pEn() ? 'Enjoy classic masterpieces in the public domain, told in anime style.' : '著作権の保護期間が満了した名作を、アニメ風の語りでお楽しみいただけます。';
       sec.appendChild(lead);
 
       var grid = document.createElement('div');
@@ -126,9 +126,9 @@
     head.appendChild(h('div', { className: 'card-title' }, _wEn(work,'title')));
     head.appendChild(h('div', { className: 'card-author' }, _wEn(work,'author')));
     var stats = h('div', { className: 'card-stats' });
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + '字' }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + '人' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_pEn()?'p':'頁') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + (_pEn()?' chars':'字') }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + (_pEn()?' cast':'人') }));
     head.appendChild(stats);
     var tags = h('div', { className: 'card-tags' });
     (work.tags || []).forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
@@ -175,7 +175,7 @@
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + '頁' }));
+    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_pEn()?'p':'頁') }));
 
     var voteBtn = createVoteBtn(work.id, { total: work.totalVotes || v.total, userVoted: work.userVoted || v.userVoted });
 
@@ -726,7 +726,8 @@
   }
 
   // === ウェルカムバナー（ログイン後の表示切替） ===
-  function _wEn(w, f){ try{ var en=(localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; return (en && w && w[f+'En']) ? w[f+'En'] : (w?(w[f]||''):''); }catch(e){ return (w&&w[f])||''; } }
+  function _pEn(){ try{ return (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; }catch(e){ return false; } }
+function _wEn(w, f){ try{ var en=(localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; return (en && w && w[f+'En']) ? w[f+'En'] : (w?(w[f]||''):''); }catch(e){ return (w&&w[f])||''; } }
 function updateWelcomeBanner() {
     var hero = document.querySelector('.portal-hero');
     if (!hero) return;
