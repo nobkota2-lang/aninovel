@@ -84,10 +84,7 @@
 
       var ack = document.createElement('div');
       ack.style.cssText = 'margin-top:16px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.8;color:var(--text-muted)';
-      ack.innerHTML = '本シリーズの原文は、ボランティアによる電子化ライブラリ「青空文庫」（aozora.gr.jp）のパブリックドメインテキストを利用しています。'
-        + '話者の振り分け・キャラクター造形・画面演出はアニノベルによる翻案です。'
-        + '貴重な原文を公開してくださっている青空文庫とボランティアの皆さまに感謝いたします。'
-        + '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>';
+      ack.innerHTML = _pEn() ? ('The original texts in this series are public-domain works from Aozora Bunko (aozora.gr.jp), a volunteer-run digital library. Speaker attribution, character design, and visual presentation are adaptations by AniNovel. We are grateful to Aozora Bunko and its volunteers for making these precious texts available.' + '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">Open Aozora Bunko ↗</a>') : ('本シリーズの原文は、ボランティアによる電子化ライブラリ「青空文庫」（aozora.gr.jp）のパブリックドメインテキストを利用しています。話者の振り分け・キャラクター造形・画面演出はアニノベルによる翻案です。貴重な原文を公開してくださっている青空文庫とボランティアの皆さまに感謝いたします。' + '<br><a href="https://www.aozora.gr.jp/" target="_blank" rel="noopener" style="color:var(--accent)">青空文庫を開く ↗</a>');
       sec.appendChild(ack);
 
       var about = document.getElementById('about-section');
