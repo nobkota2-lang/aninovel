@@ -74,10 +74,7 @@ export async function onRequestPost({ request, env }) {
     const hash = (await sha256hex(canonical)).slice(0, 40);
     const cacheKey = `worktr7:${target}:${hash}`;
 
-    if (KV && !debug) {
-      const cached = await KV.get(cacheKey);
-      if (cached) return new Response(cached, { headers: { ...JSON_HEADERS, 'X-Cache':'HIT', 'X-KV': KV === env.WORKS ? 'WORKS' : 'WORKS_KV' } });
-    }
+
     // ===== オーナー英訳の直接書き込み(AIを使わない・quota消費なし) =====
     if (body.providedTranslations && typeof body.providedTranslations === 'object') {
       if (body.writeKey !== 'aninovel-owner-2026') {
@@ -91,6 +88,10 @@ export async function onRequestPost({ request, env }) {
       const wpayload = JSON.stringify(wout);
       if (KV) await KV.put(cacheKey, wpayload, { expirationTtl: 60 * 60 * 24 * 365 }).catch(() => {});
       return new Response(wpayload, { headers: { ...JSON_HEADERS, 'X-Cache':'WRITE' } });
+    }
+    if (KV && !debug) {
+      const cached = await KV.get(cacheKey);
+      if (cached) return new Response(cached, { headers: { ...JSON_HEADERS, 'X-Cache':'HIT', 'X-KV': KV === env.WORKS ? 'WORKS' : 'WORKS_KV' } });
     }
     if (!env.AI) return json({ error:'not_configured', message:'AI binding missing' }, 500);
 
