@@ -3540,7 +3540,7 @@ function maybeTranslateWork(){
   if(state.workTransHash===hash && state.workTrans) return; // 翻訳済み
   try{
     var cached=localStorage.getItem('aninovel_tr_en5_'+hash);
-    if(cached){ var c=JSON.parse(cached); state.workTrans=c.items||{}; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; }
+    if(cached){ var c=JSON.parse(cached); var _im=c.items||{}; var _tot=Object.keys(_im).length; var _jp=0; Object.keys(_im).forEach(function(k){if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(_im[k]))_jp++;}); if(_tot>0 && _jp>_tot*0.1){ localStorage.removeItem('aninovel_tr_en5_'+hash); }else{ state.workTrans=_im; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; } }
   }catch(e){}
   translateWork(hash);
 }
