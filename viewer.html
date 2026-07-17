@@ -2620,6 +2620,25 @@ function _authorGender(){
     return 'male';
   }catch(e){ return 'male'; }
 }
+function _iconFallback(img){
+  try{
+    var src=img.getAttribute('src')||'';
+    if(src.indexOf('/gallery/')<0){ img.onerror=null; return; }
+    var tried=img.getAttribute('data-icontry')||'';
+    if(!/part\d/.test(src) && tried.indexOf('p1')<0){
+      img.setAttribute('data-icontry', tried+'p1');
+      img.src=src.replace(/\/([^\/]+\.(?:png|jpg|jpeg|webp))(\?[^\/]*)?$/i, '/part01/$1$2');
+      return;
+    }
+    if(/\/part01\//.test(src) && tried.indexOf('p2')<0){
+      img.setAttribute('data-icontry', tried+'p2');
+      img.src=src.replace('/part01/','/part02/');
+      return;
+    }
+    img.onerror=null;
+  }catch(e){ img.onerror=null; }
+}
+window._iconFallback=_iconFallback;
 function _autoAssignIcons(){
   return _loadGalleryManifest().then(function(){
     if(!_galleryManifest||!_galleryManifest.length)return;
@@ -2964,7 +2983,7 @@ function toggleDarkMode(){state.darkMode=!state.darkMode;document.documentElemen
 function dblClickChar(charId){var ch=state.characters.find(function(c){return c.id===charId});if(ch)openEditModal('character',ch)}
 
 function _isLoggedIn(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));return u&&u.loggedIn}catch(e){return false}}
-function rIcon(cid,sz){var c=state.characters.find(function(ch){return ch.id===cid});if(!c)c=state.characters[state.characters.length-1];if(!c)return'';var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];var iconImg=rc&&rc.iconImage?rc.iconImage:c.iconImage;var iconClr=rc&&rc.iconColor?rc.iconColor:c.iconColor;var canEdit=state.isAuthorMode;var canCustom=!state.isAuthorMode&&_isLoggedIn();var dblAttr=canEdit?' data-dblchar="'+c.id+'" title="ダブルクリックで編集"':(canCustom?' data-customchar="'+c.id+'" title="クリックでカスタマイズ"':'');var cur=(canEdit||canCustom)?'cursor:pointer;':'';var inner=iconImg?'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;'+cur+'"><img src="'+iconImg+'" loading="lazy"></div>':'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;background:'+iconClr+';font-size:'+Math.round(sz/3)+'px;'+cur+'">'+esc((_cname(c)||'?').substring(0,2))+'</div>';return'<div class="char-icon-wrap" data-charid="'+cid+'">'+inner+'</div>'}
+function rIcon(cid,sz){var c=state.characters.find(function(ch){return ch.id===cid});if(!c)c=state.characters[state.characters.length-1];if(!c)return'';var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];var iconImg=rc&&rc.iconImage?rc.iconImage:c.iconImage;var iconClr=rc&&rc.iconColor?rc.iconColor:c.iconColor;var canEdit=state.isAuthorMode;var canCustom=!state.isAuthorMode&&_isLoggedIn();var dblAttr=canEdit?' data-dblchar="'+c.id+'" title="ダブルクリックで編集"':(canCustom?' data-customchar="'+c.id+'" title="クリックでカスタマイズ"':'');var cur=(canEdit||canCustom)?'cursor:pointer;':'';var inner=iconImg?'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;'+cur+'"><img src="'+iconImg+'" loading="lazy" onerror="_iconFallback(this)"></div>':'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;background:'+iconClr+';font-size:'+Math.round(sz/3)+'px;'+cur+'">'+esc((_cname(c)||'?').substring(0,2))+'</div>';return'<div class="char-icon-wrap" data-charid="'+cid+'">'+inner+'</div>'}
 function aBtn(id){if(!state.isAuthorMode)return'';var a=_acts.length;_acts.push(function(){moveContent(id,'up')});_acts.push(function(){moveContent(id,'down')});_acts.push(function(){deleteItem(id,'content')});return'<div class="author-actions" style="display:none;position:absolute;top:-8px;right:-8px;gap:4px;z-index:5"><button onclick="event.stopPropagation();act('+a+')" class="btn" style="padding:3px 8px;font-size:11px;background:var(--panel-bg);border:1px solid var(--border)">↑</button><button onclick="event.stopPropagation();act('+(a+1)+')" class="btn" style="padding:3px 8px;font-size:11px;background:var(--panel-bg);border:1px solid var(--border)">↓</button><button onclick="event.stopPropagation();act('+(a+2)+')" class="btn" style="padding:3px 8px;font-size:11px;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA">✕</button></div>'}
 function hv(){return' onmouseenter="var a=this.querySelector(\'.author-actions\');if(a)a.style.display=\'flex\'" onmouseleave="var a=this.querySelector(\'.author-actions\');if(a)a.style.display=\'none\'"'}
 function editAttr(item){if(!state.isAuthorMode)return'';var a=_acts.length;var cp=JSON.parse(JSON.stringify(item));_acts.push(function(){openEditModal('content',cp)});return' onclick="act('+a+')"'}
