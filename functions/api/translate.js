@@ -78,6 +78,20 @@ export async function onRequestPost({ request, env }) {
       const cached = await KV.get(cacheKey);
       if (cached) return new Response(cached, { headers: { ...JSON_HEADERS, 'X-Cache':'HIT', 'X-KV': KV === env.WORKS ? 'WORKS' : 'WORKS_KV' } });
     }
+    // ===== オーナー英訳の直接書き込み(AIを使わない・quota消費なし) =====
+    if (body.providedTranslations && typeof body.providedTranslations === 'object') {
+      if (body.writeKey !== 'aninovel-owner-2026') {
+        return json({ error:'forbidden', message:'invalid writeKey' }, 403);
+      }
+      const pv = body.providedTranslations;
+      const itemsOut = items.map(i => ({ id: i.id, text: (pv[i.id] != null ? String(pv[i.id]) : i.text) }));
+      const charsOut = [];
+      for (const c of characters) charsOut.push({ id:c.id, name: (pv['__char_'+c.id] != null ? String(pv['__char_'+c.id]) : c.name) });
+      const wout = { target, source, title: (body.titleEn || title), author: (body.authorEn || author), items: itemsOut, characters: charsOut };
+      const wpayload = JSON.stringify(wout);
+      if (KV) await KV.put(cacheKey, wpayload, { expirationTtl: 60 * 60 * 24 * 365 }).catch(() => {});
+      return new Response(wpayload, { headers: { ...JSON_HEADERS, 'X-Cache':'WRITE' } });
+    }
     if (!env.AI) return json({ error:'not_configured', message:'AI binding missing' }, 500);
 
     // ===== 文分割 =====
