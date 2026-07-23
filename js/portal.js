@@ -168,7 +168,7 @@
     var num = h('div', { className: 'ranking-number' }, String(index + 1));
     var info = h('div', { className: 'ranking-info' });
     info.appendChild(h('div', { className: 'ranking-title' }, _wEn(work,'title')));
-    info.appendChild(h('div', { className: 'ranking-author' }, work.author));
+    info.appendChild(h('div', { className: 'ranking-author' }, _wEn(work,'author')));
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
@@ -692,7 +692,7 @@
       else voted.forEach(function(w) {
         var row = h('div', { style: 'display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;cursor:pointer' });
         row.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
-        row.appendChild(h('span', {}, w.title + ' / ' + w.author));
+        row.appendChild(h('span', {}, _wEn(w,'title') + ' / ' + _wEn(w,'author')));
         votedSection.appendChild(row);
       });
       content.appendChild(votedSection);
@@ -706,7 +706,7 @@
         var bms = all[w.id] || [];
         if (!bms.length) return;
         hasAny = true;
-        bmSection.appendChild(h('div', { style: 'font-weight:600;margin-top:8px' }, w.title));
+        bmSection.appendChild(h('div', { style: 'font-weight:600;margin-top:8px' }, _wEn(w,'title')));
         bms.forEach(function(bm) {
           var row = h('div', { style: 'padding:6px 12px;border-left:3px solid var(--accent,#6366F1);margin:4px 0;cursor:pointer;font-size:13px' });
           row.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
@@ -724,7 +724,20 @@
 
   // === ウェルカムバナー（ログイン後の表示切替） ===
   function _pEn(){ try{ return (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; }catch(e){ return false; } }
-function _wEn(w, f){ try{ var en=(localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; return (en && w && w[f+'En']) ? w[f+'En'] : (w?(w[f]||''):''); }catch(e){ return (w&&w[f])||''; } }
+function _wLang(){ try{ return (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en' ? 'en' : 'ja'; }catch(e){ return 'ja'; } }
+// 作品テキストの言語選択。w.sourceLang(既定'ja')が原文の言語。
+//   表示言語 = 原文言語        → 原文フィールド(title/author/description)をそのまま
+//   表示言語 ≠ 原文言語        → 翻訳変種(titleEn / titleJa ...)、無ければ原文へフォールバック
+// 原文は翻訳で上書きされず、翻訳が無い場合も必ず原文が出る。
+function _wEn(w, f){
+  try{
+    if(!w) return '';
+    var lang=_wLang(), src=(w.sourceLang||'ja');
+    if(lang===src) return w[f]||'';
+    var v=w[f+(lang==='en'?'En':'Ja')];
+    return v || w[f] || '';
+  }catch(e){ return (w&&w[f])||''; }
+}
 function updateWelcomeBanner() {
     var hero = document.querySelector('.portal-hero');
     if (!hero) return;
