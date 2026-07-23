@@ -1,4 +1,5 @@
-// functions/api/translate.js  v4 — 堅牢化版
+// functions/api/translate.js  v5 — 原文言語(source)対応版
+// v5: source/sourceLang受理 / 日本語ターゲット対応(ローマ字化の抑止・劣化閾値の緩和) / 著者名のローマ字化
 // 翻訳エンジン: Cloudflare Workers AI  @cf/meta/m2m100-1.2b
 // 劣化検出強化 + llama-3.1-8b-instruct フォールバック + 名前ローマ字化（緩い検証）
 // デバッグ: ?debug=1 で AI レスポンスを返す
@@ -33,7 +34,7 @@ export async function onRequestPost({ request, env }) {
   try {
     const body = await request.json().catch(() => ({}));
     const target = (body.target || 'en').toLowerCase();
-    const source = (body.source || 'ja').toLowerCase();
+    const source = (body.source || body.sourceLang || 'ja').toLowerCase();
     const title = (body.title || '').toString();
     const author = (body.author || '').toString();
     const items = Array.isArray(body.items) ? body.items.filter(i => i && i.id && typeof i.text === 'string') : [];
@@ -84,7 +85,7 @@ export async function onRequestPost({ request, env }) {
       const itemsOut = items.map(i => ({ id: i.id, text: (pv[i.id] != null ? String(pv[i.id]) : i.text) }));
       const charsOut = [];
       for (const c of characters) charsOut.push({ id:c.id, name: (pv['__char_'+c.id] != null ? String(pv['__char_'+c.id]) : c.name) });
-      const wout = { target, source, title: (body.titleEn || title), author: (body.authorEn || author), items: itemsOut, characters: charsOut };
+      const wout = { target, source, title: (body.titleTr || body.titleEn || title), author: (body.authorTr || body.authorEn || author), items: itemsOut, characters: charsOut };
       const wpayload = JSON.stringify(wout);
       if (KV) await KV.put(cacheKey, wpayload, { expirationTtl: 60 * 60 * 24 * 365 }).catch(() => {});
       return new Response(wpayload, { headers: { ...JSON_HEADERS, 'X-Cache':'WRITE' } });
@@ -143,7 +144,8 @@ export async function onRequestPost({ request, env }) {
         if (uniq / tokens.length < 0.5) return true;
       }
       // 結果が原文より極端に短い
-      if (original && original.length >= 12 && t.length < original.length * 0.35) return true;
+      const _minRatio = (target === 'ja') ? 0.20 : 0.35;  // 英->日は字数が縮むので緩める
+      if (original && original.length >= 12 && t.length < original.length * _minRatio) return true;
       return false;
     }
 
@@ -239,8 +241,10 @@ export async function onRequestPost({ request, env }) {
 
     const titleTr = title ? await translateText(title) : '';
 
+    // 人名のローマ字化はラテン文字ターゲットのときのみ。日本語ターゲットでは原名を保つ。
+    const _wantRomaji = (target !== 'ja');
     const charactersOut = [];
-    for (const c of characters) charactersOut.push({ id:c.id, name: await romanizeName(c.name) });
+    for (const c of characters) charactersOut.push({ id:c.id, name: _wantRomaji ? await romanizeName(c.name) : c.name });
 
     const results = new Array(items.length);
     for (let i = 0; i < items.length; i += CONCURRENCY) {
@@ -249,7 +253,8 @@ export async function onRequestPost({ request, env }) {
       tr.forEach((t, j) => { results[i + j] = { id: chunk[j].id, text: t }; });
     }
 
-    const out = { title: titleTr || title, author, items: results, characters: charactersOut };
+    const authorOut = (_wantRomaji && author) ? await romanizeName(author) : author;
+    const out = { title: titleTr || title, author: authorOut, items: results, characters: charactersOut };
     if (debug) out._debug = dbg;
     const payload = JSON.stringify(out);
     if (KV && !debug) await KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
