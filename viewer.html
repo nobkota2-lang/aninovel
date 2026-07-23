@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v66_novelinfo_i18n';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v67_source_language';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2992,9 +2992,19 @@ async function uploadInlineImage(file){
     render();
   }catch(e){ alert('画像アップロード失敗: '+e.message); }
 }
-function openEditModal(type,data){state.editingItem={type:type,data:JSON.parse(JSON.stringify(data))};state.editModalOpen=true;state.colorPickerOpen=false;state.imageGalleryOpen=false;state.galleryTab='photo';state.galleryGroup=null;state.galleryPage=0;render()}
+function _guardEdit(){
+  if(!_isTranslatedView()) return true;
+  var src=_srcLang(), en=(state.lang==='en');
+  var msg = en
+    ? 'You are viewing a translation.\nThe original of this work is written in '+(src==='en'?'English':'Japanese')+', and edits must be made on the original so a translation is never saved over it.\n\nSwitch to the original language now?'
+    : '\u3053\u308c\u306f\u7ffb\u8a33\u8868\u793a\u3067\u3059\u3002\n\u3053\u306e\u4f5c\u54c1\u306e\u539f\u6587\u306f'+(src==='en'?'English':'\u65e5\u672c\u8a9e')+'\u3067\u3059\u3002\u7ffb\u8a33\u3067\u539f\u6587\u3092\u4e0a\u66f8\u304d\u3057\u306a\u3044\u305f\u3081\u3001\u7de8\u96c6\u306f\u539f\u6587\u306e\u8a00\u8a9e\u3067\u884c\u3044\u307e\u3059\u3002\n\n\u4eca\u3059\u3050\u539f\u6587\u306e\u8a00\u8a9e\u306b\u5207\u308a\u66ff\u3048\u307e\u3059\u304b\uff1f';
+  if(confirm(msg)) setLang(src);
+  return false;
+}
+function openEditModal(type,data){
+  if(!_guardEdit())return;state.editingItem={type:type,data:JSON.parse(JSON.stringify(data))};state.editModalOpen=true;state.colorPickerOpen=false;state.imageGalleryOpen=false;state.galleryTab='photo';state.galleryGroup=null;state.galleryPage=0;render()}
 function closeEditModal(){state.editModalOpen=false;state.editingItem=null;state.colorPickerOpen=false;state.imageGalleryOpen=false;render()}
-function saveEditModal(){if(!state.editingItem)return;var type=state.editingItem.type,data=state.editingItem.data;if(type==='character'){if(data.name&&data.name.trim()){var base=data.name.trim();var dup=state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===base});if(dup){var n=2,nn=base+'_'+n;while(state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===nn})){n++;nn=base+'_'+n}alert('同じ名前「'+base+'」の登場人物が既に存在します。\n「'+nn+'」として登録します。');data.name=nn}}if(!data.iconImage)data.shortName=(data.shortName||(data.name||'').substring(0,2)).substring(0,10)}if(type!=='character'&&data.type==='dialogue'){var _hasCh=data.characterId&&state.characters.some(function(c){return c.id===data.characterId&&c.id!=='narrator';});if(!_hasCh){var _fc=state.characters.filter(function(c){return c.id!=='narrator';})[0];if(_fc){data.characterId=_fc.id;}else{data.type='narration';}}}state.editModalOpen=false;state.editingItem=null;state.colorPickerOpen=false;state.imageGalleryOpen=false;updateItem(data.id,data,type)}
+function saveEditModal(){if(!state.editingItem)return;if(_isTranslatedView()){console.warn('[sourceLang] 翻訳表示中の保存を拒否しました');closeEditModal();return;}var type=state.editingItem.type,data=state.editingItem.data;if(type==='character'){if(data.name&&data.name.trim()){var base=data.name.trim();var dup=state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===base});if(dup){var n=2,nn=base+'_'+n;while(state.characters.some(function(c){return c.id!==data.id&&(c.name||'').trim()===nn})){n++;nn=base+'_'+n}alert('同じ名前「'+base+'」の登場人物が既に存在します。\n「'+nn+'」として登録します。');data.name=nn}}if(!data.iconImage)data.shortName=(data.shortName||(data.name||'').substring(0,2)).substring(0,10)}if(type!=='character'&&data.type==='dialogue'){var _hasCh=data.characterId&&state.characters.some(function(c){return c.id===data.characterId&&c.id!=='narrator';});if(!_hasCh){var _fc=state.characters.filter(function(c){return c.id!=='narrator';})[0];if(_fc){data.characterId=_fc.id;}else{data.type='narration';}}}state.editModalOpen=false;state.editingItem=null;state.colorPickerOpen=false;state.imageGalleryOpen=false;updateItem(data.id,data,type)}
 function toggleDarkMode(){state.darkMode=!state.darkMode;document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');render()}
 function dblClickChar(charId){var ch=state.characters.find(function(c){return c.id===charId});if(ch)openEditModal('character',ch)}
 
@@ -3182,7 +3192,45 @@ function _toggleAozora(on){
   state.novel.tags=cur;
   render();
 }
-function renderMetaModal(){if(!state.metaEditOpen)return'';return'<div class="modal-overlay" onclick="if(event.target===this){state.metaEditOpen=false;render()}"><div class="modal-content" style="max-width:480px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-weight:700">📖 小説情報</h3><button onclick="state.metaEditOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイトル</label><input type="text" value="'+esc(state.novel.title)+'" oninput="state.novel.title=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">著者名</label><input type="text" value="'+esc(state.novel.author)+'" oninput="state.novel.author=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要・あらすじ</label><textarea oninput="state.novel.description=this.value" rows="4" placeholder="作品の紹介文・あらすじを入力（一覧やSNSシェアに表示されます）" style="width:100%;resize:vertical;font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);color:var(--text-primary)">'+esc(state.novel.description||'')+'</textarea></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">表紙画像</label><div style="display:flex;gap:12px;align-items:flex-start"><div style="width:90px;height:126px;border-radius:8px;border:1px solid var(--border);overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#fff;background:'+esc(state.novel.coverColor||'#4F46E5')+'">'+(state.novel.coverImage?'<img src="'+esc(state.novel.coverImage)+'" style="width:100%;height:100%;object-fit:cover">':('<span style="padding:4px">'+esc(state.novel.title||'無題')+'</span>'))+'</div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><label class="btn btn-ghost" style="cursor:pointer">画像を選択<input type="file" accept="image/*" style="display:none" onchange="uploadCover(this.files[0])"></label>'+(state.novel.coverImage?'<button onclick="state.novel.coverImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">表紙を削除</button>':'')+'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text-muted)">表紙の色</span><input type="color" value="'+esc(state.novel.coverColor||'#4F46E5')+'" oninput="state.novel.coverColor=this.value;render()" style="width:40px;height:30px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"></div></div></div></div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タグ（カンマ区切り）</label><input type="text" id="metaTagsInput" value="'+esc(_metaTagStr())+'" placeholder="冒険, 恋愛, ミステリー" oninput="_setNovelTags(this.value)" style="width:100%"></div><div style="margin-top:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer"><input type="checkbox" '+(_hasAozora()?'checked':'')+' onchange="_toggleAozora(this.checked)">📚 青空文庫シリーズに入れる</label><div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:26px">著作権保護期間が満了した名作を代行登録する場合にチェック。著者名は上の欄で実作者を指定してください。</div></div><div style="margin-top:24px"><button onclick="state.metaEditOpen=false;render()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div>'}
+function _setSourceLang(v){
+  if(!state.novel)return;
+  if(v===_srcLang())return;
+  var ok=confirm(state.lang==='en'
+    ? 'Set the original language of this work to '+(v==='en'?'English':'Japanese')+'?\n\nThe stored text is treated as the original in that language, and the other language is generated as a translation.'
+    : '\u3053\u306e\u4f5c\u54c1\u306e\u539f\u6587\u3092'+(v==='en'?'English':'\u65e5\u672c\u8a9e')+'\u306b\u8a2d\u5b9a\u3057\u307e\u3059\u304b\uff1f\n\n\u4fdd\u5b58\u3055\u308c\u3066\u3044\u308b\u672c\u6587\u304c\u305d\u306e\u8a00\u8a9e\u306e\u539f\u6587\u3068\u3057\u3066\u6271\u308f\u308c\u3001\u3082\u3046\u4e00\u65b9\u306e\u8a00\u8a9e\u306f\u7ffb\u8a33\u3068\u3057\u3066\u751f\u6210\u3055\u308c\u307e\u3059\u3002');
+  if(!ok){render();return;}
+  state.novel.sourceLang=v;
+  state.workTrans=null;state.workTransHash=null;state.charTrans=null;state.charTransHash=null;
+  render();
+}
+function _srcLangSelect(){
+  var s=_srcLang(), en=(state.lang==='en');
+  return '<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">'
+    +(en?'Original language':'\u539f\u6587\u306e\u8a00\u8a9e')
+    +'</label><select onchange="_setSourceLang(this.value)" style="width:100%">'
+    +'<option value="ja"'+(s==='ja'?' selected':'')+'>'+(en?'Japanese':'\u65e5\u672c\u8a9e')+'</option>'
+    +'<option value="en"'+(s==='en'?' selected':'')+'>English</option>'
+    +'</select><div style="font-size:11px;color:var(--text-muted);margin-top:4px">'
+    +(en?'The language the work was actually written in. The other language is shown as a translation, and the original is never overwritten by it.'
+        :'\u4f5c\u54c1\u304c\u5b9f\u969b\u306b\u66f8\u304b\u308c\u305f\u8a00\u8a9e\u3067\u3059\u3002\u3082\u3046\u4e00\u65b9\u306e\u8a00\u8a9e\u306f\u7ffb\u8a33\u3068\u3057\u3066\u8868\u793a\u3055\u308c\u3001\u539f\u6587\u304c\u4e0a\u66f8\u304d\u3055\u308c\u308b\u3053\u3068\u306f\u3042\u308a\u307e\u305b\u3093\u3002')
+    +'</div></div>';
+}
+function _metaModalTranslated(){
+  var en=(state.lang==='en'), src=_srcLang();
+  return '<div class="modal-overlay" onclick="if(event.target===this){state.metaEditOpen=false;render()}"><div class="modal-content" style="max-width:480px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-weight:700">'
+    +(en?'\ud83d\udcd6 Novel info':'\ud83d\udcd6 \u5c0f\u8aac\u60c5\u5831')
+    +'</h3><button onclick="state.metaEditOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">\u2715</button></div>'
+    +'<div style="background:var(--bg-secondary);border-left:3px solid var(--accent-author);padding:12px 14px;border-radius:6px;font-size:13px;line-height:1.8;margin-bottom:16px">'
+    +(en?'<b>This is a translated view.</b><br>The original of this work is written in '+(src==='en'?'English':'Japanese')+'. To protect it, the fields cannot be edited from a translation \u2014 otherwise a translation would be saved over the original and the text would drift with every round trip.<br>Switch to the original language to edit.'
+        :'<b>\u3053\u308c\u306f\u7ffb\u8a33\u8868\u793a\u3067\u3059\u3002</b><br>\u3053\u306e\u4f5c\u54c1\u306e\u539f\u6587\u306f'+(src==='en'?'English':'\u65e5\u672c\u8a9e')+'\u3067\u3059\u3002\u7ffb\u8a33\u304b\u3089\u7de8\u96c6\u3059\u308b\u3068\u539f\u6587\u3092\u7ffb\u8a33\u3067\u4e0a\u66f8\u304d\u3057\u3001\u5f80\u5fa9\u306e\u305f\u3073\u306b\u610f\u5473\u304c\u305a\u308c\u3066\u3044\u304f\u305f\u3081\u3001\u3053\u3053\u3067\u306f\u7de8\u96c6\u3067\u304d\u307e\u305b\u3093\u3002<br>\u7de8\u96c6\u306f\u539f\u6587\u306e\u8a00\u8a9e\u306b\u5207\u308a\u66ff\u3048\u3066\u884c\u3063\u3066\u304f\u3060\u3055\u3044\u3002')
+    +'</div>'
+    + _srcLangSelect()
+    +'<div style="margin-top:20px;display:flex;gap:8px"><button onclick="setLang(\''+src+'\')" class="btn btn-primary" style="flex:1;justify-content:center">'
+    +(en?'Switch to the original ('+(src==='en'?'English':'Japanese')+')':'\u539f\u6587\uff08'+(src==='en'?'English':'\u65e5\u672c\u8a9e')+'\uff09\u306b\u5207\u308a\u66ff\u3048\u308b')
+    +'</button><button onclick="state.metaEditOpen=false;render()" class="btn btn-ghost">'+(en?'Close':'\u9589\u3058\u308b')+'</button></div></div></div>';
+}
+function renderMetaModal(){if(!state.metaEditOpen)return'';if(_isTranslatedView())return _metaModalTranslated();return'<div class="modal-overlay" onclick="if(event.target===this){state.metaEditOpen=false;render()}"><div class="modal-content" style="max-width:480px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-weight:700">📖 小説情報</h3><button onclick="state.metaEditOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイトル</label><input type="text" value="'+esc(state.novel.title)+'" oninput="state.novel.title=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">著者名</label><input type="text" value="'+esc(state.novel.author)+'" oninput="state.novel.author=this.value" style="width:100%"></div>'+_srcLangSelect()+'<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要・あらすじ</label><textarea oninput="state.novel.description=this.value" rows="4" placeholder="作品の紹介文・あらすじを入力（一覧やSNSシェアに表示されます）" style="width:100%;resize:vertical;font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);color:var(--text-primary)">'+esc(state.novel.description||'')+'</textarea></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">表紙画像</label><div style="display:flex;gap:12px;align-items:flex-start"><div style="width:90px;height:126px;border-radius:8px;border:1px solid var(--border);overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#fff;background:'+esc(state.novel.coverColor||'#4F46E5')+'">'+(state.novel.coverImage?'<img src="'+esc(state.novel.coverImage)+'" style="width:100%;height:100%;object-fit:cover">':('<span style="padding:4px">'+esc(state.novel.title||'無題')+'</span>'))+'</div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><label class="btn btn-ghost" style="cursor:pointer">画像を選択<input type="file" accept="image/*" style="display:none" onchange="uploadCover(this.files[0])"></label>'+(state.novel.coverImage?'<button onclick="state.novel.coverImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">表紙を削除</button>':'')+'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text-muted)">表紙の色</span><input type="color" value="'+esc(state.novel.coverColor||'#4F46E5')+'" oninput="state.novel.coverColor=this.value;render()" style="width:40px;height:30px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"></div></div></div></div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タグ（カンマ区切り）</label><input type="text" id="metaTagsInput" value="'+esc(_metaTagStr())+'" placeholder="冒険, 恋愛, ミステリー" oninput="_setNovelTags(this.value)" style="width:100%"></div><div style="margin-top:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer"><input type="checkbox" '+(_hasAozora()?'checked':'')+' onchange="_toggleAozora(this.checked)">📚 青空文庫シリーズに入れる</label><div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:26px">著作権保護期間が満了した名作を代行登録する場合にチェック。著者名は上の欄で実作者を指定してください。</div></div><div style="margin-top:24px"><button onclick="state.metaEditOpen=false;render()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div>'}
 
 // === Reader Customize ===
 function _getProfileBundle(){
@@ -3470,6 +3518,8 @@ var I18N_DICT={'中性':'Neutral','保存完了':'Saved','内容を保存しま�
   // --- モーダル共通 ---
   '閉じる':'Close','キャンセル':'Cancel','完了':'Done','デフォルト':'Default','指定なし':'None','無題':'Untitled',
   'タイトル':'Title','著者':'Author','著者名':'Author name',
+  '原文の言語':'Original language',
+  '作品が実際に書かれた言語です。もう一方の言語は翻訳として表示され、原文が上書きされることはありません。':'The language the work was actually written in. The other language is shown as a translation, and the original is never overwritten by it.',
   // --- 小説情報モーダル(Novel info) ---
   '概要・あらすじ':'Description / synopsis',
   '表紙画像':'Cover image',
@@ -3538,12 +3588,18 @@ function _contentHash(){
   var h=5381; for(var i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; }
   return (h>>>0).toString(36);
 }
+// === 原文言語(sourceLang)管理 =========================================
+// 作品ごとに「どちらの言語が原文か」を持つ。未設定の既存作品は 'ja' 扱い。
+// 表示言語 !== 原文言語 のときが「翻訳表示」。翻訳表示中は原文を編集させない。
+function _srcLang(){ return (state.novel&&state.novel.sourceLang)||'ja'; }
+function _isTranslatedView(){ return state.lang!==_srcLang(); }
+function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'5_'+h; }
 function _ctext(item){
-  if(state.lang==='en' && state.workTrans && state.workTransHash===state._curHash && state.workTrans[item.id]!=null) return state.workTrans[item.id];
+  if(_isTranslatedView() && state.workTrans && state.workTransHash===state._curHash && state.workTrans[item.id]!=null) return state.workTrans[item.id];
   return item.text;
 }
 function _ntitle(){
-  if(state.lang==='en' && state.workTransMeta && state.workTransMeta.title && state.workTransHash===state._curHash) return state.workTransMeta.title;
+  if(_isTranslatedView() && state.workTransMeta && state.workTransMeta.title && state.workTransHash===state._curHash) return state.workTransMeta.title;
   return state.novel.title||'無題';
 }
 // 英語表示時は和文フォントだとラテン文字が間延びするので、英語向けフォント/行間に切替
@@ -3553,9 +3609,9 @@ var _EN_FONTS=[["Georgia, 'Times New Roman', serif","Georgia（コンパクト�
 function _fontOpts(list,cur){var o='';for(var i=0;i<list.length;i++){var sel=(list[i][0]===cur)?' selected':'';o+='<option value="'+list[i][0]+'"'+sel+'>'+list[i][1]+'</option>';}return o;}
 function _enVoice(gender){try{var vs=speechSynthesis.getVoices()||[];var en=vs.filter(function(v){return /^en/i.test(v.lang);});if(!en.length)return null;var us=en.filter(function(v){return /^en[-_]US/i.test(v.lang);});var pool=us.length?us:en;if(gender&&gender!=='neutral'){var gv=pool.filter(function(v){return _voiceGender(v)===gender;});if(gv.length)return gv[0];}return pool[0];}catch(e){return null;}}
 function _langToggle(){var ja=state.lang!=='en',on='background:#FAF6F0;color:#1a1a2e',off='background:transparent;color:#FAF6F0';return '<div style="display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.5);border-radius:20px;overflow:hidden;font-size:13px;line-height:1" title="Language / 言語切替"><button onclick="setLang(&#39;ja&#39;)" class="btn" style="border:none!important;border-radius:0;margin:0;padding:7px 15px;font-weight:700;'+(ja?on:off)+'">'+(ja?'日本語':'Japanese')+'</button><button onclick="setLang(&#39;en&#39;)" class="btn" style="border:none!important;border-radius:0;margin:0;padding:7px 15px;font-weight:700;'+(ja?off:on)+'">English</button></div>';}
-function _cname(ch){if(!ch)return '';if(state.lang==='en'&&ch.id==='narrator')return 'Narrator';var jp=ch.shortName||ch.name||'';if(state.lang==='en'&&state.charTrans&&state.charTransHash===state._curHash&&state.charTrans[ch.id])return state.charTrans[ch.id];return jp;}
-function _editName(d){if(!d)return '';if(state.lang==='en'){if(d.id==='narrator')return 'Narrator';if(state.charTrans&&state.charTransHash===state._curHash&&state.charTrans[d.id])return state.charTrans[d.id];}return d.name||'';}
-function _editShort(d){if(!d)return '';if(state.lang==='en'){if(d.id==='narrator')return 'N';var n=_editName(d);if(n&&/^[\x00-\x7F]+$/.test(n))return n.substring(0,2);}return d.shortName||'';}
+function _cname(ch){if(!ch)return '';if(_isTranslatedView()&&ch.id==='narrator')return 'Narrator';var jp=ch.shortName||ch.name||'';if(_isTranslatedView()&&state.charTrans&&state.charTransHash===state._curHash&&state.charTrans[ch.id])return state.charTrans[ch.id];return jp;}
+function _editName(d){if(!d)return '';return d.name||'';}
+function _editShort(d){if(!d)return '';return d.shortName||'';}
 function _lh(lh){
   if(state.lang!=='en') return lh;
   var n=parseFloat(lh); if(!n) n=1.7;
@@ -3563,30 +3619,30 @@ function _lh(lh){
 }
 function _revealApp(){try{document.documentElement.classList.remove('i18n-pending');}catch(e){}}
 function _maybeReveal(){try{
-  if(state.lang!=='en'){_revealApp();return;}
+  if(!_isTranslatedView()){_revealApp();return;}
   if(state.currentScreen==='home'){return;}
   if(state.currentScreen!=='reader'){_revealApp();return;}
   var app=document.getElementById('app');
   if(!app){return;}
   // 読者画面では本文に日本語が1文字でも残っていれば表示しない（英文完成まで隠す）
-  if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(app.textContent||'')){return;}
+  if(state.lang==='en'&&/[\u3040-\u30FF\u4E00-\u9FFF]/.test(app.textContent||'')){return;}
   _revealApp();
 }catch(e){_revealApp();}}
 function _preloadWorkTrans(){
-  if(state.lang!=='en'||state.currentScreen!=='reader')return;
+  if(!_isTranslatedView()||state.currentScreen!=='reader')return;
   try{ var hash=state._curHash||_contentHash();
     if(state.workTransHash===hash&&state.workTrans)return;
-    var cached=localStorage.getItem('aninovel_tr_en5_'+hash);
+    var cached=localStorage.getItem(_trKey(hash));
     if(cached){var c=JSON.parse(cached);state.workTrans=c.items||{};state.workTransMeta={title:c.title,author:c.author};state.workTransHash=hash;state.charTrans=c.chars||{};state.charTransHash=hash;}
   }catch(e){}
 }
 function maybeTranslateWork(){
-  if(state.lang!=='en') return;
+  if(!_isTranslatedView()) return;
   var hash=state._curHash||_contentHash();
   if(state.workTransHash===hash && state.workTrans) return; // 翻訳済み
   try{
-    var cached=localStorage.getItem('aninovel_tr_en5_'+hash);
-    if(cached){ var c=JSON.parse(cached); var _im=c.items||{}; var _tot=Object.keys(_im).length; var _jp=0; Object.keys(_im).forEach(function(k){if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(_im[k]))_jp++;}); if(_tot>0 && _jp>_tot*0.1){ localStorage.removeItem('aninovel_tr_en5_'+hash); }else{ state.workTrans=_im; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; } }
+    var cached=localStorage.getItem(_trKey(hash));
+    if(cached){ var c=JSON.parse(cached); var _im=c.items||{}; var _tot=Object.keys(_im).length; var _jp=0; if(state.lang!=='en'){_tot=0;} Object.keys(_im).forEach(function(k){if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(_im[k]))_jp++;}); if(_tot>0 && _jp>_tot*0.1){ localStorage.removeItem(_trKey(hash)); }else{ state.workTrans=_im; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; } }
   }catch(e){}
   translateWork(hash);
 }
@@ -3598,13 +3654,13 @@ function translateWork(hash){
   showToast('Translating…');
   fetch('/api/translate',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({target:'en',title:state.novel.title||'',author:state.novel.author||'',items:items,characters:(state.characters||[]).filter(function(c){return c.id!=='narrator'&&c.name;}).map(function(c){return {id:c.id,name:c.name};})})
+    body:JSON.stringify({target:state.lang,sourceLang:_srcLang(),title:state.novel.title||'',author:state.novel.author||'',items:items,characters:(state.characters||[]).filter(function(c){return c.id!=='narrator'&&c.name;}).map(function(c){return {id:c.id,name:c.name};})})
   }).then(function(r){return r.json();}).then(function(d){
     state.translating=false;
     if(d&&d.items&&d.items.length){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
       state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
-      try{ localStorage.setItem('aninovel_tr_en5_'+hash, JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
+      try{ localStorage.setItem(_trKey(hash), JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
       render();
     } else { showToast('Translation failed'); }
   }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
@@ -4095,7 +4151,7 @@ async function publishMyWork(){
         if(_aFail2>0)console.warn('音声'+_aFail2+'件のサーバー保存に失敗');
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
-      var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',coverImage:_nn.coverImage||'',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true};
+      var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',coverImage:_nn.coverImage||'',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true,sourceLang:_srcLang()};
       // 既存カタログにある英語メタ(titleEn/authorEn/descriptionEn等)を引き継ぐ。
       // これが無いと上書き公開のたびに英語カードが日本語へ戻る。
       try{
@@ -4126,6 +4182,7 @@ function unpublishMyWork(){
         alert('投稿を取り下げました。');
     }).catch(function(err){alert((state.lang==='en'?'Error: ':'エラー: ')+err.message);});
 }
+window._setSourceLang=_setSourceLang;window._srcLang=_srcLang;window._isTranslatedView=_isTranslatedView;
 window.goHome=goHome;
 window.toggleAuthorMode=toggleAuthorMode;
 window.toggleFullscreen=toggleFullscreen;
