@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v64_parser_aozora_multiquote';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v65_publish_keep_en_meta';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4085,6 +4085,20 @@ async function publishMyWork(){
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
       var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',coverImage:_nn.coverImage||'',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true};
+      // 既存カタログにある英語メタ(titleEn/authorEn/descriptionEn等)を引き継ぐ。
+      // これが無いと上書き公開のたびに英語カードが日本語へ戻る。
+      try{
+        var _cr=await fetch('/api/catalog?t='+Date.now());
+        var _cj=await _cr.json();
+        var _cl=_cj.works||_cj.items||_cj.list||(Array.isArray(_cj)?_cj:[]);
+        var _prevMeta=_cl.filter(function(w){return (w.id||w.workId)===_workParam;})[0];
+        if(_prevMeta){
+          ['titleEn','authorEn','descriptionEn','tagsEn'].forEach(function(k){
+            if(_prevMeta[k]!=null&&_prevMeta[k]!==''&&(_meta[k]==null||_meta[k]===''))_meta[k]=_prevMeta[k];
+          });
+          console.info('[Publish-Owner] 英語メタを引き継ぎ:',Object.keys(_meta).filter(function(k){return /En$/.test(k);}));
+        }
+      }catch(_e){console.warn('[Publish-Owner] 英語メタの引き継ぎに失敗(公開は続行):',_e);}
       var _up2=await fetch('/api/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
       if(!_up2.ok){var _ue2=await _up2.json().catch(function(){return{};});throw new Error(_ue2.error||('HTTP '+_up2.status));}
       console.info('[Publish-Owner] サーバーへ上書き公開完了:',_workParam);
