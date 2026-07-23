@@ -80,7 +80,9 @@
         return r.json();
       });
       // サーバー(KV)の投稿作品カタログ — 他ユーザー/他端末の投稿もここから取得
-      var serverP = fetch('/api/catalog').then(function(r) {
+      // キャッシュ回避は必須。これが無いと公開直後にブラウザキャッシュの古いカタログが返り、
+      // 作品情報を編集してもカードが更新されない（同ファイル440/726行と同じ扱いに揃える）。
+      var serverP = fetch('/api/catalog?cb=' + Date.now(), { cache: 'no-store' }).then(function(r) {
         return r.ok ? r.json() : { works: [] };
       }).catch(function() { return { works: [] }; });
       return Promise.all([staticP, serverP]).then(function(res) {
