@@ -36,7 +36,7 @@
   // 作品保存
   // ========================================
   function getWorkPayload(){ var st=window.state; if(st&&Array.isArray(st.content)) return { novel:st.novel, chapters:st.chapters, characters:st.characters, content:st.content, displaySettings:st.displaySettings, version:'2.2' }; return null; }
-  function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pl=getWorkPayload(); if(!w||!pl||!pl.novel) return null; var nv=pl.novel; var content=Array.isArray(pl.content)?pl.content:[]; var chars=Array.isArray(pl.characters)?pl.characters:[]; var cc=content.reduce(function(s,it){return s+(((it.text||it.html||'')+'').length);},0); var pg=content.filter(function(x){return x&&(x.type==='pageBreak'||x.type==='page'||x.type==='chapter');}).length; return { id:w, title:nv.title||'無題', author:nv.author||'', description:nv.description||'', coverColor:nv.coverColor||'#6366F1', coverImage:nv.coverImage||'', pageCount:(pg>0?pg:1), charCount:cc, characterCount:chars.length, tags:(Array.isArray(nv.tags)?nv.tags:[]), createdAt:nv.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString() }; } catch(e){ return null; } }
+  function getCatalogMeta(){ try { var w=getCurrentWorkId(); var pl=getWorkPayload(); if(!w||!pl||!pl.novel) return null; var nv=pl.novel; var content=Array.isArray(pl.content)?pl.content:[]; var chars=Array.isArray(pl.characters)?pl.characters:[]; var cc=content.reduce(function(s,it){return s+(((it.text||it.html||'')+'').length);},0); var pg=content.filter(function(x){return x&&(x.type==='pageBreak'||x.type==='page'||x.type==='chapter');}).length; return { id:w, title:nv.title||'無題', author:nv.author||'', description:nv.description||'', coverColor:nv.coverColor||'#6366F1', coverImage:nv.coverImage||'', pageCount:(pg>0?pg:1), charCount:cc, characterCount:chars.length, tags:(Array.isArray(nv.tags)?nv.tags:[]), sourceLang:(nv.sourceLang||'ja'), createdAt:nv.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString() }; } catch(e){ return null; } }
   function ensurePublishedWorksEntry(){
     var workId = getCurrentWorkId();
     if(!workId || workId.indexOf('pub_') !== 0) return;
@@ -71,7 +71,25 @@
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
     if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
     try {
-      var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m){ try{ var _tr=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:'en',title:m.title||'',author:m.author||'',items:[{id:'d',text:m.description||''}],characters:[]})}); if(_tr.ok){ var _tj=await _tr.json(); if(_tj){ if(_tj.title)m.titleEn=_tj.title; if(_tj.author)m.authorEn=_tj.author; if(_tj.items&&_tj.items[0]&&_tj.items[0].text)m.descriptionEn=_tj.items[0].text; console.info('[Publish] 英訳meta生成:',m.titleEn||'(なし)'); } } }catch(_te){console.warn('[Publish] 英訳生成スキップ:',_te);} body.meta=m; }
+      var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m){ try{ var _src=(m.sourceLang||'ja'); var _tgt=(_src==='en')?'ja':'en'; var _sfx=(_tgt==='en')?'En':'Ja';
+        // カード訳の方針: 手書きの訳は守り、原文が変わったフィールドだけ機械翻訳で更新する。
+        // 判定材料は「カタログに入っている前回の原文」。訳だけ手で直しても原文は変わらないので手書きは保護される。
+        var _pv=null;
+        try{ var _cr=await fetch('/api/catalog?t='+Date.now(),{cache:'no-store'}); if(_cr.ok){ var _cj=await _cr.json(); var _cl=_cj.works||_cj.items||_cj.list||(Array.isArray(_cj)?_cj:[]); _pv=_cl.filter(function(w){return (w.id||w.workId)===m.id;})[0]||null; } }catch(_pe){}
+        var _need={};
+        ['title','author','description'].forEach(function(f){
+          if(!_pv){ _need[f]=true; return; }                       // 新規公開 → 全部生成
+          if(!_pv[f+_sfx]){ _need[f]=true; return; }               // 訳がまだ無い → 生成
+          _need[f]=((_pv[f]||'')!==(m[f]||''));                    // 原文が変わった → 再生成
+          if(!_need[f]) m[f+_sfx]=_pv[f+_sfx];                     // 変わっていない → 既存の訳を維持
+        });
+        if(_pv&&_pv['tags'+_sfx]&&!m['tags'+_sfx]) m['tags'+_sfx]=_pv['tags'+_sfx];
+        if(_need.title||_need.author||_need.description){
+          var _tr=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:_tgt,source:_src,title:m.title||'',author:m.author||'',items:[{id:'d',text:m.description||''}],characters:[]})});
+          if(_tr.ok){ var _tj=await _tr.json(); if(_tj){ if(_need.title&&_tj.title)m['title'+_sfx]=_tj.title; if(_need.author&&_tj.author)m['author'+_sfx]=_tj.author; if(_need.description&&_tj.items&&_tj.items[0]&&_tj.items[0].text)m['description'+_sfx]=_tj.items[0].text; } }
+          console.info('[Publish] 原文が変わったので訳を更新:',Object.keys(_need).filter(function(k){return _need[k];}).join(', '));
+        } else { console.info('[Publish] 原文に変更なし → 手書きの訳を維持しました'); }
+      }catch(_te){console.warn('[Publish] カードmeta翻訳スキップ:',_te);} body.meta=m; }
       var r=await fetch('/api/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
