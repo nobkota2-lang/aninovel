@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v72_aozora_import';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v73_speaker_style';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2928,6 +2928,11 @@ function _retroSpeaker(t){
   if(m)return '\u50D5';   // 「と僕が云うと」→ 話中話の語り手
   m=t.match(/^(?:[^\u3002\u300C\u300D\u300E\u300F]{0,12}?)と[\u3001,]?\s*((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{1,8})(?:\u3055\u3093|\u69D8|\u541B|\u304F\u3093|\u5148\u751F|\u592B\u4EBA|\u5B22)?(?:は|が|も)/);
   if(m&&_isValidName(m[1])&&!_kataFrag(t,m[1]))return m[1];
+  if(/^\u3068[\u3001,]?/.test(t)){
+    var first=t.split('\u3002')[0]||'';
+    var m2=first.match(/((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{2,8})(?:\u3055\u3093|\u69D8|\u541B|\u304F\u3093|\u5148\u751F|\u592B\u4EBA|\u5B22)?(?:\u306F|\u304C|\u3082)[^\u3002]{0,12}?(?:\u4E91|\u8A00|\u7B54|\u5C0B|\u8A0A|\u53EB|\u554F|\u53E3\u3092|\u9976\u820C|\u558B|\u56C1|\u547C|\u4FC3|\u5451|\u8FD4\u4E8B|\u6328\u62F6|\u53E3\u8ABF|\u8A9E\u6C17)/);
+    if(m2&&_isValidName(m2[1])&&!_kataFrag(first,m2[1]))return m2[1];
+  }
   m=t.match(/^これは((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{2,8})(?:\u3055\u3093|\u69D8|\u541B|\u5148\u751F)?の(?:\u8FF0\u61D0|\u8A00\u8449|\u8FD4\u4E8B|\u6328\u62F6|\u8CEA\u554F|\u72EC\u767D|\u53F0\u8A5E|\u8A5E)/);
   if(m&&_isValidName(m[1]))return m[1];
   return null;
@@ -2947,12 +2952,41 @@ function _blockPending(t, lastMentioned, known){
   }
   var cut=t.lastIndexOf('\u3002');
   var tail=(cut>=0)?t.slice(cut+1).trim():t;
-  if(tail){ return subj(tail); }
+  if(tail){
+    var s1=subj(tail);
+    if(s1)return s1;
+    // (a)「御師匠さんの声で」「主人の口調で」— 所有格でも話者を示す
+    var m2=tail.match(/((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{1,8})(?:\u3055\u3093|\u69D8|\u541B|\u304F\u3093|\u5148\u751F)?\u306E(?:\u58F0|\u53E3\u8ABF|\u8ABF\u5B50|\u8A9E\u6C17|\u53E3\u3076\u308A)/);
+    if(m2&&_isValidName(m2[1])&&!_kataFrag(tail,m2[1])&&known(m2[1]))return m2[1];
+    // (b)「やはり沈着な口調で」— 話し方だけを述べる導入部は、直前の文の主題が話者
+    if(cut>=0&&/(?:\u58F0|\u53E3\u8ABF|\u8ABF\u5B50|\u8A9E\u6C17|\u53E3\u3076\u308A|\u8FD4\u4E8B)/.test(tail)){
+      var pv=t.slice(0,cut).split('\u3002').filter(function(x){return x.trim();});
+      var s2=subj(pv[pv.length-1]||'');
+      if(s2)return s2;
+    }
+    return null;
+  }
   var sents=t.split('\u3002').filter(function(x){return x.trim();});
   var lastSent=sents[sents.length-1]||'';
   if(/(?:\u4E91|\u8A00|\u554F|\u7B54|\u5C0B|\u53EB|\u805E|\u7D9A\u3051|\u53E3\u3092|\u9976\u820C|\u558B|\u56C1|\u547C|\u4FC3|\u547D|\u8CEA\u554F|\u6328\u62F6|\u5F01|\u8A34|\u544A|\u8A9E\u3063|\u9022\u7740|\u611F\u5F97|\u767A\u660E)[^\u3002]{0,6}$/.test(lastSent)){ return subj(lastSent); }
   return null;
 }
+function _polite(t){
+  t=(t||'').replace(/^[\u300C\u300E]|[\u300D\u300F]$/g,'');
+  if(!t)return 0;
+  if(/(?:\u3067\u3059|\u307E\u3059|\u307E\u305B|\u307E\u3057|\u307E\u3057\u3087|\u3067\u3057\u3087|\u3054\u3056\u3044\u307E|\u304F\u3060\u3055\u3044)/.test(t))return 1;
+  if(/(?:\u3060\u3088|\u3060\u306D|\u3060\u3044|\u304B\u3044|\u3060\u308D|\u3060\u3063|\u3050\u3089\u3044\u3060|\u305E|\u305C|\u3060\u3002|\u3060$)/.test(t))return -1;
+  return 0;
+}
+function _namelessTag(t){
+  t=(t||'').trim();
+  if(t.length>36)return false;
+  if(!/^\u3068[\u3001,]?\s*/.test(t))return false;
+  if(/[\u306C\u3093]\u3070\u304B\u308A/.test(t))return false;     // 「と云わぬばかりに」は比喩
+  if(_retroSpeaker(t))return false;                                    // 名前があるならそちらが優先
+  return /^\u3068[\u3001,]?\s*[^\u3002\u300C\u300D\u300E\u300F]{0,12}?(?:\u4E91|\u8A00|\u7B54|\u5C0B|\u8A0A|\u805E|\u53EB|\u554F|\u8FD4\u4E8B|\u56C1|\u5451)/.test(t);
+}
+
 function _resolveSpeakersV2(){
   try{
     var items=state.content;
@@ -2975,7 +3009,23 @@ function _resolveSpeakersV2(){
     // --- 1) 後方参照: 地の文「と◯◯は…」は直前のセリフの話者を明かしている(最も確実) ---
     for(var i=1;i<items.length;i++){
       var it=items[i];if(it.type!=='narration'||isPureQuote(it))continue;
-      var nm=_retroSpeaker(it.text);if(!nm)continue;
+      var nm=_retroSpeaker(it.text);
+      if(!nm&&_namelessTag(it.text)){
+        // 直近の地の文で主題(◯◯は)になっている既知の人物を探す
+        var tp=null;
+        for(var z=i-2;z>=0&&z>=i-10&&!tp;z--){
+          var w0=items[z];
+          if(!w0||w0.type!=='narration')continue;
+          var mm=/((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{1,8})(?:\u3055\u3093|\u69D8|\u541B|\u5148\u751F)?\u306F/.exec(w0.text||'');
+          if(mm&&_nameOK(mm[1])&&findChar(mm[1]))tp=mm[1];
+        }
+        if(tp){
+          var _mt=mkChar(tp),_pq=items[i-1];
+          if(_mt&&_pq&&(_pq.type==='dialogue'||isPureQuote(_pq))){toDialogue(_pq,_mt);_pq._conf='hi';}
+        }
+        continue;
+      }
+      if(!nm)continue;
       var p=items[i-1];if(!p)continue;
       if(p.type!=='dialogue'&&!isPureQuote(p))continue;
       if(nm==='\u50D5'){
@@ -3055,6 +3105,29 @@ function _resolveSpeakersV2(){
         Object.keys(cnt).forEach(function(kk){if(cnt[kk]>bn){bn=cnt[kk];best=kk;}});
         if(best)who.push(best);
       }
+      // ランの地の文で主語になっている既知の人物(=その場にいる人物)
+      var present={};
+      who.forEach(function(n){present[n]=1;});
+      for(var x4=qs[run[0]];x4<=qs[run[run.length-1]];x4++){
+        var w7=items[x4];
+        if(!w7||w7.type!=='narration')continue;
+        var re4=/((?:\u304A[\u4E00-\u9FFF\u3041-\u3096]{1,2})|[\u4E00-\u9FFF\u30A1-\u30FA]{1,8})(?:\u3055\u3093|\u69D8|\u541B|\u304F\u3093|\u5148\u751F)?(?:\u306F|\u304C)/g,m4;
+        while((m4=re4.exec(w7.text||''))){
+          if(!_nameOK(m4[1]))continue;
+          var c7=findChar(m4[1]);
+          if(c7)present[c7.name]=1;
+        }
+      }
+      // 明示された話者ごとの話しぶりを集計
+      var style={};
+      anchors.forEach(function(a){
+        var p=_polite(items[qs[run[a.pos]]].text||'');
+        if(!p)return;
+        style[a.n]=style[a.n]||{p:0,n:0};
+        if(p>0)style[a.n].p++;else style[a.n].n++;
+      });
+      // 一度も明示されていない参加者(黙っているように見える人物)
+      var silent=Object.keys(present).filter(function(n){return who.indexOf(n)<0;});
       if(who.length<2)return;
       var A=who[0],B=who[1];
       run.forEach(function(qi,pos){
@@ -3068,6 +3141,19 @@ function _resolveSpeakersV2(){
         });
         if(!nearest)return;
         var g=(nearest.d%2===0)?nearest.n:(nearest.n===A?B:A);
+        // 話しぶり(敬体/常体)による補正: 交互推定の候補と話しぶりが明確に食い違い、
+        // かつ話しぶりの合う参加者がただ一人なら、その人物を話者とする。
+        var pq=_polite(it3.text||'');
+        if(pq){
+          var fit=[];
+          Object.keys(style).forEach(function(n7){
+            var s7=style[n7];
+            if(pq>0&&s7.p>=2&&s7.n===0)fit.push(n7);
+            if(pq<0&&s7.n>=2&&s7.p===0)fit.push(n7);
+          });
+          var sg=style[g];
+          if(fit.length===1&&fit[0]!==g&&sg&&((pq>0&&sg.n>=2&&sg.p===0)||(pq<0&&sg.p>=2&&sg.n===0)))g=fit[0];
+        }
         var mc=mkChar(g);
         if(mc){toDialogue(it3,mc);it3._conf='alt';}
       });
