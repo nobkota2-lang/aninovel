@@ -50,6 +50,87 @@
 
   // === 作品カードを生成 ===
   // === 青空文庫シリーズ コーナー（謝辞付き・完全分離） ===
+  // ==== 一覧のページング（1ページ10件） ==========================
+  // 横並びのカードが増えると見づらいので、10件ごとにページを切って表示する。
+  var PAGE_SIZE = 10;
+  var _pageNo = {};   // key -> 現在のページ番号
+  function _renderPagedGrid(grid, works, votes, key) {
+    if (!grid) return;
+    var total = works.length;
+    var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (!_pageNo[key] || _pageNo[key] > pages) _pageNo[key] = Math.min(_pageNo[key] || 1, pages);
+    var cur = _pageNo[key];
+
+    grid.innerHTML = '';
+    works.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE).forEach(function (w) {
+      try { grid.appendChild(createWorkCard(w, votes)); }
+      catch (e) { console.warn('[works] card skipped:', w && w.id, e); }
+    });
+    try { grid.scrollLeft = 0; } catch (e) {}
+
+    var pagerId = 'pager-' + key;
+    var old = document.getElementById(pagerId);
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    if (pages <= 1) return;   // 1ページに収まるならページャは出さない
+
+    var en = _pEn();
+    var pager = document.createElement('div');
+    pager.id = pagerId;
+    pager.className = 'works-pager';
+    pager.style.cssText = 'display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin:16px 0 4px';
+
+    function mkBtn(label, page, disabled, active) {
+      var b = document.createElement('button');
+      b.textContent = label;
+      b.disabled = !!disabled;
+      b.setAttribute('aria-label', label);
+      if (active) b.setAttribute('aria-current', 'page');
+      b.style.cssText = 'min-width:36px;height:36px;padding:0 10px;border-radius:8px;font-size:13px;'
+        + 'border:1px solid var(--border-color,rgba(128,128,128,.35));'
+        + 'background:' + (active ? 'var(--accent-author,#6366F1)' : 'transparent') + ';'
+        + 'color:' + (active ? '#fff' : 'var(--text-primary,inherit)') + ';'
+        + 'font-weight:' + (active ? '700' : '500') + ';'
+        + 'opacity:' + (disabled ? '.35' : '1') + ';'
+        + 'cursor:' + (disabled || active ? 'default' : 'pointer') + ';';
+      if (!disabled && !active) b.onclick = function () {
+        _pageNo[key] = page;
+        _renderPagedGrid(grid, works, votes, key);
+        try { grid.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+      };
+      return b;
+    }
+
+    pager.appendChild(mkBtn(en ? '\u2039 Prev' : '\u2039 \u524d\u3078', cur - 1, cur <= 1, false));
+    var nums = [];
+    if (pages <= 7) { for (var i = 1; i <= pages; i++) nums.push(i); }
+    else {
+      nums.push(1);
+      var st = Math.max(2, cur - 1), ed = Math.min(pages - 1, cur + 1);
+      if (st > 2) nums.push('\u2026');
+      for (var j = st; j <= ed; j++) nums.push(j);
+      if (ed < pages - 1) nums.push('\u2026');
+      nums.push(pages);
+    }
+    nums.forEach(function (n) {
+      if (n === '\u2026') {
+        var sp = document.createElement('span');
+        sp.textContent = '\u2026';
+        sp.style.cssText = 'padding:0 2px;color:var(--text-muted,#999)';
+        pager.appendChild(sp); return;
+      }
+      pager.appendChild(mkBtn(String(n), n, false, n === cur));
+    });
+    pager.appendChild(mkBtn(en ? 'Next \u203a' : '\u6b21\u3078 \u203a', cur + 1, cur >= pages, false));
+
+    var info = document.createElement('div');
+    info.style.cssText = 'width:100%;text-align:center;color:var(--text-muted,#999);font-size:12px;margin-top:6px';
+    info.textContent = en ? ('Page ' + cur + ' of ' + pages + '  \u00b7  ' + total + ' works')
+                          : (cur + ' / ' + pages + ' \u30da\u30fc\u30b8\u3000\u5168 ' + total + ' \u4ef6');
+    pager.appendChild(info);
+
+    if (grid.parentNode) grid.parentNode.insertBefore(pager, grid.nextSibling);
+  }
+
   function renderAozoraSeries(works, votes) {
     try {
       var existing = document.getElementById('aozora-section');
@@ -76,11 +157,9 @@
       var grid = document.createElement('div');
       grid.className = 'works-grid';
       grid.id = 'aozora-grid';
-      works.slice().sort(function (a, b) { return ((Date.parse(b&&b.createdAt)||0) - (Date.parse(a&&a.createdAt)||0)); })
-        .forEach(function (w) {
-          try { try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { console.warn('[works] card skipped:', w && w.id, e); } } catch (e) { /* 1枚失敗しても継続 */ }
-        });
+      var _azSorted = works.slice().sort(function (a, b) { return ((Date.parse(b&&b.createdAt)||0) - (Date.parse(a&&a.createdAt)||0)); });
       sec.appendChild(grid);
+      _renderPagedGrid(grid, _azSorted, votes, 'aozora');
 
       var ack = document.createElement('div');
       ack.style.cssText = 'margin-top:16px;padding:14px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;font-size:12.5px;line-height:1.8;color:var(--text-muted)';
@@ -935,9 +1014,7 @@ function updateWelcomeBanner() {
         var regular = sorted;
         try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
         catch(e){ regular = sorted; }
-        regular.forEach(function(w) {
-          try { try { grid.appendChild(createWorkCard(w, votes)); } catch (e) { console.warn('[works] card skipped:', w && w.id, e); } } catch (e) { console.warn('[works] card skipped:', w && w.id, e); }
-        });
+        _renderPagedGrid(grid, regular, votes, 'works');
       }
 
       // 青空文庫シリーズ コーナー（謝辞付き）。失敗しても本一覧に影響させない。
