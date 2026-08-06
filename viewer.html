@@ -3483,7 +3483,7 @@ function renderHeading(item){
   return '<div class="citem '+(big?'chapter-head':'section-head')+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+
     ' style="'+wm+'text-align:center;margin:'+(big?'32px':'20px')+' auto;max-width:640px;position:relative">'+aBtn(item.id)+
     '<p class="font-serif-jp" style="font-size:'+sz+'px;font-weight:700;font-family:'+ft+';letter-spacing:.15em;color:var(--text-primary)">'+
-    esc(item.text||'')+'</p><div style="height:1px;background:var(--border-color,rgba(128,128,128,.3));margin:'+(big?'12px':'8px')+' auto;width:'+(big?'160px':'90px')+'"></div></div>';
+    esc((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'')+'</p><div style="height:1px;background:var(--border-color,rgba(128,128,128,.3));margin:'+(big?'12px':'8px')+' auto;width:'+(big?'160px':'90px')+'"></div></div>';
 }
 
 function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=_lh(ds.lineHeight),ft=_font(ds.font),or=ds.orientation,ns=ds.narratorStyle,is=ds.iconSize;var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon('narrator',is)+'</div><div class="bubble v-bubble-body" style="background:var(--bg-secondary);padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';font-style:italic;color:var(--text-secondary)">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble')return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative">'+aBtn(item.id)+dh+rIcon('narrator',is)+'<div class="bubble" style="background:var(--bg-secondary);max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';font-style:italic;color:var(--text-secondary)">'+txt+'</p></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
@@ -4020,7 +4020,7 @@ function _contentHash(){
 // 表示言語 !== 原文言語 のときが「翻訳表示」。翻訳表示中は原文を編集させない。
 function _srcLang(){ return (state.novel&&state.novel.sourceLang)||'ja'; }
 function _isTranslatedView(){ return state.lang!==_srcLang(); }
-function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'5_'+h; }
+function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'6_'+h; }
 function _ctext(item){
   if(_isTranslatedView() && state.workTrans && state.workTransHash===state._curHash && state.workTrans[item.id]!=null) return state.workTrans[item.id];
   return item.text;
@@ -4075,7 +4075,7 @@ function maybeTranslateWork(){
 }
 function translateWork(hash){
   if(state.translating) return;
-  var items=state.content.filter(function(it){return it.text && (it.type==='narration'||it.type==='dialogue');}).map(function(it){return {id:it.id,text:it.text};});
+  var items=state.content.filter(function(it){return it.text && (it.type==='narration'||it.type==='dialogue'||it.type==='chapter_break'||it.type==='section_break');}).map(function(it){return {id:it.id,text:it.text};});
   if(items.length===0) return;
   state.translating=true;
   showToast('Translating…');
