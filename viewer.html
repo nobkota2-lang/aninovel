@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v78_tts_preaudio_fallback';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v79_tts_voice_recovery';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -457,6 +457,25 @@ function _sortByQuality(arr){return arr.slice().sort(function(a,b){return _voice
 
 // --- キャラクター別音声自動割り当て (Edge Natural音声を優先カタログから割当) ---
 var _charVoiceMap={};
+// 実際に発話させたら synthesis-failed になった音声を記録する(音声名→true)。
+// Windows の SAPI 音声(Microsoft Ichiro 等)はブラウザによっては列挙されるのに
+// 一切鳴らせないことがあり、その音声を割り当てられたキャラだけ無音になっていた。
+var _badVoices={};
+// _badVoices を避けて、鳴らせる見込みのある日本語音声を1つ返す。
+// exclude(現在使用中で失敗した音声)は必ず除外する。性別一致を優先し、
+// 見つからなければ品質順(オンライン音声も含む)で選ぶ。
+function _pickWorkingJaVoice(ch,exclude){
+  var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
+  var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+  var ok=ja.filter(function(v){return !_badVoices[v.name]&&(!exclude||v.name!==exclude.name);});
+  if(!ok.length)return null;
+  var g=ch&&ch.gender;
+  if(g&&g!=='neutral'){
+    var gv=ok.filter(function(v){return _voiceGender(v)===g;});
+    if(gv.length)return _sortByQuality(gv)[0];
+  }
+  return _sortByQuality(ok)[0];
+}
 function _buildVoicePool(voices,prefList,fallbackPool){
   var pool=[];var seen={};
   prefList.forEach(function(p){
@@ -474,6 +493,9 @@ function _buildVoicePool(voices,prefList,fallbackPool){
 function _assignCharVoices(){
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+  // 過去に synthesis-failed になった音声は割当対象から外す(全滅する場合のみ元に戻す)
+  var _jaOk=ja.filter(function(v){return !_badVoices[v.name];});
+  if(_jaOk.length)ja=_jaOk;
   var jaFemRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='female';}));
   var jaMasRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='male';}));
   var jaUnkRaw=_sortByQuality(ja.filter(function(v){return _voiceGender(v)==='unknown';}));
@@ -1496,6 +1518,10 @@ var _speakSessionId=0;
 // マニフェストに載っているのに実体が無い/壊れている作品で、全ブロックが無音のまま
 // 飛ばされるのを防ぐ (2連続失敗でそのセッションはライブ合成に切替)。
 var _preAudioFailStreak=0,_preAudioDisabled=false;
+// クラウドTTS(StreamElements / Google翻訳TTS)の死活ラッチ。
+// 両エンドポイントとも即エラーになる状況では、ブロックごとに試すだけ無駄なので
+// 2連続失敗でそのセッションは Web Speech に直行する。
+var _cloudFailStreak=0,_cloudDisabled=false;
 // Edge ではページ読込後の最初の speak() が synthesis-failed で落ちやすい。
 // デフォルト音声(非Natural)で無音発話を成功させてからキューを始める。
 function _warmUpSpeech(done){
@@ -2201,12 +2227,18 @@ function _speakItem(item,onEnd){
       });
       return;
     }
+    if(_cloudDisabled){_speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);return;}
     _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
-      function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
+      function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;_cloudFailStreak=0;safeEnd();},
       function(err){
         if(mySession!==_speakSessionId)return;
         console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
         _cloudAudioCtrl=null;
+        _cloudFailStreak++;
+        if(_cloudFailStreak>=2&&!_cloudDisabled){
+          _cloudDisabled=true;
+          console.warn('[TTS] クラウドTTSが連続で失敗するため、このセッションでは以降 Web Speech のみを使います');
+        }
         _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
       },
       applyCharId /* onStart */
@@ -2221,6 +2253,8 @@ var _OFFLINE_PREF_MALE=['Ichiro','Keita','Naoki'];
 function _offlineFallbackVoice(ch){
   var voices=state.tts.voices;if(!voices||!voices.length)voices=speechSynthesis.getVoices();
   var ja=voices.filter(function(v){return v.lang&&v.lang.indexOf('ja')===0;});
+  var _jaOk2=ja.filter(function(v){return !_badVoices[v.name];});
+  if(_jaOk2.length)ja=_jaOk2;
   var nonNat=ja.filter(function(v){return !/natural|neural|wavenet|online/i.test(v.name||'');});
   if(!nonNat.length)nonNat=ja;
   var g=ch?(ch.gender||'male'):'male';
@@ -2249,8 +2283,13 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var useOffline=(_forceOfflineChars[chId]||_disableNaturalForSession)&&fallbackVoice;
   var primaryVoice=useOffline?fallbackVoice:_ttsVoice(ch);
   var currentVoice=primaryVoice;if(state.lang==='en'){var _ev=_enVoice(ch&&ch.gender);if(_ev)currentVoice=_ev;}
+  // 既に使用不可と分かっている音声なら、最初から別の音声で始める
+  if(state.lang!=='en'&&currentVoice&&_badVoices[currentVoice.name]){
+    var _cv=_pickWorkingJaVoice(ch,currentVoice);
+    if(_cv){console.info('[TTS] 使用不可の音声を回避:',currentVoice.name,'→',_cv.name);currentVoice=_cv;}
+  }
   var switchedToFallback=(currentVoice===fallbackVoice);
-  var idx=0,consecutiveErrors=0,startedOnce=false;
+  var idx=0,consecutiveErrors=0,startedOnce=false,_voiceTries={};
   function isStale(){return session!==_speakSessionId;}
   function remainingText(){return chunks.slice(idx).join('');}
   function speakNext(){
@@ -2291,6 +2330,23 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       var probablyPlayed=thisStarted||(elapsed>=350&&(startedOnce||_sessionHasOnstart));
       console.info('[TTS] Web Speech エラー:',err,'started='+thisStarted,'elapsed='+elapsed+'ms','idx='+idx,'startedOnce='+startedOnce,'sessionOnstart='+_sessionHasOnstart,'skip='+probablyPlayed);
       if(probablyPlayed){idx++;consecutiveErrors=0;setTimeout(function(){if(!isStale())speakNext();},200);return;}
+      // 音声そのものが使えない場合(Windows SAPI の synthesis-failed 等)の救済。
+      // 「onstart が来ていない」かつ「即座に失敗した(<400ms)」ときだけ、
+      // その音声を使用不可として記録し、別の音声で同じチャンクを鳴らし直す。
+      // 音が出たのに synthesis-failed を投げる Edge Natural のケースは
+      // thisStarted か elapsed のどちらかで弾かれるので、二重発話にはならない。
+      if(state.lang!=='en'&&!thisStarted&&elapsed<400){
+        if(currentVoice&&currentVoice.name)_badVoices[currentVoice.name]=true;
+        _voiceTries[idx]=(_voiceTries[idx]||0)+1;
+        var _alt=_pickWorkingJaVoice(ch,currentVoice);
+        if(_alt&&_voiceTries[idx]<=3){
+          console.info('[TTS] 音声「'+(currentVoice&&currentVoice.name)+'」は使用不可('+err+')→「'+_alt.name+'」で同じチャンクを再発話 idx='+idx);
+          currentVoice=_alt;switchedToFallback=true;
+          try{speechSynthesis.cancel();}catch(e){}
+          setTimeout(function(){if(!isStale())speakNext();},200);return;
+        }
+        console.warn('[TTS] 代替できる日本語音声が見つかりません idx='+idx+' tries='+_voiceTries[idx]);
+      }
       consecutiveErrors++;
       // 【絶対原則】失敗したチャンクは二度と再発話しない。必ず idx++ で次へ進める。
       // 理由: Edge Natural は onstart を発火せず音声を出してから synthesis-failed を投げる
@@ -2360,6 +2416,7 @@ function startTTS(){
   if(!window.speechSynthesis){alert('このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。');return;}
   speechSynthesis.cancel();
   _preAudioFailStreak=0;_preAudioDisabled=false; // 事前生成音声の退避スイッチを解除(再挑戦)
+  _cloudFailStreak=0;_cloudDisabled=false;       // クラウドTTSの退避スイッチも解除(再挑戦)
   var items=getPC().slice().sort(function(a,b){return a.order-b.order});
   if(!items.length){alert('このページにコンテンツがありません');return;}
   // 空テキスト項目は読み上げ対象から除外する。
