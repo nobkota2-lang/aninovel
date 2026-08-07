@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v74_speaker_anchors';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v78_tts_preaudio_fallback';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1492,6 +1492,10 @@ function _hasNaturalJaVoice(){
 }
 // --- 発話処理（セッションID管理で重複・ズレ防止） ---
 var _speakSessionId=0;
+// 事前生成音声(R2/IDB/repo)が連続で再生できない場合の退避スイッチ。
+// マニフェストに載っているのに実体が無い/壊れている作品で、全ブロックが無音のまま
+// 飛ばされるのを防ぐ (2連続失敗でそのセッションはライブ合成に切替)。
+var _preAudioFailStreak=0,_preAudioDisabled=false;
 // Edge ではページ読込後の最初の speak() が synthesis-failed で落ちやすい。
 // デフォルト音声(非Natural)で無音発話を成功させてからキューを始める。
 function _warmUpSpeech(done){
@@ -1811,6 +1815,15 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   };
   audio.onended=function(){
     if(settled||isStale())return;settled=true;
+    // 一度も onplaying が来ないまま終了 = 長さ0/空ファイル。これを完了扱いにすると
+    // 無音のままブロックだけが進むので、失敗として扱いライブ合成へ回す。
+    if(!started){
+      var _dur=audio.duration;
+      cleanup();
+      console.warn('[TTS] 事前生成音声が無音のまま終了 item='+item.id+' duration='+_dur);
+      if(onError){onError(new Error('audio ended without playing'));return;}
+      if(onEnd)onEnd();return;
+    }
     cleanup();if(onEnd)onEnd();
   };
   audio.onerror=function(){
@@ -2149,48 +2162,57 @@ function _speakItem(item,onEnd){
   }catch(e){}
   if(_voiceOverride && _hasPreAudio(item.id)){console.info('[TTS] 事前生成音声をスキップ (音声オーバーライド: '+_voiceOverrideSrc+') item='+item.id+' ch='+(ch&&ch.name)+' voice='+_voiceOverride);}
   // 最優先: 事前生成音声 (VOICEVOX) があればそれを使用 (音声オーバーライド未設定時のみ)
-  if(!_voiceOverride && state.lang!=='en' && _hasPreAudio(item.id)){
+  if(!_voiceOverride && !_preAudioDisabled && state.lang!=='en' && _hasPreAudio(item.id)){
     _preAudioCtrl=_speakItemAudio(item,ch,mySession,applyCharId,
-      function(){if(mySession!==_speakSessionId)return;_preAudioCtrl=null;safeEnd();},
+      function(){if(mySession!==_speakSessionId)return;_preAudioCtrl=null;_preAudioFailStreak=0;safeEnd();},
       function(err){
         if(mySession!==_speakSessionId)return;
-        console.warn('[TTS] 事前生成音声失敗→Web Speechへフォールバック:',err&&err.message||err);
+        console.warn('[TTS] 事前生成音声失敗→ライブ合成へフォールバック:',err&&err.message||err);
         _preAudioCtrl=null;
-        // 念のためすべての音声経路を停止してから Web Speech 開始(二重発話防止)
-        try{speechSynthesis.cancel();}catch(e){}
-        if(_hasNaturalJaVoice()){
-          _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
-        }else{
-          safeEnd();
+        _preAudioFailStreak++;
+        if(_preAudioFailStreak>=2&&!_preAudioDisabled){
+          _preAudioDisabled=true;
+          console.warn('[TTS] 事前生成音声が連続で再生できないため、このセッションでは以降ライブ合成のみを使います');
         }
+        // 念のためすべての音声経路を停止してから再合成(二重発話防止)
+        try{speechSynthesis.cancel();}catch(e){}
+        // 旧実装はここで Natural日本語音声が無いと safeEnd() していたため、
+        // Edge Natural を持たない環境(Chrome等)では全ブロックが無音で飛ばされていた。
+        _speakItemLiveJa();
       });
     return;
   }
-  if(_hasNaturalJaVoice()){
-    _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err,remainingText){
-      if(mySession!==_speakSessionId)return;
-      console.warn('[TTS] Web Speech 失敗→クラウドTTSへ:',err&&err.message||err,'残='+(remainingText||'').length);
-      _stopAllSpeech();
-      // 既に部分再生済みの場合は未再生分のみクラウドで続行(二重発話防止)
-      var textToSpeak=(remainingText!=null)?remainingText:(item.text||'');
-      if(!textToSpeak){safeEnd();return;}
-      _cloudAudioCtrl=_speakCloud(textToSpeak,ch,state.tts.rate,mySession,
-        function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
-        function(err2){if(mySession!==_speakSessionId)return;console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;safeEnd();},
-        applyCharId /* onStart: 音声再生開始時に口パク */);
-    });
-    return;
+  // 事前生成音声を使わない/使えないときのライブ合成経路。
+  // 事前生成音声の失敗ハンドラからも呼ぶので関数にしてある(中身は従来と同一)。
+  function _speakItemLiveJa(){
+    if(mySession!==_speakSessionId)return;
+    if(_hasNaturalJaVoice()){
+      _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd,function(err,remainingText){
+        if(mySession!==_speakSessionId)return;
+        console.warn('[TTS] Web Speech 失敗→クラウドTTSへ:',err&&err.message||err,'残='+(remainingText||'').length);
+        _stopAllSpeech();
+        // 既に部分再生済みの場合は未再生分のみクラウドで続行(二重発話防止)
+        var textToSpeak=(remainingText!=null)?remainingText:(item.text||'');
+        if(!textToSpeak){safeEnd();return;}
+        _cloudAudioCtrl=_speakCloud(textToSpeak,ch,state.tts.rate,mySession,
+          function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
+          function(err2){if(mySession!==_speakSessionId)return;console.warn('[TTS] クラウドも失敗:',err2&&err2.message||err2);_cloudAudioCtrl=null;safeEnd();},
+          applyCharId /* onStart: 音声再生開始時に口パク */);
+      });
+      return;
+    }
+    _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
+      function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
+      function(err){
+        if(mySession!==_speakSessionId)return;
+        console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
+        _cloudAudioCtrl=null;
+        _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
+      },
+      applyCharId /* onStart */
+    );
   }
-  _cloudAudioCtrl=_speakCloud(item.text||'',ch,state.tts.rate,mySession,
-    function(){if(mySession!==_speakSessionId)return;_cloudAudioCtrl=null;safeEnd();},
-    function(err){
-      if(mySession!==_speakSessionId)return;
-      console.warn('[TTS] クラウド失敗→Web Speech APIへフォールバック:',err&&err.message||err);
-      _cloudAudioCtrl=null;
-      _speakItemWebAPI(item,ch,mySession,applyCharId,safeEnd);
-    },
-    applyCharId /* onStart */
-  );
+  _speakItemLiveJa();
 }
 // Natural でない安定オフライン音声を性別別に返す。
 // 優先: Haruka/Sayaka/Ichiro(rate対応) > Ayumi(モバイル音声: rate無視) > その他
@@ -2337,6 +2359,7 @@ function _ttsStartIndex(){
 function startTTS(){
   if(!window.speechSynthesis){alert('このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。');return;}
   speechSynthesis.cancel();
+  _preAudioFailStreak=0;_preAudioDisabled=false; // 事前生成音声の退避スイッチを解除(再挑戦)
   var items=getPC().slice().sort(function(a,b){return a.order-b.order});
   if(!items.length){alert('このページにコンテンツがありません');return;}
   // 空テキスト項目は読み上げ対象から除外する。
