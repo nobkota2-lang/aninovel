@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v81_ruby_edit_tts';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v82_tts_yomi_dict';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3542,20 +3542,64 @@ function _rubyMarks(raw,rb){
   marks.sort(function(x,y){return x.i-y.i;});
   return marks;
 }
+// 読み上げ辞書。音声合成が誤読しやすい語(主に近代文語・当て字)を、
+// 読み上げ用テキストに限ってかなへ置き換える。**表示や本文は一切変えない**。
+// ルビが振ってあればルビが優先される。ここに無い語は、編集画面でルビを
+// 振れば恒久的に直る(ルビは読者にも表示される)。
+// 追加するときは「その語が他の読みになる可能性がほぼ無い」ものだけにすること。
+var TTS_YOMI = [
+  // 数詞・助数詞
+  ['一疋','いっぴき'],['二疋','にひき'],['三疋','さんびき'],['数疋','すうひき'],
+  ['一匹','いっぴき'],['二匹','にひき'],
+  ['拾円','じゅうえん'],['一寸','ちょっと'],
+  // 動詞まわり
+  ['居やがら','いやがら'],['云う','いう'],['云っ','いっ'],['云い','いい'],['云わ','いわ'],['云え','いえ'],
+  ['呉れ','くれ'],['仕舞っ','しまっ'],['遣っ','やっ'],['頑張','がんば'],['貰っ','もらっ'],
+  // 副詞・接続詞（当て字）
+  ['兎に角','とにかく'],['兎も角','ともかく'],['兎角','とかく'],
+  ['矢張り','やはり'],['流石','さすが'],['屹度','きっと'],['迚も','とても'],
+  ['併し','しかし'],['然し','しかし'],['而も','しかも'],['乍ら','ながら'],
+  ['所謂','いわゆる'],['斯う','こう'],['斯く','かく'],['丁度','ちょうど'],
+  ['折角','せっかく'],['勿論','もちろん'],['無論','むろん'],['是非とも','ぜひとも'],
+  ['尤も','もっとも'],['漸く','ようやく'],['悉く','ことごとく'],['頗る','すこぶる'],
+  ['忽ち','たちまち'],['暫く','しばらく'],['殆ど','ほとんど'],['尚更','なおさら'],
+  ['曾て','かつて'],['嘗て','かつて'],['剰え','あまつさえ'],['如何にも','いかにも'],
+  ['聊か','いささか'],['直ぐ','すぐ'],['最早','もはや'],['凡そ','およそ'],
+  // 代名詞・指示語
+  ['何処','どこ'],['何時','いつ'],['何故','なぜ'],['何方','どちら'],['何卒','なにとぞ'],['何遍','なんべん'],
+  ['其処','そこ'],['其れ','それ'],['其の','その'],
+  ['此処','ここ'],['此れ','これ'],['此の','この'],
+  ['彼処','あそこ'],['彼奴','あいつ'],
+  // 形容・名詞
+  ['可笑し','おかし'],['美味し','おいし'],['美事','みごと'],['出鱈目','でたらめ'],
+  ['可哀想','かわいそう'],['真面目','まじめ'],['土産','みやげ'],['田舎','いなか'],
+  ['胡散','うさん'],['気障','きざ'],['昨日','きのう'],['一昨日','おととい'],
+  ['段々','だんだん'],['益々','ますます'],['偶々','たまたま'],['態々','わざわざ'],['呉々','くれぐれ']
+];
+// 長い語から順に当てる(短い語が先に食い込むのを防ぐ)
+TTS_YOMI.sort(function(a,b){return b[0].length-a[0].length;});
+function _applyYomiDict(s){
+  if(!s)return s;
+  for(var i=0;i<TTS_YOMI.length;i++){
+    if(s.indexOf(TTS_YOMI[i][0])>=0) s=s.split(TTS_YOMI[i][0]).join(TTS_YOMI[i][1]);
+  }
+  return s;
+}
 // 読み上げ用: ルビのある箇所を読み(かな)に置き換える。
 // 「怪しからん」→「けしからん」、「居やがらん」→「いやがらん」のように、
 // 音声合成が漢字を誤読するのを防ぐ。ルビが無ければ原文のまま。
 function _ttsJaText(item){
   var raw=(item&&item.text)||'';
   var marks=_rubyMarks(raw,item&&item.ruby);
-  if(!marks.length)return raw;
+  if(!marks.length)return _applyYomiDict(raw);
   var out='',pos=0;
   for(var k=0;k<marks.length;k++){
     var m=marks[k];if(m.i<pos)continue;
-    out+=raw.slice(pos,m.i)+(m.r||raw.substr(m.i,m.l));
+    // ルビの無い区間だけ辞書を当てる(ルビが振ってあればルビが優先)
+    out+=_applyYomiDict(raw.slice(pos,m.i))+(m.r||raw.substr(m.i,m.l));
     pos=m.i+m.l;
   }
-  return out+raw.slice(pos);
+  return out+_applyYomiDict(raw.slice(pos));
 }
 // 編集用: 本文とルビを青空文庫記法(漢字《かな》)に戻す。
 function _rubyToMarkup(item){
