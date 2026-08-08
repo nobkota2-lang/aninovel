@@ -207,7 +207,7 @@
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + (_pEn()?' cast':'人') }));
     head.appendChild(stats);
     var tags = h('div', { className: 'card-tags' });
-    (work.tags || []).forEach(function(t) { tags.appendChild(h('span', { className: 'tag' }, t)); });
+    (work.tags || []).forEach(function(t, ti) { tags.appendChild(h('span', { className: 'tag' }, _tagLabel(t, work, ti))); });
     head.appendChild(tags);
     top.appendChild(head);
     card.appendChild(top);
@@ -551,11 +551,40 @@
 
   // === ロール表示ヘルパー ===
   var ROLE_META = {
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', color: '#F59E0B' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     color: '#8B5CF6' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     color: '#3B82F6' }
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#F59E0B' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#8B5CF6' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#3B82F6' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
+  // 表示言語(_pEn と同じ判定。ROLE_META 周辺から呼べるようここにも置く)
+  function _roleEn(){ try{ return (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; }catch(e){ return false; } }
+  // 「オーナー」「Owner」のようにロール名だけを返す
+  function _roleLabel(m){ if(!m) return ''; return (_roleEn() ? (m.labelEn||m.label) : m.label) || ''; }
+  // 「読者モード」「Reader mode」のようにモード名を返す
+  function _modeLabel(m){ return _roleEn() ? (_roleLabel(m)+' mode') : (_roleLabel(m)+'モード'); }
+  // 表示名は本来そのまま出す(人名は翻訳しない)。ただしロール名そのものを表示名に
+  // しているアカウント(displayName='オーナー' 等)だけは、英語表示で日本語が残るのを避ける。
+  // 恒久的にはアカウントの表示名を英字に変更するのが正しい。
+  function _displayName(u){
+    var n=(u&&u.displayName)||'';
+    if(!_roleEn()||!n) return n;
+    for(var k in ROLE_META){ if(ROLE_META[k].label===n) return ROLE_META[k].labelEn; }
+    return n;
+  }
+  // タグの表示名。カタログに tagsEn があればそれ、無ければ辞書、未知語は原文のまま
+  var TAG_EN = {
+    '青空文庫':'Aozora Bunko','名作':'Classic','群像劇':'Ensemble cast','長編':'Full-length',
+    '短編':'Short story','中編':'Novella','随筆':'Essay','戯曲':'Play','童話':'Fairy tale',
+    '怪談':'Ghost story','ミステリー':'Mystery','推理':'Detective','SF':'Science fiction',
+    'ファンタジー':'Fantasy','ホラー':'Horror','恋愛':'Romance','歴史':'Historical',
+    '時代小説':'Period fiction','青春':'Coming of age','日常':'Slice of life','コメディ':'Comedy',
+    '文学':'Literary','詩':'Poetry','ノンフィクション':'Nonfiction','エッセイ':'Essay'
+  };
+  function _tagLabel(t, work, idx){
+    if(!_roleEn()) return t;
+    try{ if(work && Array.isArray(work.tagsEn) && work.tagsEn[idx]) return work.tagsEn[idx]; }catch(e){}
+    return TAG_EN[t] || t;
+  }
 
   // === 認証UI更新 ===
   function updateAuthUI() {
@@ -575,19 +604,20 @@
       var modeBadge = h('span', {
         className: 'role-mode-badge',
         style: 'background:' + rm.color + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap'
-      }, rm.icon + ' ' + rm.label + 'モード');
+      }, rm.icon + ' ' + _modeLabel(rm));
       badge.appendChild(modeBadge);
       badge.appendChild(h('span', { className: 'name', style: 'margin-left:6px' }, state.user.displayName));
 
       // モード切替ドロップダウン（複数ロール保有時）
       var roles = state.user.roles || [ar];
       if (roles.length > 1) {
-        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'モード切替', style: 'font-size:13px' }, '\u{1F504}');
+        var switchBtn = h('button', { className: 'btn btn-ghost btn-sm', title: (_roleEn()?'Switch mode':'モード切替'), style: 'font-size:13px' }, '\u{1F504}');
         switchBtn.onclick = function() { showRoleSwitchMenu(switchBtn); };
         badge.appendChild(switchBtn);
       } else {
         // 未登録ロールへの追加登録ボタン
-        var addLabel = ar === 'reader' ? '作者登録' : '読者登録';
+        var addLabel = _roleEn() ? (ar === 'reader' ? 'Register as author' : 'Register as reader')
+                                 : (ar === 'reader' ? '作者登録' : '読者登録');
         var addBtn = h('button', { className: 'btn btn-ghost btn-sm', title: addLabel, style: 'font-size:12px' }, '\uFF0B ' + addLabel);
         addBtn.onclick = function() {
           showAuthModal('register');
@@ -644,7 +674,7 @@
         style: 'display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;border:none;background:' + (active ? 'var(--bg-secondary)' : 'none') + ';cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left'
       });
       item.appendChild(h('span', {}, m.icon));
-      item.appendChild(h('span', { style: 'flex:1' }, m.label + 'モード'));
+      item.appendChild(h('span', { style: 'flex:1' }, _modeLabel(m)));
       if (active) item.appendChild(h('span', { style: 'color:var(--accent);font-size:12px' }, '\u2714'));
       item.onclick = function() {
         popup.remove();
@@ -824,7 +854,7 @@ function updateWelcomeBanner() {
     if (state.user && state.user.loggedIn) {
       var ar = roleOf(state.user);
       var rm = ROLE_META[ar] || ROLE_META.reader;
-      var _en = (localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja')==='en'; var rolesLabel = (state.user.roles || [ar]).map(function(r) { var m=ROLE_META[r]||{}; return (_en?(m.labelEn||m.label):m.label) || r; }).join(' / ');
+      var _en = _roleEn(); var rolesLabel = (state.user.roles || [ar]).map(function(r) { return _roleLabel(ROLE_META[r]) || r; }).join(' / ');
       var tips = ar === 'owner'
         ? (_en?'\uD83D\uDC51 Manage users and works in the admin panel. ✏️ My Works and \uD83D\uDCCA Dashboard are also available.':'\uD83D\uDC51 管理パネルでユーザー・作品を管理できます。✏️ マイ作品、📊 ダッシュボードも利用可能です。')
         : ar === 'author'
@@ -833,8 +863,8 @@ function updateWelcomeBanner() {
       if (existing) existing.remove();
       var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
       banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
-      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_en?(' Welcome back, ' + state.user.displayName):(' おかえりなさい、' + state.user.displayName + ' さん'))));
-      banner.appendChild(h('div', { className: 'welcome-role' }, (_en?('Current mode: ' + (rm.labelEn||rm.label) + ' (roles: ' + rolesLabel + ')'):('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'))));
+      banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_en?(' Welcome back, ' + _displayName(state.user)):(' おかえりなさい、' + state.user.displayName + ' さん'))));
+      banner.appendChild(h('div', { className: 'welcome-role' }, (_en?('Current mode: ' + _roleLabel(rm) + ' (roles: ' + rolesLabel + ')'):('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'))));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
