@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v82_tts_yomi_dict';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v83_gaiji_keep';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3304,10 +3304,11 @@ function _aozoraPrepare(text){
     return lines.filter(function(l){return !hr.test(l);}).join('\n');
   }catch(e){ return text; }
 }
+var GAIJI_DESC={'\u76EE\uFF0B\u5321':'\u7736','\u3066\u3078\u3093\uFF0B\u4E11':'\u626D'};
 function _aozoraLine(line){
   var ruby=[],heading=0,htitle='';
   try{
-    line=line.replace(/\u203B\uFF3B\uFF03[^\uFF3D]*\uFF3D/g,'');          // 外字注記は本文ではない(※も残さない)
+    line=line.replace(/\u203B\uFF3B\uFF03([^\uFF3D]*)\uFF3D/g,function(_m,note){var d=String(note).match(/\u300C([^\u300D]+)\u300D/);if(d&&GAIJI_DESC[d[1]])return GAIJI_DESC[d[1]];return '\u203B';});          // 外字注記は本文ではない(※も残さない)
     var hm=line.match(/\uFF3B\uFF03(?:\u300C([^\u300D]*)\u300D\u306F)?(\u5927|\u4E2D|\u5C0F)\u898B\u51FA\u3057\uFF3D/);
     var htitle=hm?(hm[1]||''):'';
     if(hm)heading=(hm[2]==='\u5927')?1:((hm[2]==='\u4E2D')?2:3);          // 大/中/小見出し
