@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v83_gaiji_keep';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v86_speaker_merge';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2588,6 +2588,7 @@ function _isValidName(n){
   if(/^(?:底本の親本|底本|親本|初出|入力|校正|青空文庫|ファイル|テキスト|注|訳|編|著|作|出典|表題|副題|奥付|凡例|序|跋|目次|挿絵|口絵|装丁|印刷|発行|発売|定価|検印|昭和|大正|明治|平成|令和)$/.test(n))return false;
   if(/^(?:京都|東京|江戸|大阪|奈良|鎌倉|武蔵|山|川|海|町|村|家|店|扉|部屋|廊下|道|空|窓|汽車|車|席|手|声|音|風|涙|心|体|顔|目|口|足|頭|胸|息|気|水|火|光|闇|夜|朝|雨|雪|星|月|日)$/.test(n))return false;
   if(/^(?:仕方|月並|今度|最初|近頃|語弊|冗談|造作|増加|御馳走|前足|後足|教師|野蛮人|実業家|巡査|下女|人間|大丈夫|突然|勿論|多分|随分|大変|一体|何分|何時|沢山|皆さん|諸君|世間|時分|問題|事件|様子|評判|返事|挨拶|議論|勉強|商売|世話|心配|安心|遠慮|失礼|大事|大切)$/.test(n))return false;
+  if(/^(?:今日|昨日|明日|明後日|一昨日|今朝|今晩|今夜|昨夜|毎日|当時|先日|後日|翌日|本日|昼|夕方|座布団|蒲団|火鉢|障子|煙草|番茶|盗難品|贓品|大和魂|擂粉木|第一句|希臘語|両君|御両人|御一同|彼等生徒|青年諸君|一同|各位)$/.test(n))return false;   // dates, objects, group address are not people
   if(/(?:云|言|思|聞|見|叫|答|尋|呼|返|怒|嘆|笑|泣|続|歩|走|立|座|入|出)[\u3041-\u3096]/.test(n))return false;
   if(/[。、！？「」『』（）\s]/.test(n))return false;
   if(/^[をにでへとやのもはが]/.test(n))return false;
@@ -2775,6 +2776,56 @@ function _pruneWeakCharacters(){
     console.info('[prune] 信頼度の低いキャラを除去:', removed.length, '件');
   }catch(e){console.warn('[prune] 失敗:',e);}
 }
+// Resolve honorific/prefix variants to an EXISTING character. Never creates one.
+var _HONOR=/(?:\u541B|\u3055\u3093|\u69D8|\u5148\u751F|\u6C0F|\u6BBF|\u3061\u3083\u3093|\u304F\u3093)$/;
+function _resolveExistingChar(nm){
+  if(!nm)return null;
+  var base=String(nm).replace(_HONOR,'');
+  var cs=state.characters.filter(function(x){return x.id!=='narrator'&&x.name;});
+  var c=cs.find(function(x){return x.name===nm||x.shortName===nm;});
+  if(c)return c;
+  c=cs.find(function(x){return x.name===base||x.shortName===base;});
+  if(c)return c;
+  if(base.length>=2){
+    c=cs.find(function(x){var b2=String(x.name).replace(_HONOR,'');
+      return b2.length>=2&&(b2===base||b2.indexOf(base)===0||base.indexOf(b2)===0);});
+    if(c)return c;
+    c=cs.find(function(x){var b2=String(x.name).replace(_HONOR,'');
+      return b2.length>=2&&base.length>b2.length&&base.length-b2.length<=2&&base.slice(-b2.length)===b2;});
+    if(c)return c;
+  }
+  return null;
+}
+// Merge duplicates created by detection order. Honorific-only differences and a
+// short extra prefix are merged; other suffixes (e.g. 'wife of') stay separate.
+var _ALIASSUF=/(?:\u541B|\u3055\u3093|\u69D8|\u5148\u751F|\u6C0F|\u6BBF|\u3061\u3083\u3093|\u304F\u3093|\u5B50)$/;
+function _mergeAliasCharacters(){
+  try{
+    var cs=state.characters.filter(function(x){return x.id!=='narrator'&&x.name;});
+    var use={};
+    state.content.forEach(function(b){if(b.characterId)use[b.characterId]=(use[b.characterId]||0)+1;});
+    function base(n){var b=String(n).replace(_ALIASSUF,'');return b.length>=2?b:String(n);}
+    cs.sort(function(a,b){return (use[b.id]||0)-(use[a.id]||0);});
+    var dead={};
+    for(var i=0;i<cs.length;i++){
+      if(dead[cs[i].id])continue;
+      var bi=base(cs[i].name);
+      for(var j=i+1;j<cs.length;j++){
+        if(dead[cs[j].id])continue;
+        var bj=base(cs[j].name);
+        if(bi.length<2||bj.length<2)continue;
+        var same=(bi===bj)||
+          (bj.length>bi.length&&bj.length-bi.length<=2&&bj.slice(-bi.length)===bi)||
+          (bi.length>bj.length&&bi.length-bj.length<=2&&bi.slice(-bj.length)===bj);
+        if(same){dead[cs[j].id]=cs[i].id;console.info('[merge] '+cs[j].name+' -> '+cs[i].name);}
+      }
+    }
+    var n=0;
+    state.content.forEach(function(b){if(b.characterId&&dead[b.characterId]){b.characterId=dead[b.characterId];n++;}});
+    state.characters=state.characters.filter(function(x){return !dead[x.id];});
+    if(n)console.info('[merge] reassigned '+n+' blocks');
+  }catch(e){console.warn('[merge] failed:',e);}
+}
 function _rescueChapterSpeakers(){
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
@@ -2793,7 +2844,7 @@ function _rescueChapterSpeakers(){
           var atx=after.text||'';
           if(fwd.test(atx))continue;
           var m=verb.exec(atx)||verbTail.exec(atx);
-          if(m&&_isValidName(m[1]))name=m[1];
+          if(m&&_isValidName(m[1])&&_nameOK(m[1]))name=m[1];
         }
       }
       if(!name){
@@ -2803,18 +2854,15 @@ function _rescueChapterSpeakers(){
             var btx=before.text||'';
             if(!fwd.test(btx))continue;
             var m2=verb.exec(btx);
-            if(m2&&_isValidName(m2[1]))name=m2[1];
+            if(m2&&_isValidName(m2[1])&&_nameOK(m2[1]))name=m2[1];
           }
         }
       }
       if(!name)continue;
-      var ch=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===name||x.shortName===name);});
-      if(!ch){
-        var g=(/男/.test(name))?'male':((/女|母|姉|妹|娘|婆/.test(name))?'female':detGender(name));
-        var pr=(CP[g]||CP.male)[state.characters.length%5];
-        ch={id:'char'+Date.now()+'_rc'+i,name:name,shortName:name.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};
-        state.characters.push(ch);
-      }
+      // rescue is a last resort (22% accurate). Take ONLY candidates that map to an
+      // existing person; never invent a character from it.
+      var ch=_resolveExistingChar(name);
+      if(!ch)continue;
       var inner=tx.replace(/^[「『]/,'').replace(/[」』]$/,'');
       it.type='dialogue';it.text=inner;it.characterId=ch.id;
     }
@@ -2928,7 +2976,7 @@ async function _aiRefineSpeakers(){
     if(failed){
       if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
-    _rescueChapterSpeakers();_pruneWeakCharacters();await _aiCurateCharacters();await _autoAssignIcons();render();
+    _rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();await _aiCurateCharacters();await _autoAssignIcons();render();
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
@@ -3077,6 +3125,8 @@ function _resolveSpeakersV2(){
       var c=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===nm||x.shortName===nm)});
       if(c)return c;
       c=state.characters.find(function(x){return x.id!=='narrator'&&x.name&&x.name.length>=2&&nm.length>=2&&(nm.indexOf(x.name)===0||x.name.indexOf(nm)===0)});
+      if(c)return c;
+      c=_resolveExistingChar(nm);
       if(c)return c;
       if(!_nameOK(nm))return null;
       var g=detGender(nm);var pr=(CP[g]||CP.male)[state.characters.length%5];
@@ -3304,11 +3354,23 @@ function _aozoraPrepare(text){
     return lines.filter(function(l){return !hr.test(l);}).join('\n');
   }catch(e){ return text; }
 }
-var GAIJI_DESC={'\u76EE\uFF0B\u5321':'\u7736','\u3066\u3078\u3093\uFF0B\u4E11':'\u626D'};
+// 青空文庫の外字注記に出てくる字形説明 → 実際の文字。
+// 確実なものだけを載せること。分からないものは ※ のまま残す方が安全。
+var GAIJI_DESC={
+  '目＋匡':'眶',        // 羅生門「眶の赤くなった」
+  'てへん＋丑':'扭'     // 羅生門「扭じ倒した」
+};
 function _aozoraLine(line){
   var ruby=[],heading=0,htitle='';
   try{
-    line=line.replace(/\u203B\uFF3B\uFF03([^\uFF3D]*)\uFF3D/g,function(_m,note){var d=String(note).match(/\u300C([^\u300D]+)\u300D/);if(d&&GAIJI_DESC[d[1]])return GAIJI_DESC[d[1]];return '\u203B';});          // 外字注記は本文ではない(※も残さない)
+    // 外字注記 ※［＃「目＋匡」、第3水準1-88-79］ は、注記だけでなく ※ ごと消すと
+  // 本文から一字抜け落ちて文が壊れる(「眼球が※の外へ」→「眼球がの外へ」)。
+  // 字形の説明から実際の文字に置き換え、分からないものは ※ を残す。
+  line=line.replace(/\u203B\uFF3B\uFF03([^\uFF3D]*)\uFF3D/g,function(_m,note){
+    var d=String(note).match(/\u300C([^\u300D]+)\u300D/);   // 「目＋匡」の部分
+    if(d&&GAIJI_DESC[d[1]])return GAIJI_DESC[d[1]];
+    return '\u203B';   // 不明な外字は ※ を残す(文字数を保つ)
+  });
     var hm=line.match(/\uFF3B\uFF03(?:\u300C([^\u300D]*)\u300D\u306F)?(\u5927|\u4E2D|\u5C0F)\u898B\u51FA\u3057\uFF3D/);
     var htitle=hm?(hm[1]||''):'';
     if(hm)heading=(hm[2]==='\u5927')?1:((hm[2]==='\u4E2D')?2:3);          // 大/中/小見出し
@@ -3424,7 +3486,7 @@ function parseText(text){
       lastWasDialogue=(_lastType==='d');
     }
   });
-  state.currentPage=0;_resolveSpeakersV2();_rescueChapterSpeakers();_pruneWeakCharacters();render();_autoAssignIcons();_aiRefineSpeakers();
+  state.currentPage=0;_resolveSpeakersV2();_rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();render();_autoAssignIcons();_aiRefineSpeakers();
 }
 
 async function uploadInlineVideo(file){
