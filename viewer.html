@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v86_speaker_merge';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v87_icon_unique';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2667,30 +2667,44 @@ function _ageNeighbors(age){
   }
   return res;
 }
-function _pickIconGroup(gender,age,usedGroups){
+// 名前から安定した整数を作る(同じ人物なら毎回同じ値。取り込み直しても顔が変わらない)
+function _nameHash(s){
+  var h=0,t=String(s||'');
+  for(var i=0;i<t.length;i++){h=((h<<5)-h+t.charCodeAt(i))|0;}
+  return Math.abs(h);
+}
+function _pickIconGroup(gender,age,usedGroups,seedName){
   var g=_galleryManifest||[];
   var G=gender==='female'?'Female':'Male';
   var races=['Japanese','Asian','White','Hispanic','MiddleEastern','SouthAsian','Black'];
   var types=['Anime','AnimeGen','Pastel','Watercolor','Painterly','RetroMangaGen','RetroManga','PhotoGen','Photo'];
   var ages=_ageNeighbors(age);
-  // 完全一致から緩和: age近傍 × race優先 × type優先
+  var seed=_nameHash(seedName);
+  // まず「まだ誰も使っていないグループ」だけを探す。年齢近傍→race→type の順に緩める。
+  // 同じ条件のグループが複数あるときは名前ハッシュで散らす(常に先頭を取ると偏るため)。
   for(var ai=0;ai<ages.length;ai++){
     for(var ri=0;ri<races.length;ri++){
       for(var ti=0;ti<types.length;ti++){
         var hit=g.filter(function(x){
           return x.gender===G && x.age===ages[ai] && x.race===races[ri] && (x.type===types[ti]||x.style===types[ti]);
         });
-        // 未使用グループ優先
         var fresh=hit.filter(function(x){return usedGroups.indexOf(x.id)<0;});
-        var pool=fresh.length?fresh:hit;
-        if(pool.length)return pool[0];
+        if(fresh.length)return fresh[seed%fresh.length];
       }
     }
   }
-  // それでも無ければ性別だけ合わせる
+  // 未使用が尽きたら、性別と年齢近傍だけ合わせて未使用を探す
+  for(var ai2=0;ai2<ages.length;ai2++){
+    var byAge=g.filter(function(x){return x.gender===G&&x.age===ages[ai2]&&usedGroups.indexOf(x.id)<0;});
+    if(byAge.length)return byAge[seed%byAge.length];
+  }
+  // 性別だけ合わせて未使用を探す
+  var anyFresh=g.filter(function(x){return x.gender===G&&usedGroups.indexOf(x.id)<0;});
+  if(anyFresh.length)return anyFresh[seed%anyFresh.length];
+  // 全グループ使用済み。ここで初めて再利用するが、乱数ではなく名前で決める(重複はこのあと画像単位で回避)
   var any=g.filter(function(x){return x.gender===G;});
-  if(any.length)return any[Math.floor(Math.random()*any.length)];
-  return g.length?g[0]:null;
+  if(any.length)return any[seed%any.length];
+  return g.length?g[seed%g.length]:null;
 }
 function _authorGender(){
   try{
@@ -2729,20 +2743,43 @@ function _autoAssignIcons(){
     if(!_galleryManifest||!_galleryManifest.length)return;
     var chars=(state.characters||[]).filter(function(c){return !c.iconImage;});
     var usedGroups=[];var usedImgs={};var usedImgPaths=(state.characters||[]).filter(function(x){return x.iconImage;}).map(function(x){return x.iconImage;});
+    var dupe=0;
     chars.forEach(function(c){
       var isNar=(c.id==='narrator');
       var gender=isNar?_authorGender():((c.gender==='female')?'female':'male');
       var age=isNar?'MiddleAge':_guessAge(c.name);
-      var grp=_pickIconGroup(gender,age,usedGroups);
+      var grp=_pickIconGroup(gender,age,usedGroups,c.name||c.id);
       if(!grp||!grp.items||!grp.items.length)return;
       usedGroups.push(grp.id);
+      var seed=_nameHash(c.name||c.id);
       var used=usedImgs[grp.id]||0;
       var item=null;
-      for(var _t=0;_t<grp.items.length;_t++){var _cand=grp.items[(used+_t)%grp.items.length];if(_cand&&_cand.p&&usedImgPaths.indexOf(_cand.p)<0){item=_cand;used=used+_t;break;}}
-      if(!item){item=grp.items[used%grp.items.length];}
+      // まず選ばれたグループの中から未使用の画像を探す(開始位置は名前で散らす)
+      for(var _t=0;_t<grp.items.length;_t++){
+        var _cand=grp.items[(seed+used+_t)%grp.items.length];
+        if(_cand&&_cand.p&&usedImgPaths.indexOf(_cand.p)<0){item=_cand;break;}
+      }
+      // グループ内が尽きたら、同性の他グループからでも未使用画像を探す
+      // (登場人物が多い作品で同じ顔が並ぶのを防ぐ。年齢や画風の一致より一意性を優先)
+      if(!item){
+        var G=(gender==='female')?'Female':'Male';
+        var pool=(_galleryManifest||[]).filter(function(x){return x.gender===G;});
+        for(var gi=0;gi<pool.length&&!item;gi++){
+          var gg=pool[(seed+gi)%pool.length];
+          if(!gg||!gg.items)continue;
+          for(var ii=0;ii<gg.items.length;ii++){
+            var cd=gg.items[ii];
+            if(cd&&cd.p&&usedImgPaths.indexOf(cd.p)<0){item=cd;break;}
+          }
+        }
+      }
+      // 画像そのものが足りない場合のみ重複を許す
+      if(!item){item=grp.items[(seed+used)%grp.items.length];dupe++;}
       usedImgs[grp.id]=used+1;
       if(item&&item.p){c.iconImage=item.p;usedImgPaths.push(item.p);}
     });
+    if(dupe)console.warn('[icon] 画像が不足し '+dupe+'名でアイコンが重複しました');
+    console.info('[icon] '+chars.length+'名にアイコンを割当(重複 '+dupe+')');
     render();
   });
 }
