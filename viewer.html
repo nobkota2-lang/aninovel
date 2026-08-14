@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v88_ruby_offset';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v89_ruby_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3417,7 +3417,10 @@ function _aozoraLine(line){
     // 位置を捨てて表示時に base を検索し直すと、同じ文字列が前にもあるとき
     // そちらに振ってしまう(猫では9,202件中1,885件が該当)。
     // ruby の要素は [base, 読み, 本文中の開始位置] の3つ組。
-    var _re=/\uFF5C([^\uFF5C\u300A\u300B]+)\u300A([^\u300B]*)\u300B|([\u4E00-\u9FFF\u3005\u30A1-\u30FA\u30FCA-Za-z0-9]+)\u300A([^\u300B]*)\u300B|\u300A[^\u300B]*\u300B/g;
+    // ｜分岐は「｜の直後から次の《まで」を親字にする。ここを無制限にすると、
+    // 離れた所に ｜ が紛れ込んだとき何十文字も巻き込んでしまう(実害あり)。
+    // ルビの親字は長くても十数文字なので上限を設け、句読点・括弧・空白は跨がせない。
+    var _re=/\uFF5C([^\uFF5C\u300A\u300B\u3002\u3001\uFF01\uFF1F\u300C\u300D\u300E\u300F\s]{1,20})\u300A([^\u300B]*)\u300B|([\u4E00-\u9FFF\u3005\u30A1-\u30FA\u30FCA-Za-z0-9]+)\u300A([^\u300B]*)\u300B|\u300A[^\u300B]*\u300B/g;
     var _out='',_last=0,_m2;
     while((_m2=_re.exec(line))!==null){
       _out+=line.slice(_last,_m2.index).replace(/\uFF5C/g,'');
@@ -3639,11 +3642,23 @@ function renderImageBlock(item){
 
 // item.ruby を本文のどの位置に当てるかを求める(非重複・各ベース最初の1回)。
 // _dispRuby / _ttsJaText / _rubyToMarkup で同じ結果になるよう1箇所にまとめた。
+// 親字として妥当か。壊れたデータ(親字が一文に及ぶ等)を表示に持ち込まないための最後の砦。
+function _rubyBaseOK(base,read){
+  if(!base)return false;
+  if(base.length>20)return false;                    // ルビの親字がこれより長いことはまず無い
+  if(/[\u3002\u3001\uFF01\uFF1F\u300C\u300D\u300E\u300F\s]/.test(base))return false; // 句読点や括弧を跨いでいる
+  if(read&&base.length>read.length*3+4)return false; // 読みに対して親字が長すぎる
+  return true;
+}
 function _rubyMarks(raw,rb){
   var used=[],marks=[];
   if(!raw||!rb||!rb.length)return marks;
   for(var i=0;i<rb.length;i++){
     var base=rb[i][0];if(!base)continue;
+    if(!_rubyBaseOK(base,rb[i][1])){
+      console.warn('[ruby] 親字が不正なので表示しません: '+JSON.stringify(String(base).slice(0,30))+' → '+rb[i][1]);
+      continue;
+    }
     // 取り込み時に記録した位置があればそれを使う(検索し直さない)。
     // 位置が本文と食い違う場合(手編集などで本文が変わった)だけ検索へ落とす。
     var pos=rb[i][2];
