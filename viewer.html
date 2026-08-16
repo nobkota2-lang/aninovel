@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v89_ruby_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v90_audio_lazy';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1645,7 +1645,7 @@ function _audioBaseUrl(){
 }
 
 // ===== IndexedDB 音声ストア (投稿作品/マイ作品用) =====
-var _IDB_NAME='aninovel_audio',_IDB_VERSION=1,_IDB_STORE='audio';
+var _IDB_NAME='aninovel_audio',_IDB_VERSION=2,_IDB_STORE='audio';
 var _idbPromise=null;
 function _idbOpen(){
   if(_idbPromise)return _idbPromise;
@@ -1653,11 +1653,16 @@ function _idbOpen(){
     if(!window.indexedDB){rej(new Error('IndexedDB未対応'));return;}
     var req=indexedDB.open(_IDB_NAME,_IDB_VERSION);
     req.onupgradeneeded=function(e){
-      var db=e.target.result;
+      var db=e.target.result,tx=e.target.transaction,s;
       if(!db.objectStoreNames.contains(_IDB_STORE)){
-        var s=db.createObjectStore(_IDB_STORE,{keyPath:'key'});
+        s=db.createObjectStore(_IDB_STORE,{keyPath:'key'});
         s.createIndex('workId','workId',{unique:false});
+      }else{
+        s=tx.objectStore(_IDB_STORE);
       }
+      // 本文+話者のハッシュで引ける索引。取り込み直しでブロックidが変わっても、
+      // 同じ台詞なら既存の音声を使い回せるようにするため(ver2で追加)。
+      if(!s.indexNames.contains('hash'))s.createIndex('hash','meta.hash',{unique:false});
     };
     req.onsuccess=function(e){res(e.target.result);};
     req.onerror=function(e){rej(e.target.error);};
@@ -1665,6 +1670,43 @@ function _idbOpen(){
   return _idbPromise;
 }
 function _idbKey(workId,itemId,lang){return workId+'::'+itemId+(lang?'::'+lang:'');}
+// blob を一切読まずにキーだけを列挙する。長編では getAll(blob込み)がメモリを食い潰すため。
+function _idbKeysByWork(workId){
+  return _idbOpen().then(function(db){
+    return new Promise(function(res,rej){
+      var out=[],tx=db.transaction(_IDB_STORE,'readonly');
+      var cur=tx.objectStore(_IDB_STORE).index('workId').openKeyCursor(workId);
+      cur.onsuccess=function(e){
+        var c=e.target.result;
+        if(!c){res(out);return;}
+        var k=String(c.primaryKey),rest=k.slice(String(workId).length+2);
+        var lang='ja',itemId=rest;
+        var m=/^(.*)::(ja|en)$/.exec(rest);
+        if(m){itemId=m[1];lang=m[2];}
+        out.push({key:k,itemId:itemId,lang:lang});
+        c.continue();
+      };
+      cur.onerror=function(){rej(cur.error);};
+    });
+  });
+}
+// 同じ本文+話者の音声が既にどこかにあれば、そのレコードを返す(作品をまたいで探す)。
+function _idbFindByHash(hash){
+  if(!hash)return Promise.resolve(null);
+  return _idbOpen().then(function(db){
+    return new Promise(function(res){
+      var tx=db.transaction(_IDB_STORE,'readonly'),st=tx.objectStore(_IDB_STORE);
+      if(!st.indexNames.contains('hash')){res(null);return;}
+      var r=st.index('hash').get(hash);
+      r.onsuccess=function(){
+        var v=r.result;
+        if(v&&v.blob&&v.meta&&v.meta.engine==='voicevox'&&(v.meta.lang||'ja')!=='en')res(v);
+        else res(null);
+      };
+      r.onerror=function(){res(null);};
+    });
+  }).catch(function(){return null;});
+}
 function _idbPut(workId,itemId,blob,meta){
   return _idbOpen().then(function(db){
     return new Promise(function(res,rej){
@@ -1762,7 +1804,7 @@ function _buildAudioSources(){
   var serverP=(wid&&wid.indexOf('pub_')===0)
     ?fetch('/api/audio/'+encodeURIComponent(wid)).then(function(r){return r.ok?r.json():{items:{}};}).catch(function(){return {items:{}};})
     :Promise.resolve({items:{}});
-  return Promise.all([serverP].concat(relIds.map(function(w){return _idbListByWork(w);}))).then(function(results){
+  return Promise.all([serverP].concat(relIds.map(function(w){return _idbKeysByWork(w).catch(function(){return [];});}))).then(function(results){
     var serverManifest=results[0]||{items:{}};
     var lists=results.slice(1);
     Object.keys(serverManifest.items||{}).forEach(function(id){
@@ -1799,6 +1841,20 @@ function _getAudioSrc(itemId){
   var bucket = (state.lang==='en') ? (_audioSourcesEn||{}) : (_audioSourcesJa||_audioSources||{});
   return bucket[itemId]||null;
 }
+// 再生の直前に blob を取り出して URL にする。ソース表には blob を持たないので、
+// 4,000件を超える作品でもメモリはほとんど使わない。
+function _resolveAudioUrlAsync(itemId){
+  var src=(typeof _getAudioSrc==='function')?_getAudioSrc(itemId):_audioSources[itemId];
+  if(!src)return Promise.resolve(null);
+  if(src.type==='idb'&&!src.blob){
+    return _idbGet(src.workId||_currentWorkId(),src.itemId||itemId,src.lang||'ja').then(function(rec){
+      if(!rec||!rec.blob)return null;
+      var u=URL.createObjectURL(rec.blob);
+      return {url:u,revoke:true};
+    }).catch(function(){return null;});
+  }
+  return Promise.resolve(_resolveAudioUrl(itemId));
+}
 function _resolveAudioUrl(itemId){
   var src=(typeof _getAudioSrc==='function')?_getAudioSrc(itemId):_audioSources[itemId];
   if(!src)return null;
@@ -1817,16 +1873,14 @@ function _resolveAudioUrl(itemId){
   return null;
 }
 function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
-  var resolved=_resolveAudioUrl(item.id);
-  if(!resolved){if(onError)onError(new Error('no audio source'));return null;}
-  var url=resolved.url,needsRevoke=resolved.revoke;
   var src=(typeof _getAudioSrc==='function')?_getAudioSrc(item.id):_audioSources[item.id];
+  if(!src){if(onError)onError(new Error('no audio source'));return null;}
+  var url=null,needsRevoke=false;
   var spk=src&&src.meta&&src.meta.speaker;
   var fromW=src&&src.fromWorkId;
   console.info('[TTS] 再生開始 item='+item.id+' chId='+(ch&&ch.id)+' chName='+(ch&&ch.name)+' txt="'+(item.text||'').substring(0,20)+'…" type='+(src&&src.type)+(spk!=null?' speaker='+spk:'')+(fromW?' fromWorkId='+fromW:''));
   var audio=new Audio();
   audio.preload='auto';
-  audio.src=url;
   var rate=Math.max(0.5,Math.min(2.5,state.tts.rate||1.4));
   try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
   var settled=false,started=false;
@@ -1866,15 +1920,26 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
       if(onError)onError(new Error('audio error '+code));
     }
   };
-  var playPromise=audio.play();
-  if(playPromise&&playPromise.catch){
-    playPromise.catch(function(e){
-      if(settled)return;settled=true;
-      console.warn('[TTS] audio.play() reject:',e&&e.message||e);
-      cleanup();
-      if(onError)onError(e);
-    });
-  }
+  // URL の用意(IDBからの取り出しは非同期)が済んでから再生する
+  _resolveAudioUrlAsync(item.id).then(function(resolved){
+    if(settled)return;
+    if(isStale()){settled=true;return;}
+    if(!resolved){settled=true;if(onError)onError(new Error('no audio source'));return;}
+    url=resolved.url;needsRevoke=resolved.revoke;
+    audio.src=url;
+    var playPromise=audio.play();
+    if(playPromise&&playPromise.catch){
+      playPromise.catch(function(e){
+        if(settled)return;settled=true;
+        console.warn('[TTS] audio.play() reject:',e&&e.message||e);
+        cleanup();
+        if(onError)onError(e);
+      });
+    }
+  },function(e){
+    if(settled)return;settled=true;
+    if(onError)onError(e||new Error('audio resolve failed'));
+  });
   return {
     stop:function(){if(settled)return;settled=true;cleanup();},
     pause:function(){try{audio.pause();}catch(e){}},
@@ -1991,11 +2056,16 @@ async function generateVoicesLocal(opts){
     return {ok:false,reason:_hc.reason};
   }
   console.info('[VOICEVOX] connected:',_hc.version);
-  // 既存IDB キャッシュをロード
-  var existing={};
-  (await _idbListByWork(wid)).forEach(function(r){existing[r.itemId]=r;});
+  // 既存の確認は「キーの一覧」だけにする(blobを読み込むとメモリが持たない)
+  var existingKeys={};
+  try{
+    (await _idbKeysByWork(wid)).forEach(function(r){if(r.lang!=='en')existingKeys[r.itemId]=r.key;});
+  }catch(e){
+    alert('既存音声の一覧が取得できませんでした。全件を作り直してしまうため中止します。\n'+(e&&e.message));
+    return {ok:false,reason:'list failed'};
+  }
   var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
-  var total=items.length,generated=0,cached=0,failed=0;
+  var total=items.length,generated=0,cached=0,failed=0,reused=0;
   if(!total){alert('生成対象のセリフがありません');return {ok:true,total:0};}
   if(!opts.noConfirm && !confirm('VOICEVOX でこの作品の全セリフ('+total+'件)を音声生成します。\n数十秒〜数分かかります。続行しますか?'))return {ok:false,cancelled:true};
   var progressBox=opts.progressBox||_showProgress('🎤 音声生成中');
@@ -2006,8 +2076,19 @@ async function generateVoicesLocal(opts){
       // 注: voiceLang による分岐は廃止。全アイテム VOICEVOX 生成（state.lang='ja'時の再生で使用）
       var speaker=_voicevoxSpeakerFor(ch);
       var hash=_simpleHashJS((it.text||'')+'|sp='+speaker);
-      var prev=existing[it.id];
-      if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
+      // 同じキーに同じハッシュで入っていれば作り直さない
+      var prevRec=existingKeys[it.id]?await _idbGet(wid,it.id,'ja'):null;
+      if(prevRec&&prevRec.meta&&prevRec.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
+      // ブロックidが変わっていても、同じ本文+話者の音声が別のidや別作品にあれば使い回す。
+      // (取り込み直しで id が総入れ替えになっても作り直さずに済む)
+      var donor=await _idbFindByHash(hash);
+      if(donor&&donor.blob){
+        try{
+          await _idbPut(wid,it.id,donor.blob,{lang:'ja',engine:'voicevox',speaker:speaker,hash:hash,
+            chars:(it.text||'').length,bytes:donor.blob.size,reusedFrom:donor.key});
+          reused++;_updateProgress(progressBox,i+1,total,'reused '+it.id);continue;
+        }catch(e){console.warn('[VOICEVOX] 使い回しに失敗:',e&&e.message);}
+      }
       _updateProgress(progressBox,i+1,total,it.id);
       try{
         // audio_query
@@ -2032,8 +2113,8 @@ async function generateVoicesLocal(opts){
   // 再生時に使えるようソースマップを再構築
   _audioManifest=_audioManifest||false; // 既存維持
   if(!opts.noRebuild)await _buildAudioSources();
-  if(!opts.noAlert)alert('音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
-  return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
+  if(!opts.noAlert)alert('音声生成完了\n新規='+generated+' / 使い回し='+reused+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
+  return {ok:true,generated:generated,reused:reused,cached:cached,failed:failed,total:total};
 }
 // ===== 英語クラウド事前生成 (Deepgram Aura via /api/tts) — VOICEVOXと同じIDBへ保存 =====
 async function generateVoicesAura(opts){
