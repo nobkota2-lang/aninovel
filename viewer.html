@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v91_vv_robust';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v93_vv_timeout';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -278,19 +278,34 @@ function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.
 // 音声埋込みエクスポート: IndexedDBに保存された生成音声をBase64でJSONに同梱
 async function exportDataWithAudio(){
   var wid=_currentWorkId();
-  var recs=await _idbListByWork(wid);
-  if(!recs.length){
-    if(!confirm('このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「🎤 音声生成」ボタンで先に作れます)'))return;
+  var keys=await _idbKeysByWork(wid);
+  if(!keys.length){
+    if(!confirm('このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「~1F3A4~ 音声生成」ボタンで先に作れます)'))return;
     return exportData();
   }
-  var pg=_showProgress('📦 音声埋込みエクスポート中');
+  // Base64は元の約1.33倍に膨らみ、しかも1つのJSON文字列に載せるので
+  // 大きい作品では確実にメモリが足りなくなる。先に見積もって警告する。
+  var _est=0;
+  for(var _s=0;_s<Math.min(keys.length,20);_s++){
+    var _r0=await _idbGet(wid,keys[_s].itemId,keys[_s].lang);
+    if(_r0&&_r0.blob)_est+=_r0.blob.size;
+  }
+  var _estMB=Math.round(_est/Math.max(Math.min(keys.length,20),1)*keys.length*1.4/1e6);
+  if(_estMB>300&&!confirm('音声'+keys.length+'件を埋め込むと約'+_estMB+'MBのファイルになります。\n'
+      +'この大きさだとブラウザが落ちる可能性が高いです。\n\n'
+      +'投稿すれば音声はサーバーに保存され、読者にも配信されます。\n'
+      +'それでも埋め込みエクスポートを続けますか？'))return;
+  var pg=_showProgress('~1F4E6~ 音声埋込みエクスポート中');
   try{
     var audioStore={};var i=0;
-    for(var k=0;k<recs.length;k++){
-      var r=recs[k];
-      _updateProgress(pg,++i,recs.length,r.itemId);
+    for(var k=0;k<keys.length;k++){
+      _updateProgress(pg,++i,keys.length,keys[k].itemId);
+      var r=await _idbGet(wid,keys[k].itemId,keys[k].lang);
+      if(!r||!r.blob)continue;
       var b64=await _blobToB64(r.blob);
       audioStore[r.itemId]={b64:b64,mime:(r.blob&&r.blob.type)||'audio/wav',meta:r.meta||{}};
+      r=null;b64=null;
+      if(i%25===0)await new Promise(function(res){setTimeout(res,0);});
     }
     var payload={
       version:'2.3',
@@ -1601,8 +1616,9 @@ var _badSpeakers={};
 var _VV_FALLBACK={male:[11,12,52,53,21],female:[8,2,10,14,16],neutral:[3,2,8]};
 // エラー本文まで読む fetch。VOICEVOX は {"detail":...} で理由を返すので握り潰さない。
 function _vvFetch(url,opts,timeoutMs){
+  var ms=timeoutMs||60000,timedOut=false;
   var ac=new AbortController();
-  var to=setTimeout(function(){try{ac.abort();}catch(e){}},timeoutMs||30000);
+  var to=setTimeout(function(){timedOut=true;try{ac.abort();}catch(e){}},ms);
   opts=opts||{};opts.signal=ac.signal;
   return fetch(url,opts).then(function(r){
     clearTimeout(to);
@@ -1611,7 +1627,17 @@ function _vvFetch(url,opts,timeoutMs){
       var d=t;try{var j=JSON.parse(t);d=j.detail?JSON.stringify(j.detail):t;}catch(e){}
       throw new Error('HTTP '+r.status+' '+String(d).slice(0,300));
     });
-  },function(e){clearTimeout(to);throw e;});
+  },function(e){
+    clearTimeout(to);
+    // AbortError のままだと「signal is aborted without reason」としか出ず原因が分からない
+    if(timedOut)throw new Error('timeout '+Math.round(ms/1000)+'s');
+    throw e;
+  });
+}
+// 合成にかかる時間は文字数にほぼ比例する。CPU合成だと1文字あたり0.3秒程度かかる
+// こともあるので、長さに応じて待ち時間を伸ばす(下限30秒・上限5分)。
+function _vvTimeoutFor(text){
+  return Math.max(30000,Math.min(300000,15000+String(text||'').length*400));
 }
 // 長文は文単位に切る。VOICEVOX は極端に長いテキストで落ちることがある(猫は最長9,521字)。
 function _vvSplit(text,maxLen){
@@ -1659,15 +1685,31 @@ async function _vvSynth(text,speaker,engineUrl,sampleRate){
   engineUrl=engineUrl||'http://localhost:50021';
   var chunks=_vvSplit(text,120),bufs=[];
   for(var i=0;i<chunks.length;i++){
-    var qr=await _vvFetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(chunks[i]),{method:'POST'});
-    var q=await qr.json();
-    q.speedScale=1.0;q.outputStereo=false;
-    if(sampleRate)q.outputSamplingRate=sampleRate;
-    var sr=await _vvFetch(engineUrl+'/synthesis?speaker='+speaker,
-      {method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},body:JSON.stringify(q)});
-    bufs.push(await sr.arrayBuffer());
+    var tmo=_vvTimeoutFor(chunks[i]),buf=null,lastErr=null;
+    // タイムアウトは一時的な混み合いのこともあるので、1チャンクにつき1回だけ待ち直す
+    for(var attempt=0;attempt<2&&buf===null;attempt++){
+      try{
+        var qr=await _vvFetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(chunks[i]),{method:'POST'},tmo);
+        var q=await qr.json();
+        q.speedScale=1.0;q.outputStereo=false;
+        if(sampleRate)q.outputSamplingRate=sampleRate;
+        var sr=await _vvFetch(engineUrl+'/synthesis?speaker='+speaker,
+          {method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},body:JSON.stringify(q)},tmo*2);
+        buf=await sr.arrayBuffer();
+      }catch(e){
+        lastErr=e;
+        if(attempt===0&&/timeout/.test((e&&e.message)||'')){
+          console.warn('[VOICEVOX] '+chunks[i].length+'字のチャンクがタイムアウト。待ち時間を伸ばして再試行します');
+          tmo=Math.min(300000,tmo*2);
+        }else break;
+      }
+    }
+    if(buf===null)throw new Error('chunk '+(i+1)+'/'+chunks.length+' ('+chunks[i].length+'字) '+((lastErr&&lastErr.message)||'失敗'));
+    bufs.push(buf);buf=null;
   }
-  return new Blob([_wavConcat(bufs)],{type:'audio/wav'});
+  var out=new Blob([_wavConcat(bufs)],{type:'audio/wav'});
+  bufs.length=0;
+  return out;
 }
 // 話者が使えないときの代替を選ぶ
 function _vvAltSpeaker(speaker,gender){
@@ -1816,6 +1858,41 @@ function _idbGet(workId,itemId,lang){
       r.onerror=function(){rej(r.error);};
     });
   }).catch(function(){return null;});
+}
+// 音声をまとめてサーバへ送る。**全件を一度にメモリへ載せない**のが要点で、
+// キーだけ先に列挙し、chunk 件ずつ読み出しては送って捨てる。
+// copyTo を渡すとアップロードのついでにそのworkIdへ複製する(投稿時の my_→pub_)。
+async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
+  opts=opts||{};
+  var chunk=opts.chunk||25;
+  var keys=await _idbKeysByWork(srcWorkId);
+  var total=keys.length,sent=0,fail=0,bytes=0;
+  if(!total)return {total:0,fail:0,bytes:0};
+  for(var i=0;i<total;i+=chunk){
+    var slice=keys.slice(i,i+chunk),fd=new FormData(),n=0;
+    for(var j=0;j<slice.length;j++){
+      var rec=null;
+      try{rec=await _idbGet(srcWorkId,slice[j].itemId,slice[j].lang);}catch(e){}
+      if(!rec||!rec.blob)continue;
+      if(opts.copyTo&&opts.copyTo!==srcWorkId){
+        try{await _idbPut(opts.copyTo,rec.itemId,rec.blob,rec.meta||{});}catch(e){}
+      }
+      fd.append(rec.itemId,rec.blob,rec.itemId+'.wav');
+      bytes+=rec.blob.size;n++;rec=null;
+    }
+    if(n){
+      try{
+        var r=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{method:'PUT',body:fd});
+        if(!r.ok)fail+=n;
+        else{var jj=await r.json().catch(function(){return{};});fail+=((jj.errors&&jj.errors.length)||0);}
+      }catch(e){fail+=n;}
+      sent+=n;
+    }
+    fd=null;
+    if(opts.onProgress)opts.onProgress(sent,total);
+    await new Promise(function(res){setTimeout(res,0);});   // 参照を手放してGCさせる
+  }
+  return {total:total,fail:fail,bytes:bytes};
 }
 function _idbListByWork(workId){
   return _idbOpen().then(function(db){
@@ -5042,24 +5119,16 @@ async function publishMyWork(){
       if(!confirm('この作品を投稿しますか？\n投稿すると他の読者がこの作品を読んで評価できるようになります。'))return;
       window.AninovelServices.publishWork(_workParam).then(async function(res){
         try{
-          var srcList=await _idbListByWork(_workParam);
-          if(srcList.length){
-            var pubId=res.publishedId;
-            for(var i=0;i<srcList.length;i++){var r=srcList[i];await _idbPut(pubId,r.itemId,r.blob,r.meta||{});}
-            console.info('[Publish] 生成音声'+srcList.length+'件を投稿版IDBへ複製:',pubId);
-            var _aCHUNK=25,_aFail=0;
-            for(var _ac=0;_ac<srcList.length;_ac+=_aCHUNK){
-              var _aslice=srcList.slice(_ac,_ac+_aCHUNK);
-              var _afd=new FormData();
-              _aslice.forEach(function(rec){_afd.append(rec.itemId,rec.blob,rec.itemId+'.wav');});
-              try{
-                var _ares=await fetch('/api/audio/'+encodeURIComponent(pubId),{method:'PUT',body:_afd});
-                if(!_ares.ok){_aFail+=_aslice.length;}
-                else{var _aj=await _ares.json().catch(function(){return{};});_aFail+=((_aj.errors&&_aj.errors.length)||0);}
-              }catch(e){_aFail+=_aslice.length;}
-            }
-            console.info('[Publish] サーバー音声アップロード: 成功'+(srcList.length-_aFail)+'/'+srcList.length);
-            if(_aFail>0)alert('音声'+_aFail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。');
+          var pubId=res.publishedId;
+          var _pg=_showProgress('\uD83D\uDD0A 音声をアップロード中');
+          var _ar;
+          try{
+            _ar=await _audioUploadStreamed(_workParam,pubId,{copyTo:pubId,
+              onProgress:function(a,b){_updateProgress(_pg,a,b);}});
+          }finally{_hideProgress(_pg);}
+          if(_ar.total){
+            console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' ('+Math.round(_ar.bytes/1e6)+'MB)');
+            if(_ar.fail>0)alert('音声'+_ar.fail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。');
           }
         }catch(e){console.warn('[Publish] 音声複製/アップロードエラー:',e);}
         try{
@@ -5094,21 +5163,13 @@ async function publishMyWork(){
     if(!confirm('オーナー権限でこの作品を上書き公開します。\n作品ID: '+_workParam+'\n続行しますか？'))return;
     try{
       // 音声があればサーバーへもアップロード
-      var srcList=await _idbListByWork(_workParam);
-      if(srcList.length){
-        var _aCHUNK2=25,_aFail2=0;
-        for(var _ac2=0;_ac2<srcList.length;_ac2+=_aCHUNK2){
-          var _aslice2=srcList.slice(_ac2,_ac2+_aCHUNK2);
-          var _afd2=new FormData();
-          _aslice2.forEach(function(rec){_afd2.append(rec.itemId,rec.blob,rec.itemId+'.wav');});
-          try{
-            var _ares2=await fetch('/api/audio/'+encodeURIComponent(_workParam),{method:'PUT',body:_afd2});
-            if(!_ares2.ok){_aFail2+=_aslice2.length;}
-            else{var _aj2=await _ares2.json().catch(function(){return{};});_aFail2+=((_aj2.errors&&_aj2.errors.length)||0);}
-          }catch(e){_aFail2+=_aslice2.length;}
-        }
-        console.info('[Publish-Owner] 音声アップロード: 成功'+(srcList.length-_aFail2)+'/'+srcList.length);
-        if(_aFail2>0)console.warn('音声'+_aFail2+'件のサーバー保存に失敗');
+      var _pg2=_showProgress('\uD83D\uDD0A 音声をアップロード中'),_ar2;
+      try{
+        _ar2=await _audioUploadStreamed(_workParam,_workParam,{onProgress:function(a,b){_updateProgress(_pg2,a,b);}});
+      }finally{_hideProgress(_pg2);}
+      if(_ar2.total){
+        console.info('[Publish-Owner] 音声アップロード: 成功'+(_ar2.total-_ar2.fail)+'/'+_ar2.total+' ('+Math.round(_ar2.bytes/1e6)+'MB)');
+        if(_ar2.fail>0)console.warn('音声'+_ar2.fail+'件のサーバー保存に失敗');
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
       var _nn=state.novel||{};var _cc=(state.content||[]).reduce(function(s,p){return s+(((p.text||p.html||'')+'').length);},0);var _meta={id:_workParam,title:_nn.title||'無題',author:_nn.author||'',description:_nn.description||'',coverColor:_nn.coverColor||'#DB2777',coverImage:_nn.coverImage||'',pageCount:(function(){var pg=(state.content||[]).filter(function(x){return x&&(x.type==='page'||x.type==='chapter');}).length;return pg>0?pg:1;})(),charCount:_cc,characterCount:(state.characters||[]).length,tags:(Array.isArray(_nn.tags)?_nn.tags:[]),createdAt:_nn.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),ownerPublished:true,sourceLang:_srcLang()};

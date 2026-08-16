@@ -10,3 +10,5 @@ dist/
 legal.config.json
 legal/*.backup-*
 .wrangler/
+
+viewer.html.bak
