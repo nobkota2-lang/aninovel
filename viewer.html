@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v90_audio_lazy';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v91_vv_robust';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1594,6 +1594,87 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
 function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||('id:'+id);}
 function _auraNameById(id){var n=null;_AURA_VOICES.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||id;}
 var _testAudio=null;
+// ===== VOICEVOX 合成の共通処理 =====
+// 500 を返した話者を覚えておき、以降は代替話者に切り替える(モデル未導入などで
+// 特定の話者だけ落ちることがあるため。Web Speech の _badVoices と同じ考え方)。
+var _badSpeakers={};
+var _VV_FALLBACK={male:[11,12,52,53,21],female:[8,2,10,14,16],neutral:[3,2,8]};
+// エラー本文まで読む fetch。VOICEVOX は {"detail":...} で理由を返すので握り潰さない。
+function _vvFetch(url,opts,timeoutMs){
+  var ac=new AbortController();
+  var to=setTimeout(function(){try{ac.abort();}catch(e){}},timeoutMs||30000);
+  opts=opts||{};opts.signal=ac.signal;
+  return fetch(url,opts).then(function(r){
+    clearTimeout(to);
+    if(r.ok)return r;
+    return r.text().then(function(t){
+      var d=t;try{var j=JSON.parse(t);d=j.detail?JSON.stringify(j.detail):t;}catch(e){}
+      throw new Error('HTTP '+r.status+' '+String(d).slice(0,300));
+    });
+  },function(e){clearTimeout(to);throw e;});
+}
+// 長文は文単位に切る。VOICEVOX は極端に長いテキストで落ちることがある(猫は最長9,521字)。
+function _vvSplit(text,maxLen){
+  maxLen=maxLen||120;
+  var s=String(text||'');
+  if(s.length<=maxLen)return [s];
+  var out=[],buf='';
+  var parts=s.split(/(?<=[\u3002\uFF01\uFF1F\n])/);
+  parts.forEach(function(p){
+    while(p.length>maxLen){
+      var cut=p.lastIndexOf('\u3001',maxLen);if(cut<maxLen*0.4)cut=maxLen;
+      if(buf){out.push(buf);buf='';}
+      out.push(p.slice(0,cut));p=p.slice(cut);
+    }
+    if((buf+p).length>maxLen){out.push(buf);buf=p;}else{buf+=p;}
+  });
+  if(buf)out.push(buf);
+  return out.filter(function(x){return x.replace(/\s/g,'').length;});
+}
+// 複数のWAVを1つに繋ぐ(fmtが同じ前提。dataチャンクだけ連結してヘッダを作り直す)
+function _wavConcat(bufs){
+  if(bufs.length===1)return bufs[0];
+  var fmt=null,datas=[],total=0;
+  for(var i=0;i<bufs.length;i++){
+    var dv=new DataView(bufs[i]),pos=12;
+    while(pos+8<=dv.byteLength){
+      var id=String.fromCharCode(dv.getUint8(pos),dv.getUint8(pos+1),dv.getUint8(pos+2),dv.getUint8(pos+3));
+      var sz=dv.getUint32(pos+4,true);
+      if(id==='fmt ' && !fmt)fmt=new Uint8Array(bufs[i].slice(pos+8,pos+8+sz));
+      if(id==='data'){var d=new Uint8Array(bufs[i].slice(pos+8,pos+8+sz));datas.push(d);total+=d.length;}
+      pos+=8+sz+(sz%2);
+    }
+  }
+  if(!fmt||!datas.length)return bufs[0];
+  var out=new Uint8Array(12+8+fmt.length+8+total),v=new DataView(out.buffer),o=0;
+  function str(s){for(var i=0;i<s.length;i++)out[o++]=s.charCodeAt(i);}
+  str('RIFF');v.setUint32(o,out.length-8,true);o+=4;str('WAVE');
+  str('fmt ');v.setUint32(o,fmt.length,true);o+=4;out.set(fmt,o);o+=fmt.length;
+  str('data');v.setUint32(o,total,true);o+=4;
+  datas.forEach(function(d){out.set(d,o);o+=d.length;});
+  return out.buffer;
+}
+// 1ブロックを合成する。長ければ分割して繋ぐ。
+async function _vvSynth(text,speaker,engineUrl,sampleRate){
+  engineUrl=engineUrl||'http://localhost:50021';
+  var chunks=_vvSplit(text,120),bufs=[];
+  for(var i=0;i<chunks.length;i++){
+    var qr=await _vvFetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(chunks[i]),{method:'POST'});
+    var q=await qr.json();
+    q.speedScale=1.0;q.outputStereo=false;
+    if(sampleRate)q.outputSamplingRate=sampleRate;
+    var sr=await _vvFetch(engineUrl+'/synthesis?speaker='+speaker,
+      {method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},body:JSON.stringify(q)});
+    bufs.push(await sr.arrayBuffer());
+  }
+  return new Blob([_wavConcat(bufs)],{type:'audio/wav'});
+}
+// 話者が使えないときの代替を選ぶ
+function _vvAltSpeaker(speaker,gender){
+  var cands=(_VV_FALLBACK[gender]||_VV_FALLBACK.neutral).concat([3,2,8,11]);
+  for(var i=0;i<cands.length;i++){if(cands[i]!==speaker&&!_badSpeakers[cands[i]])return cands[i];}
+  return null;
+}
 function _voicevoxSynthBlob(text,speaker,engineUrl){
   engineUrl=engineUrl||'http://localhost:50021';
   return fetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(text),{method:'POST'})
@@ -2090,24 +2171,36 @@ async function generateVoicesLocal(opts){
         }catch(e){console.warn('[VOICEVOX] 使い回しに失敗:',e&&e.message);}
       }
       _updateProgress(progressBox,i+1,total,it.id);
-      try{
-        // audio_query
-        var qr=await fetch(engineUrl+'/audio_query?speaker='+speaker+'&text='+encodeURIComponent(it.text),{method:'POST'});
-        if(!qr.ok)throw new Error('audio_query '+qr.status);
-        var query=await qr.json();
-        query.speedScale=1.0;
-        // synthesis
-        var sr=await fetch(engineUrl+'/synthesis?speaker='+speaker,{
-          method:'POST',headers:{'Content-Type':'application/json','Accept':'audio/wav'},
-          body:JSON.stringify(query)
-        });
-        if(!sr.ok)throw new Error('synthesis '+sr.status);
-        var blob=await sr.blob();
-        await _idbPut(wid,it.id,blob,{lang:'ja',engine:'voicevox',speaker:speaker,hash:hash,chars:(it.text||'').length,bytes:blob.size});
-        generated++;
-      }catch(e){
-        console.warn('[VOICEVOX] 失敗 item='+it.id,e&&e.message||e);failed++;
+      // その話者が既に使えないと分かっていれば、最初から代替話者で合成する
+      var useSp=speaker;
+      if(_badSpeakers[useSp]){
+        var alt0=_vvAltSpeaker(useSp,ch&&ch.gender);
+        if(alt0!=null)useSp=alt0;
       }
+      try{
+        var blob=await _vvSynth(it.text,useSp,engineUrl,opts.sampleRate);
+        await _idbPut(wid,it.id,blob,{lang:'ja',engine:'voicevox',speaker:useSp,hash:hash,chars:(it.text||'').length,bytes:blob.size});
+        blob=null;generated++;
+      }catch(e){
+        var msg=(e&&e.message)||String(e);
+        // 話者そのものが使えない場合(モデル未導入など)は、その話者を記録して代替でやり直す
+        var alt=null;
+        if(/HTTP 5\d\d/.test(msg)&&!_badSpeakers[useSp]){
+          _badSpeakers[useSp]=msg;
+          console.warn('[VOICEVOX] 話者 '+useSp+' が使えません → 代替に切り替えます: '+msg.slice(0,160));
+          alt=_vvAltSpeaker(useSp,ch&&ch.gender);
+        }
+        if(alt!=null){
+          try{
+            var b2=await _vvSynth(it.text,alt,engineUrl,opts.sampleRate);
+            await _idbPut(wid,it.id,b2,{lang:'ja',engine:'voicevox',speaker:alt,hash:_simpleHashJS((it.text||'')+'|sp='+alt),chars:(it.text||'').length,bytes:b2.size});
+            b2=null;generated++;continue;
+          }catch(e2){msg=(e2&&e2.message)||String(e2);}
+        }
+        console.warn('[VOICEVOX] 失敗 item='+it.id+' ('+(it.text||'').length+'字, speaker='+useSp+') '+msg);
+        failed++;
+      }
+      if((i+1)%25===0)await new Promise(function(r){setTimeout(r,0);});   // 息継ぎ
     }
   }finally{if(!opts.progressBox)_hideProgress(progressBox);}
   // 再生時に使えるようソースマップを再構築
