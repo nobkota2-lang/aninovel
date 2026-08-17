@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v95_narration_speaker';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v96_bubble_side';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -243,7 +243,35 @@ function act(n){if(_acts[n])_acts[n]()}
 function cacheForEdit(t,o){var k='_e'+Date.now()+'_'+Math.random().toString(36).substr(2,5);_ec[k]={type:t,data:o};return k}
 function triggerEdit(k){var e=_ec[k];if(e)openEditModal(e.type,e.data)}
 var _sideMap={};
-function _computeSideMap(){_sideMap={};var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var seen={},n=0;arr.forEach(function(it){if(it.type==='pageBreak'){seen={};n=0;return;}if(it.type==='dialogue'&&it.characterId){if(it.characterId==='narrator'){_sideMap[it.id]='left';return;}if(seen[it.characterId]===undefined){seen[it.characterId]=(n%2===0)?'left':'right';n++;}_sideMap[it.id]=seen[it.characterId];}});}
+function _computeSideMap(){
+  // 左右の振り分けは**場面ごと**に決める。作品全体で登場順に交互に振ると、
+  // 1番目と3番目に登場した人物がどちらも左になり、その二人の会話が
+  // 同じ側に並んでしまう(猫のように登場人物が多い作品で顕著)。
+  // 同じ人物はなるべく前と同じ側に置き、ぶつかるときだけ反対側にする。
+  _sideMap={};
+  var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var prefer={};            // 人物ごとの直前の側(場面をまたいで引き継ぐ)
+  var scene={},used={};     // この場面での割り当て
+  function newScene(){scene={};used={left:0,right:0};}
+  newScene();
+  arr.forEach(function(it){
+    if(it.type==='pageBreak'||it.type==='chapter_break'||it.type==='section_break'){newScene();return;}
+    if(it.type==='narration'){ if((it.text||'').length>=80)newScene(); return; }
+    if(it.type!=='dialogue'||!it.characterId)return;
+    var cid=it.characterId;
+    if(cid==='narrator'){_sideMap[it.id]='left';return;}
+    if(scene[cid]===undefined){
+      var want=prefer[cid];
+      if(want && !used[want]) scene[cid]=want;                  // 前と同じ側が空いていれば維持
+      else if(!used.left) scene[cid]='left';
+      else if(!used.right) scene[cid]='right';
+      else scene[cid]=(used.left<=used.right)?'left':'right';   // 3人目以降は少ない方へ
+      used[scene[cid]]++;
+      prefer[cid]=scene[cid];
+    }
+    _sideMap[it.id]=scene[cid];
+  });
+}
 function getPC(){_computeSideMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
 function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render();_saveProgress()}}
