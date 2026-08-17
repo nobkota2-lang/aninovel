@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v97_monologue_label';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v98_monologue_fixes';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -256,9 +256,11 @@ function _computeSideMap(){
   newScene();
   arr.forEach(function(it){
     if(it.type==='pageBreak'||it.type==='chapter_break'||it.type==='section_break'){newScene();return;}
-    if(it.type==='narration'){ if((it.text||'').length>=80)newScene(); return; }
-    if(it.type!=='dialogue'||!it.characterId)return;
     var cid=it.characterId;
+    if(it.type==='narration'){
+      // 話者つきの地の文(=独白)は発話として左右に参加させる。話者なしの長い地の文だけが場面の区切り。
+      if(!cid||cid==='narrator'){ if((it.text||'').length>=80)newScene(); return; }
+    } else if(it.type!=='dialogue'||!cid){ return; }
     if(cid==='narrator'){_sideMap[it.id]='left';return;}
     if(scene[cid]===undefined){
       var want=prefer[cid];
@@ -2458,7 +2460,10 @@ function _speakItem(item,onEnd){
   // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
   state.tts.currentCharId=null;
   // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
-  var targetCharId=item.type==='dialogue'?(item.characterId||null):'narrator';
+  // 地の文でも話者が入っていればその人物の口を動かす。
+  // 以前は地の文を無条件に 'narrator' 扱いにしていたため、猫の独白でナレーターの
+  // 口パク画像に差し替わってしまっていた。
+  var targetCharId=item.characterId||(item.type==='dialogue'?null:'narrator');
   function applyCharId(){
     if(mySession!==_speakSessionId)return;
     state.tts.currentCharId=targetCharId;
@@ -4105,11 +4110,14 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=_l
   var _sty=_cid?('color:var(--text-primary)'):('font-style:italic;color:var(--text-secondary)');
   // 話者つきの地の文は「その人物の独白」なので、セリフと同じように
   // 名前ラベルと本人の吹き出し色を出す(v95では名前を出し忘れていた)。
-  var _ch=_cid?(state.characters||[]).filter(function(c){return c.id===_cid;})[0]:null;
-  var _rcN=(!state.isAuthorMode)&&state.readerCustom&&_cid&&state.readerCustom[_cid];
-  var _bg=(_ch?((_rcN&&_rcN.bubbleColor)||_ch.bubbleColor||'var(--bg-secondary)'):'var(--bg-secondary)');
-  var _lbl=_ch?('<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">'+esc(_cname(_ch))+'</div>'):'';
-  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative">'+aBtn(item.id)+dh+rIcon(_cid||'narrator',is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble':'')+'" style="background:'+_bg+';max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
+  var _who=_cid||'narrator';
+  var _ch=(state.characters||[]).filter(function(c){return c.id===_who;})[0]||null;
+  var _rcN=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[_who];
+  var _bg=(_cid&&_ch)?(((_rcN&&_rcN.bubbleColor)||_ch.bubbleColor)||'var(--bg-secondary)'):'var(--bg-secondary)';
+  // 吹き出しで描くときは名前を出す(ナレーターも)。素の地の文のときは出さない。
+  var _lbl=(_ch&&(_cid||ns==='bubble'))?('<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px'+(_cid&&_sideMap[item.id]==='right'?';text-align:right':'')+'">'+esc(_cname(_ch))+'</div>'):'';
+  var _revN=(_cid&&_sideMap[item.id]==='right')?'flex-direction:row-reverse;':'';
+  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative;'+_revN+'">'+aBtn(item.id)+dh+rIcon(_who,is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble':'')+'" style="background:'+_bg+';max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
 
 function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div>'+_langToggle()+'<button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
