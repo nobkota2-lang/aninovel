@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v93_vv_timeout';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v94_upload_resume';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1866,33 +1866,59 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
   opts=opts||{};
   var chunk=opts.chunk||25;
   var keys=await _idbKeysByWork(srcWorkId);
-  var total=keys.length,sent=0,fail=0,bytes=0;
-  if(!total)return {total:0,fail:0,bytes:0};
+  var total=keys.length,sent=0,fail=0,bytes=0,skipped=0;
+  if(!total)return {total:0,fail:0,bytes:0,skipped:0};
+  // 既にサーバにあるものは送らない。1.5GB級のアップロードが途中で切れても、
+  // もう一度実行すれば続きから再開できるようにするため。
+  var already={};
+  if(!opts.force){
+    try{
+      var mr=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{cache:'no-store'});
+      if(mr.ok){
+        var mj=await mr.json();
+        Object.keys((mj&&mj.items)||{}).forEach(function(id){already[id]=1;});
+        if(Object.keys(already).length)console.info('[Upload] サーバに既に '+Object.keys(already).length+'件。その分は送りません');
+      }
+    }catch(e){}
+  }
   for(var i=0;i<total;i+=chunk){
     var slice=keys.slice(i,i+chunk),fd=new FormData(),n=0;
     for(var j=0;j<slice.length;j++){
       var rec=null;
+      if(already[slice[j].itemId]&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){skipped++;sent++;continue;}
       try{rec=await _idbGet(srcWorkId,slice[j].itemId,slice[j].lang);}catch(e){}
       if(!rec||!rec.blob)continue;
       if(opts.copyTo&&opts.copyTo!==srcWorkId){
         try{await _idbPut(opts.copyTo,rec.itemId,rec.blob,rec.meta||{});}catch(e){}
       }
+      if(already[slice[j].itemId]){skipped++;sent++;rec=null;continue;}
       fd.append(rec.itemId,rec.blob,rec.itemId+'.wav');
       bytes+=rec.blob.size;n++;rec=null;
     }
     if(n){
-      try{
-        var r=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{method:'PUT',body:fd});
-        if(!r.ok)fail+=n;
-        else{var jj=await r.json().catch(function(){return{};});fail+=((jj.errors&&jj.errors.length)||0);}
-      }catch(e){fail+=n;}
+      // 回線の一時的な不調で1.5GBを丸ごとやり直すのは避けたいので、束ごとに3回まで試す
+      var okChunk=false,lastMsg='';
+      for(var at=0;at<3&&!okChunk;at++){
+        try{
+          var r=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{method:'PUT',body:fd});
+          if(r.ok){
+            var jj=await r.json().catch(function(){return{};});
+            fail+=((jj.errors&&jj.errors.length)||0);okChunk=true;
+          }else{lastMsg='HTTP '+r.status;}
+        }catch(e){lastMsg=(e&&e.message)||String(e);}
+        if(!okChunk&&at<2){
+          console.warn('[Upload] 送信に失敗('+lastMsg+')。'+(at+1)*5+'秒待って再試行します');
+          await new Promise(function(res){setTimeout(res,(at+1)*5000);});
+        }
+      }
+      if(!okChunk){fail+=n;console.warn('[Upload] '+n+'件の送信を諦めました: '+lastMsg);}
       sent+=n;
     }
     fd=null;
     if(opts.onProgress)opts.onProgress(sent,total);
     await new Promise(function(res){setTimeout(res,0);});   // 参照を手放してGCさせる
   }
-  return {total:total,fail:fail,bytes:bytes};
+  return {total:total,fail:fail,bytes:bytes,skipped:skipped};
 }
 function _idbListByWork(workId){
   return _idbOpen().then(function(db){
@@ -5127,7 +5153,7 @@ async function publishMyWork(){
               onProgress:function(a,b){_updateProgress(_pg,a,b);}});
           }finally{_hideProgress(_pg);}
           if(_ar.total){
-            console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' ('+Math.round(_ar.bytes/1e6)+'MB)');
+            console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' (送信'+Math.round(_ar.bytes/1e6)+'MB / 既存スキップ'+_ar.skipped+'件)');
             if(_ar.fail>0)alert('音声'+_ar.fail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。');
           }
         }catch(e){console.warn('[Publish] 音声複製/アップロードエラー:',e);}
@@ -5168,7 +5194,7 @@ async function publishMyWork(){
         _ar2=await _audioUploadStreamed(_workParam,_workParam,{onProgress:function(a,b){_updateProgress(_pg2,a,b);}});
       }finally{_hideProgress(_pg2);}
       if(_ar2.total){
-        console.info('[Publish-Owner] 音声アップロード: 成功'+(_ar2.total-_ar2.fail)+'/'+_ar2.total+' ('+Math.round(_ar2.bytes/1e6)+'MB)');
+        console.info('[Publish-Owner] 音声アップロード: 成功'+(_ar2.total-_ar2.fail)+'/'+_ar2.total+' (送信'+Math.round(_ar2.bytes/1e6)+'MB / 既存スキップ'+_ar2.skipped+'件)');
         if(_ar2.fail>0)console.warn('音声'+_ar2.fail+'件のサーバー保存に失敗');
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
