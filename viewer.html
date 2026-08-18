@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v98_monologue_fixes';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v100_classify_review';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -80,6 +80,8 @@ ruby{ruby-align:center}
 .anim-fade{animation:fadeIn .3s ease-out}.anim-slide-up{animation:slideUp .4s ease-out}.anim-slide-down{animation:slideDown .25s ease-out}
 .progress-bar{height:3px;background:var(--progress-bg);overflow:hidden}.progress-fill{height:100%;background:var(--progress-fill);transition:width .5s cubic-bezier(.4,0,.2,1)}
 .bubble{position:relative;border-radius:16px;padding:14px 18px;box-shadow:0 2px 8px var(--shadow);max-width:480px;transition:transform .2s,box-shadow .2s}.bubble.char-bubble,.bubble.char-bubble *{color:#1F2937 !important}.bubble:hover{transform:translateY(-1px);box-shadow:0 4px 16px var(--shadow-strong)}
+.bubble.bubble-mono{border:2px dashed var(--text-muted);box-shadow:none}
+.bubble.bubble-mono::before,.bubble.bubble-mono::after{display:none !important}
 .bubble-left::before{content:'';position:absolute;left:-8px;top:16px;border:8px solid transparent;border-right-color:inherit;border-left:0}
 .bubble-right::after{content:'';position:absolute;right:-8px;top:16px;border:8px solid transparent;border-left-color:inherit;border-right:0}
 .insert-area{padding:2px 0;border-radius:8px;transition:all .2s ease;min-height:32px}
@@ -274,7 +276,164 @@ function _computeSideMap(){
     _sideMap[it.id]=scene[cid];
   });
 }
-function getPC(){_computeSideMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
+// --- 独白(誰にも向けていない語り)か、会話(相手に向けた発話)かの判定 ---
+// ①話者つきの地の文は独白(声に出していないから地の文として書かれている)
+// ②「…」の直後が「と考えた」「と腹の中で思った」等で、「と言った」系を含まない
+//   セリフも独白とみなす。猫では2件しか当たらないが、心内語をかぎ括弧で書く
+//   近代以降の作品では効く
+var _monoMap={};
+var _MONO_RE=/^と[^\u3002]{0,10}?(心の中で|腹の中で|腹で|心中)?[^\u3002]{0,6}?(思っ|思う|考えた|独りごちた)/;
+var _SPOKE_RE=/(言っ|云っ|答え|叫|訊|聞い|返事|云う|言う|口を)/;
+function _computeMonoMap(){
+  _monoMap={};
+  var arr=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
+  arr.forEach(function(it,i){
+    if(it.type==='narration'){
+      if(it.characterId&&it.characterId!=='narrator')_monoMap[it.id]=true;
+      return;
+    }
+    if(it.type!=='dialogue')return;
+    var nx=arr[i+1];
+    if(!nx||nx.type!=='narration')return;
+    var h=String(nx.text||'').slice(0,26);
+    if(_MONO_RE.test(h)&&!_SPOKE_RE.test(h))_monoMap[it.id]=true;
+  });
+}
+// ===== 地の文 / 独白 / 会話 の自動判定と、作者による確認 =====
+// 判定は機械的にできるところまでやり、確信の持てないものだけ作者に確認してもらう。
+// kind: 'plain'=地の文(作者の解説) / 'mono'=独白・心内語 / 'talk'=会話のセリフ
+var _CLS_FIRST=/(私|僕|俺|吾輩|我輩|あたし|わたし|わたくし|拙者|自分)[はがもをのに]/;
+var _CLS_POLITE=/(です|ます|ません|でしょう|ましょう|でした|ください)[。！？…」』）\s]*$/;
+var _CLS_DOCHEAD=/^(拝啓|謹啓|時下)|(候也|致候|御座候|奉り|申候|候処)/;
+var _CLS_DIARY=/余[はがのを]/;
+// 作品全体の文体をまず見る。一人称の語りが一定割合あれば「一人称小説」とみなし、
+// 地の文の既定を「独白(=主人公の語り)」にする。猫のように「私」を使わない文語でも、
+// 「吾輩」が地の文の1割に出るので判定できる。
+var _clsProfile=null;
+function _clsWorkProfile(){
+  var nar=0,fp=0,po=0;
+  (state.content||[]).forEach(function(it){
+    if(it.type!=='narration')return;
+    var t=String(it.text||'').trim(); if(!t||t.charAt(0)==='\u300C')return;
+    nar++;
+    if(_CLS_FIRST.test(t))fp++;
+    if(_CLS_POLITE.test(t))po++;
+  });
+  var r=nar?fp/nar:0, rp=nar?po/nar:0;
+  _clsProfile={narration:nar,fpRatio:r,politeRatio:rp,firstPerson:(r>=0.05||rp>=0.5)};
+  return _clsProfile;
+}
+function _classifyBlock(it,next){
+  var t=String(it.text||'').trim();
+  if(!t)return null;
+  if(it.type==='chapter_break'||it.type==='section_break'||it.type==='pageBreak')return null;
+  // 既にセリフとして話者が決まっているものは動かさない
+  if(it.type==='dialogue'&&it.characterId)return {kind:'talk',conf:.95,why:'話者つきのセリフ'};
+  if(it.type==='dialogue')return {kind:'talk',conf:.55,why:'セリフだが話者が未設定'};
+  // 以下は地の文
+  if(t.charAt(0)==='\u300C'||t.charAt(0)==='\u300E')
+    return {kind:'talk',conf:.5,why:'かぎ括弧で始まる=誰かの発話だが話者が不明'};
+  if(_CLS_DOCHEAD.test(t.slice(0,40))||_CLS_DIARY.test(t))
+    return {kind:'plain',conf:.9,why:'手紙・日記などの引用文書'};
+  if(it.characterId&&it.characterId!=='narrator')
+    return {kind:'mono',conf:.95,why:'すでに語り手が設定されている'};
+  var fp=_CLS_FIRST.test(t), po=_CLS_POLITE.test(t);
+  if(fp&&po)return {kind:'mono',conf:.9,why:'一人称＋です・ます調'};
+  if(fp)return {kind:'mono',conf:.85,why:'一人称が使われている'};
+  var prof=_clsProfile||_clsWorkProfile();
+  if(prof.firstPerson){
+    // 一人称小説では地の文そのものが主人公の語り。客観的な解説の方が例外。
+    // ただし作品が敬体中心なのにこの行だけ常体なら、語りから外れた客観描写の疑いがある
+    if(po)return {kind:'mono',conf:.85,why:'一人称小説の地の文(敬体)'};
+    if(prof.politeRatio>=0.5&&/(だった|である|であった|だ|た)[。！？…]?$/.test(t))
+      return {kind:'plain',conf:.6,why:'作品は敬体なのにこの行だけ常体=客観描写かも'};
+    return {kind:'mono',conf:.8,why:'一人称小説なので地の文は主人公の語り'};
+  }
+  if(po)return {kind:'mono',conf:.62,why:'です・ます調(読者への語りかけ)'};
+  return {kind:'plain',conf:.75,why:'一人称も敬体もない客観的な記述'};
+}
+var _CLS_LABEL={plain:'地の文',mono:'独白',talk:'会話'};
+function _clsApply(it,kind,heroId){
+  if(kind==='talk'){ it.type='dialogue'; }
+  else if(kind==='mono'){ it.type='narration'; it.characterId=heroId||null; }
+  else { it.type='narration'; it.characterId=null; }
+}
+function openClassifyReview(){
+  if(!state.isAuthorMode){alert('作者モードで開いてください');return;}
+  var LOW=0.8, PAGE=40, page=0, onlyLow=true;
+  _clsWorkProfile();
+  var heroId=null;
+  var rows=[];
+  state.content.forEach(function(it,i){
+    var r=_classifyBlock(it,state.content[i+1]);
+    if(r)rows.push({i:i,id:it.id,r:r,kind:r.kind});
+  });
+  var cs=(state.characters||[]).filter(function(c){return c.id!=='narrator'&&c.name;});
+  heroId=(cs.filter(function(c){return /吾輩|我輩|主人公|私/.test(c.name);})[0]||cs[0]||{}).id||null;
+  var old=document.getElementById('cls-modal'); if(old)old.remove();
+  var m=document.createElement('div'); m.id='cls-modal';
+  m.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:var(--bg-primary,#fff);color:var(--text-primary,#222);border-radius:12px;max-width:900px;width:94%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
+   +'<div style="padding:14px 18px;border-bottom:1px solid rgba(0,0,0,.1)">'
+   +'<b style="font-size:15px">\u{1F50E} 地の文・独白・会話の確認</b>'
+   +'<div id="cls-sum" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>'
+   +'<div style="margin-top:8px;font-size:13px">語り手: <select id="cls-hero"></select>'
+   +' <label style="margin-left:12px"><input type="checkbox" id="cls-low" checked> 確認が必要なものだけ表示</label>'
+   +' <button id="cls-close" style="float:right;padding:4px 10px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer">閉じる</button></div></div>'
+   +'<div id="cls-list" style="flex:1;overflow:auto;padding:10px 18px;font-size:13px"></div>'
+   +'<div style="padding:12px 18px;border-top:1px solid rgba(0,0,0,.1);display:flex;gap:10px;align-items:center">'
+   +'<button id="cls-prev" style="padding:6px 12px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer">前へ</button>'
+   +'<span id="cls-page" style="font-size:12px"></span>'
+   +'<button id="cls-next" style="padding:6px 12px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer">次へ</button>'
+   +'<span style="flex:1"></span>'
+   +'<button id="cls-apply" style="padding:8px 18px;border-radius:6px;border:1px solid #8B5CF6;background:#8B5CF6;color:#fff;cursor:pointer">この判定で反映する</button></div></div>';
+  document.body.appendChild(m);
+  var sel=m.querySelector('#cls-hero');
+  sel.innerHTML=cs.map(function(c){return '<option value="'+c.id+'"'+(c.id===heroId?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')
+    ||'<option value="">(登場人物なし)</option>';
+  sel.onchange=function(){heroId=sel.value;};
+  m.querySelector('#cls-close').onclick=function(){m.remove();};
+  m.querySelector('#cls-low').onchange=function(e){onlyLow=e.target.checked;page=0;draw();};
+  m.querySelector('#cls-prev').onclick=function(){if(page>0){page--;draw();}};
+  m.querySelector('#cls-next').onclick=function(){page++;draw();};
+  m.querySelector('#cls-apply').onclick=function(){
+    var n=0;
+    rows.forEach(function(x){ _clsApply(state.content[x.i],x.kind,heroId); n++; });
+    m.remove();
+    try{render();}catch(e){}
+    alert(n+'件に反映しました。\n内容を確認して「\u{1F4E2} 上書き公開」で保存してください。');
+  };
+  function view(){ return onlyLow?rows.filter(function(x){return x.r.conf<LOW;}):rows; }
+  function draw(){
+    var v=view(), tot=Math.max(1,Math.ceil(v.length/PAGE));
+    if(page>=tot)page=tot-1;
+    var c={plain:0,mono:0,talk:0}; rows.forEach(function(x){c[x.kind]++;});
+    m.querySelector('#cls-sum').textContent='全'+rows.length+'件 — 地の文'+c.plain+' / 独白'+c.mono+' / 会話'+c.talk
+      +'　確認が必要: '+rows.filter(function(x){return x.r.conf<LOW;}).length+'件';
+    m.querySelector('#cls-page').textContent=(v.length?(page*PAGE+1):0)+'–'+Math.min((page+1)*PAGE,v.length)+' / '+v.length;
+    var h=v.slice(page*PAGE,(page+1)*PAGE).map(function(x){
+      var btns=['plain','mono','talk'].map(function(k){
+        var on=(x.kind===k);
+        return '<button data-id="'+x.id+'" data-k="'+k+'" style="padding:3px 10px;margin-right:4px;border-radius:14px;font-size:12px;cursor:pointer;'
+          +(on?'border:1px solid #8B5CF6;background:#8B5CF6;color:#fff':'border:1px solid #ccc;background:#fff;color:#444')+'">'+_CLS_LABEL[k]+'</button>';
+      }).join('');
+      return '<div style="padding:8px 0;border-bottom:1px dashed rgba(0,0,0,.12)">'
+        +'<div style="margin-bottom:4px">'+btns
+        +'<span style="font-size:11px;color:var(--text-muted);margin-left:8px">'+(x.r.conf<LOW?'\u26A0 ':'')+esc(x.r.why)+'</span></div>'
+        +'<div style="color:var(--text-secondary)">'+esc(String(state.content[x.i].text||'').slice(0,110))+'</div></div>';
+    }).join('')||'<div style="padding:20px;color:var(--text-muted)">確認が必要なものはありません</div>';
+    m.querySelector('#cls-list').innerHTML=h;
+    Array.prototype.forEach.call(m.querySelectorAll('#cls-list button'),function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-id'),k=b.getAttribute('data-k');
+        rows.forEach(function(x){if(x.id===id)x.kind=k;});
+        draw();
+      };
+    });
+  }
+  draw();
+}
+function getPC(){_computeSideMap();_computeMonoMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
 function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render();_saveProgress()}}
 function _saveProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var tp=getTP();var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');all[_workParam]={page:state.currentPage,total:tp,at:Date.now()};localStorage.setItem('aninovel_progress',JSON.stringify(all));}catch(e){}}
@@ -3905,7 +4064,7 @@ function hv(){return' onmouseenter="var a=this.querySelector(\'.author-actions\'
 function editAttr(item){if(!state.isAuthorMode)return'';var a=_acts.length;var cp=JSON.parse(JSON.stringify(item));_acts.push(function(){openEditModal('content',cp)});return' onclick="act('+a+')"'}
 function insertRow(pos){if(!state.isAuthorMode)return'';var a=_acts.length;_acts.push(function(){insertAt('narration',pos)});_acts.push(function(){insertAt('dialogue',pos)});_acts.push(function(){insertAt('image',pos)});_acts.push(function(){insertAt('video',pos)});return'<div class="insert-area" data-droppos="'+pos+'"><div class="insert-row"><button class="ibtn" onclick="act('+a+')">＋ ナレーション</button><button class="ibtn" onclick="act('+(a+1)+')">＋ セリフ</button><button class="ibtn" onclick="act('+(a+2)+')">＋ 画像</button><button class="ibtn" onclick="act('+(a+3)+')">＋ 動画</button></div></div>'}
 
-function renderDialogue(item,index){var _isTTSItem=state.tts&&state.tts.active&&state.tts.currentItemId===item.id;var _rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[item.characterId];var ch=state.characters.find(function(c){return c.id===item.characterId});if(!ch){ch={id:item.characterId||'_noChar',name:'⚠ キャラ未設定（クリックで修正）',shortName:'?',bubbleColor:'#FEF3C7',iconColor:'#F59E0B',gender:'male'};}var ds=state.displaySettings,fs=ds.fontSize,lh=_lh(ds.lineHeight),is=ds.iconSize,ft=_font(ds.font),or=ds.orientation;var txt=_dispRuby(item,state.searchQuery);var _spIdx=state.characters.filter(function(c){return c.id!=='narrator'}).findIndex(function(c){return c.id===item.characterId});var isL=_sideMap[item.id]==='right'?false:(_sideMap[item.id]==='left'?true:(_spIdx%2===0));var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';var _ttsCls=_isTTSItem?' tts-highlight':'';if(or==='vertical'){return'<div class="v-bubble-wrap citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(item.characterId,is)+'</div><div class="bubble char-bubble v-bubble-body" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div>'}return'<div class="citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:10pt;margin-bottom:4px;position:relative;'+(isL?'':'flex-direction:row-reverse')+'">'+aBtn(item.id)+dh+rIcon(item.characterId,is)+'<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;'+(isL?'':'text-align:right')+'">'+esc(_cname(ch))+'</div><div class="bubble char-bubble '+(isL?'bubble-left':'bubble-right')+'" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';border-color:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';max-width:none;width:100%;box-sizing:border-box"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div></div>'}
+function renderDialogue(item,index){var _isTTSItem=state.tts&&state.tts.active&&state.tts.currentItemId===item.id;var _rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[item.characterId];var ch=state.characters.find(function(c){return c.id===item.characterId});if(!ch){ch={id:item.characterId||'_noChar',name:'⚠ キャラ未設定（クリックで修正）',shortName:'?',bubbleColor:'#FEF3C7',iconColor:'#F59E0B',gender:'male'};}var ds=state.displaySettings,fs=ds.fontSize,lh=_lh(ds.lineHeight),is=ds.iconSize,ft=_font(ds.font),or=ds.orientation;var txt=_dispRuby(item,state.searchQuery);var _spIdx=state.characters.filter(function(c){return c.id!=='narrator'}).findIndex(function(c){return c.id===item.characterId});var isL=_sideMap[item.id]==='right'?false:(_sideMap[item.id]==='left'?true:(_spIdx%2===0));var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';var _ttsCls=_isTTSItem?' tts-highlight':'';if(or==='vertical'){return'<div class="v-bubble-wrap citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(item.characterId,is)+'</div><div class="bubble char-bubble v-bubble-body" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div>'}return'<div class="citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:10pt;margin-bottom:4px;position:relative;'+(isL?'':'flex-direction:row-reverse')+'">'+aBtn(item.id)+dh+rIcon(item.characterId,is)+'<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;'+(isL?'':'text-align:right')+'">'+esc(_cname(ch))+'</div><div class="bubble char-bubble '+(_monoMap[item.id]?'bubble-mono':(isL?'bubble-left':'bubble-right'))+'" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';border-color:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';max-width:none;width:100%;box-sizing:border-box"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div></div>'}
 function renderImageBlock(item){
   var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';
   var url=item.url||'';
@@ -4117,11 +4276,11 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=_l
   // 吹き出しで描くときは名前を出す(ナレーターも)。素の地の文のときは出さない。
   var _lbl=(_ch&&(_cid||ns==='bubble'))?('<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px'+(_cid&&_sideMap[item.id]==='right'?';text-align:right':'')+'">'+esc(_cname(_ch))+'</div>'):'';
   var _revN=(_cid&&_sideMap[item.id]==='right')?'flex-direction:row-reverse;':'';
-  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative;'+_revN+'">'+aBtn(item.id)+dh+rIcon(_who,is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble':'')+'" style="background:'+_bg+';max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
+  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble bubble-mono':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative;'+_revN+'">'+aBtn(item.id)+dh+rIcon(_who,is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble bubble-mono':'')+'" style="background:'+_bg+';max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
 
 function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div>'+_langToggle()+'<button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
-function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var _mayAuthor=!_portalMode||(_workParam&&_workParam.indexOf("my_")===0)||_isOwner();var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf("my_")===0){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_isOwner()){h+='<button onclick="publishMyWork()" class="btn" style="background:#0E7490;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="オーナー権限で既存作品（デモ等）を上書き公開">📢 上書き公開</button>';}h+='<button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span><button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
+function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var _mayAuthor=!_portalMode||(_workParam&&_workParam.indexOf("my_")===0)||_isOwner();var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf("my_")===0){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_isOwner()){h+='<button onclick="publishMyWork()" class="btn" style="background:#0E7490;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="オーナー権限で既存作品（デモ等）を上書き公開">📢 上書き公開</button>';}h+='<button onclick="openClassifyReview()" class="btn" style="background:#8B5CF6;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="地の文・独白・会話を自動判定し、確信の持てないものだけ確認します">🔎 文の種別</button><button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button><button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="登場人物">👥</button><button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span><button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar
     h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border)"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(_cname(ch))+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';h+='<div class="page-footer"><button onclick="jP('+(state.currentPage-1)+')"'+(state.currentPage===0?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage===0?'opacity:.4;cursor:default':'')+'">← 前</button><div style="display:flex;align-items:center;gap:12px"><span style="font-size:13px;color:var(--text-secondary)"><strong>'+(state.currentPage+1)+'</strong> / '+tp+'</span><input type="number" min="1" max="'+tp+'" value="'+(state.currentPage+1)+'" onchange="jP(parseInt(this.value)-1)" style="width:56px;text-align:center;padding:4px;font-size:13px">'+(state.isAuthorMode?'<span style="font-size:11px;color:var(--text-muted)">💾 '+state.lastSaved+'</span>':'<button onclick="if(window.AninovelShare)AninovelShare.openMenu({title:_ntitle()||\'アニノベル\',url:location.href,text:(state.lang===\'en\'?(\'Reading \\u201c\'+_ntitle()+\'\\u201d\'):(\'「\'+_ntitle()+\'」を読んでいます\'))})" class="btn-icon" title="シェア" style="font-size:14px;color:var(--text-muted);background:transparent;border:none;cursor:pointer">📤</button>'+'')+'</div><button onclick="jP('+(state.currentPage+1)+')"'+(state.currentPage>=tp-1?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage>=tp-1?'opacity:.4;cursor:default':'')+'">次 →</button></div>';if(state.settingsOpen)h+=renderSettings();if(state.tocOpen)h+=renderTOC();if(state.bookmarkListOpen)h+=renderBM();h+='</div>';return h}
 
