@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v100_classify_review';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v101_metaai_vocab';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3120,14 +3120,17 @@ function _loadGalleryManifest(){
 function _guessAge(name){
   var n=name||'';
   if(/(赤ん坊|赤ちゃん|乳児)/.test(n))return 'Baby';
-  if(/(老人|老婆|老爺|翁|媼|婆|爺|おじいさん|おばあさん|じいさん|ばあさん)/.test(n))return 'Senior';
-  if(/(先生|博士|父|母|夫人|おじ|おば|おじさん|おばさん|旦那|女将|主人|店主|校長|教授|大人|紳士|婦人)/.test(n))return 'MiddleAge';
-  if(/(少年|少女|坊|嬢|娘|息子|子供|こども|生徒|学生|童)/.test(n))return 'Teen';
-  if(/(ちゃん|くん)$/.test(n))return 'Child';
-  return 'YoungAdult';
+  if(/(幼児|幼子|園児)/.test(n))return 'Infant';
+  if(/(老人|老婆|老爺|翁|媼|婆|爺|おじいさん|おばあさん|じいさん|ばあさん)/.test(n))return '70s-';
+  if(/(先生|博士|父|母|夫人|おじ|おば|おじさん|おばさん|旦那|女将|主人|店主|校長|教授|大人|紳士|婦人)/.test(n))return '40-60s';
+  if(/(小学生|園児)/.test(n))return 'ESchool';
+  if(/(中学生|高校生|少年|少女|生徒|学生)/.test(n))return 'MSchool';
+  if(/(坊|嬢|娘|息子|子供|こども|童)/.test(n))return 'ESchool';
+  if(/(ちゃん|くん)$/.test(n))return 'ESchool';
+  return '20-30s';
 }
 function _ageNeighbors(age){
-  var order=['Baby','Child','Teen','YoungAdult','Adult','MiddleAge','Senior'];
+  var order=['Baby','Infant','ESchool','MSchool','20-30s','40-60s','70s-'];
   var i=order.indexOf(age);if(i<0)i=3;
   var res=[age];
   for(var d=1;d<order.length;d++){
@@ -3145,8 +3148,8 @@ function _nameHash(s){
 function _pickIconGroup(gender,age,usedGroups,seedName){
   var g=_galleryManifest||[];
   var G=gender==='female'?'Female':'Male';
-  var races=['Japanese','Asian','White','Hispanic','MiddleEastern','SouthAsian','Black'];
-  var types=['Anime','AnimeGen','Pastel','Watercolor','Painterly','RetroMangaGen','RetroManga','PhotoGen','Photo'];
+  var races=['Japanese','White','Black','India','Latin','Arab','Micronesia'];
+  var types=['Anime','Manga','Photo'];
   var ages=_ageNeighbors(age);
   var seed=_nameHash(seedName);
   // まず「まだ誰も使っていないグループ」だけを探す。年齢近傍→race→type の順に緩める。
@@ -3216,7 +3219,7 @@ function _autoAssignIcons(){
     chars.forEach(function(c){
       var isNar=(c.id==='narrator');
       var gender=isNar?_authorGender():((c.gender==='female')?'female':'male');
-      var age=isNar?'MiddleAge':_guessAge(c.name);
+      var age=isNar?'40-60s':_guessAge(c.name);
       var grp=_pickIconGroup(gender,age,usedGroups,c.name||c.id);
       if(!grp||!grp.items||!grp.items.length)return;
       usedGroups.push(grp.id);
@@ -4321,12 +4324,12 @@ function renderGallery(){
     h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください（画風 → 民族 → 年齢）</p>';
     h+='<div style="max-height:60vh;overflow-y:auto;padding-right:4px">';
     // 画風(type)→民族(race)→年齢(age) の階層グルーピング
-    var _typeIcon={'Anime':'🎨','AnimeGen':'🎨','Photo':'📷','PhotoGen':'📸','RetroManga':'📚','RetroMangaGen':'📚','Painterly':'🖌️','Watercolor':'💧','Pastel':'🖍️'};
-    var _typeJa={'Anime':'アニメ(精選)','AnimeGen':'アニメ(生成)','Photo':'写真(精選)','PhotoGen':'写真(生成)','RetroManga':'レトロ漫画(精選)','RetroMangaGen':'レトロ漫画(生成)','Painterly':'絵画調','Watercolor':'水彩','Pastel':'パステル'};
-    var _typeOrder=['Anime','AnimeGen','Photo','PhotoGen','RetroManga','RetroMangaGen','Painterly','Watercolor','Pastel'];
-    var _raceJa={'Japanese':'日本','White':'欧米','Asian':'アジア','MiddleEastern':'中東','Hispanic':'ヒスパニック','Black':'黒人','SouthAsian':'南アジア'};
-    var _ageJa={'Baby':'赤ちゃん','Child':'子供','Teen':'10代','YoungAdult':'青年','Adult':'成人','MiddleAge':'中年','Senior':'高齢'};
-    var _ageOrder=['Baby','Child','Teen','YoungAdult','Adult','MiddleAge','Senior'];
+    var _typeIcon={'Anime':'🎨','Manga':'📚','Photo':'📷'};
+    var _typeJa={'Anime':'アニメ','Manga':'漫画','Photo':'写真'};
+    var _typeOrder=['Anime','Manga','Photo'];
+    var _raceJa={'Japanese':'日本','White':'欧米','Black':'アフリカ系','India':'インド','Latin':'ラテン','Arab':'中東','Micronesia':'ミクロネシア','Etc':'その他'};
+    var _ageJa={'Baby':'赤ちゃん','Infant':'幼児','ESchool':'小学生','MSchool':'中高生','20-30s':'20〜30代','40-60s':'40〜60代','70s-':'高齢者','Adult':'その他'};
+    var _ageOrder=['Baby','Infant','ESchool','MSchool','20-30s','40-60s','70s-','Adult'];
     // type でグループ化
     var _byType={};
     man.groups.forEach(function(grp){var t=grp.type||grp.style||'Other';if(!_byType[t])_byType[t]=[];_byType[t].push(grp);});
@@ -4763,11 +4766,11 @@ var I18N_DICT={'中性':'Neutral','保存完了':'Saved','内容を保存しま�
   '顔未検出':'No face','全クロップで顔未検出':'No face detected',
   'アニメ(精選)':'Anime (Curated)','アニメ(生成)':'Anime (Generated)',
   '写真(精選)':'Photo (Curated)','写真(生成)':'Photo (Generated)',
-  'レトロ漫画(精選)':'Retro Manga (Curated)','レトロ漫画(生成)':'Retro Manga (Generated)',
+  'アニメ':'Anime','漫画':'Manga','写真':'Photo',
   '絵画調':'Painterly','水彩':'Watercolor','パステル':'Pastel',
   '男性':'Male','女性':'Female','性別':'Gender',
-  '赤ちゃん':'Baby','子供':'Child','10代':'Teen','青年':'Young Adult','成人':'Adult','中年':'Middle-aged','高齢':'Senior',
-  '日本':'Japanese','欧米':'Western','アジア':'Asian','中東':'Middle Eastern','南アジア':'South Asian','ヒスパニック':'Hispanic','黒人':'Black',
+  '赤ちゃん':'Baby','幼児':'Infant','小学生':'Elementary school','中高生':'Middle/High school','20〜30代':'20s-30s','40〜60代':'40s-60s','高齢者':'Senior',
+  '日本':'Japanese','欧米':'Western','アフリカ系':'Black','インド':'Indian','ラテン':'Latin','中東':'Middle Eastern','ミクロネシア':'Micronesian','その他':'Other',
   // --- しおり / プロファイル ---
   '📚 しおり一覧':'📚 Bookmarks','しおりがありません':'No bookmarks yet','しおりを追加しました':'Bookmark added',
   '新規プロファイル':'New profile','使用中のプロファイル':'Active profile','このプロファイルを削除':'Delete this profile',
