@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v101_metaai_vocab';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v102_pages_header';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -106,7 +106,10 @@ ruby{ruby-align:center}
 .citem{position:relative;transition:opacity .15s;overflow:visible}.citem[onclick]{cursor:pointer}.citem.dragging{opacity:.3}
 .citem .drag-handle{position:absolute;left:2px;top:2px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:grab;color:var(--text-muted);font-size:12px;opacity:0;transition:opacity .15s;border-radius:6px;background:var(--panel-bg);border:1px solid var(--border);z-index:10;box-shadow:0 1px 4px var(--shadow)}
 .citem .drag-handle:hover{background:var(--accent-author);color:#fff;border-color:var(--accent-author)}.citem:hover .drag-handle{opacity:1}.citem .drag-handle:active{cursor:grabbing}
-.panel-slide{position:fixed;top:0;right:-400px;width:380px;height:100%;background:var(--panel-bg);box-shadow:-4px 0 24px var(--shadow-strong);transition:right .35s cubic-bezier(.4,0,.2,1);z-index:40;overflow-y:auto}.panel-slide.open{right:0}
+.panel-slide{position:fixed;top:0;right:-400px;width:380px;height:100%;background:var(--panel-bg);box-shadow:-4px 0 24px var(--shadow-strong);transition:right .35s cubic-bezier(.4,0,.2,1);z-index:40;display:flex;flex-direction:column;overflow:hidden}
+/* ヘッダ(閉じるボタン)は常に見える位置に固定し、中身だけスクロールさせる */
+.panel-slide>div:first-child{flex:0 0 auto}
+.panel-slide>div:nth-child(2){flex:1 1 auto;overflow-y:auto}.panel-slide.open{right:0}
 .modal-overlay{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;z-index:50;animation:fadeIn .2s ease-out}
 .modal-content{background:var(--panel-bg);border-radius:16px;padding:28px;max-width:640px;width:95%;max-height:90vh;overflow-y:auto;animation:scaleIn .25s ease-out;box-shadow:0 24px 64px var(--shadow-strong)}
 .btn{padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:none;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
@@ -433,8 +436,37 @@ function openClassifyReview(){
   }
   draw();
 }
-function getPC(){_computeSideMap();_computeMonoMap();var a=state.content.slice().sort(function(x,y){return x.order-y.order});var br=[-1];a.forEach(function(i){if(i.type==='pageBreak')br.push(i.order)});br.push(Infinity);var s=br[state.currentPage]+1,e=br[state.currentPage+1];return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'})}
-function getTP(){return state.content.filter(function(c){return c.type==='pageBreak'}).length+1}
+// 1ページに詰め込む本文の目安(文字数)。これを超えたら次のブロック境界で改ページする。
+var PAGE_CHARS=1800;
+// ページの切れ目を求める。明示の pageBreak に加えて、
+//   ・章/節の見出しの直前で必ず改ページ(章立てを無視していた)
+//   ・長い作品は PAGE_CHARS ごとに自動で改ページ
+// 見出しがページ末尾に取り残されないよう、見出しは次ページの先頭に置く。
+function _pageBreaks(a){
+  var br=[-1],chars=0,started=false;
+  for(var i=0;i<a.length;i++){
+    var it=a[i];
+    if(it.type==='pageBreak'){br.push(it.order);chars=0;started=false;continue;}
+    var isHead=(it.type==='chapter_break'||it.type==='section_break');
+    if(isHead&&started){br.push(it.order-0.5);chars=0;}       // 見出しの前で切る
+    else if(!isHead&&started&&chars>=PAGE_CHARS){br.push(it.order-0.5);chars=0;}
+    chars+=((it.text||'').length);
+    started=true;
+  }
+  br.push(Infinity);
+  return br;
+}
+function getPC(){
+  _computeSideMap();_computeMonoMap();
+  var a=state.content.slice().sort(function(x,y){return x.order-y.order});
+  var br=_pageBreaks(a);
+  var s=br[state.currentPage]+ (br[state.currentPage]%1?0.5:1), e=br[state.currentPage+1];
+  return a.filter(function(c){return c.order>=s&&c.order<e&&c.type!=='pageBreak'});
+}
+function getTP(){
+  var a=state.content.slice().sort(function(x,y){return x.order-y.order});
+  return Math.max(1,_pageBreaks(a).length-1);
+}
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render();_saveProgress()}}
 function _saveProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var tp=getTP();var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');all[_workParam]={page:state.currentPage,total:tp,at:Date.now()};localStorage.setItem('aninovel_progress',JSON.stringify(all));}catch(e){}}
 function _restoreProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');var p=all[_workParam];if(p&&typeof p.page==='number'){var tp=getTP();state.currentPage=Math.max(0,Math.min(p.page,(tp>0?tp-1:0)));}}catch(e){}}
@@ -3302,6 +3334,16 @@ function _resolveExistingChar(nm){
     c=cs.find(function(x){var b2=String(x.name).replace(_HONOR,'');
       return b2.length>=2&&base.length>b2.length&&base.length-b2.length<=2&&base.slice(-b2.length)===b2;});
     if(c)return c;
+  }
+  // 「彼の友は…」の「友」のように、地の文の主語が一文字に切り出されることがある。
+  // 従来は一律に捨てていたため、その台詞が交互発話の勘定で別人(主人など)に流れていた。
+  // 候補が一人に絞れるときだけ採用する(「三」→三平君/三毛子 のように複数なら見送る)。
+  if(base.length===1&&/[\u4E00-\u9FFF]/.test(base)){
+    var hit=cs.filter(function(x){
+      var b2=String(x.name).replace(_HONOR,'');
+      return b2.length>=2&&b2.charAt(0)===base;
+    });
+    if(hit.length===1)return hit[0];
   }
   return null;
 }
