@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v107_tts_ruby';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v108_yomi_priority';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4253,6 +4253,7 @@ function _rubyMarks(raw,rb){
 var TTS_YOMI = [
   // 数詞・助数詞
   ['一疋','いっぴき'],['二疋','にひき'],['三疋','さんびき'],['数疋','すうひき'],
+
   ['一匹','いっぴき'],['二匹','にひき'],
   ['拾円','じゅうえん'],['一寸','ちょっと'],
   // 動詞まわり
@@ -4291,9 +4292,42 @@ function _applyYomiDict(s){
 // 読み上げ用: ルビのある箇所を読み(かな)に置き換える。
 // 「怪しからん」→「けしからん」、「居やがらん」→「いやがらん」のように、
 // 音声合成が漢字を誤読するのを防ぐ。ルビが無ければ原文のまま。
+// 読み辞書の語が本文のどこに現れるかを求める(長い語を優先)
+function _yomiSpans(raw){
+  var spans=[],used=[];
+  var dict=TTS_YOMI.slice().sort(function(a,b){return b[0].length-a[0].length;});
+  for(var d=0;d<dict.length;d++){
+    var key=dict[d][0],from=0,at;
+    while((at=raw.indexOf(key,from))>=0){
+      var ng=false;
+      for(var u=0;u<used.length;u++){if(at<used[u][1]&&at+key.length>used[u][0]){ng=true;break;}}
+      if(!ng){used.push([at,at+key.length]);spans.push({i:at,l:key.length,r:dict[d][1]});}
+      from=at+key.length;
+    }
+  }
+  return spans.sort(function(a,b){return a.i-b.i;});
+}
 function _ttsJaText(item){
   var raw=(item&&item.text)||'';
   var marks=_rubyMarks(raw,item&&item.ruby);
+  // ルビが辞書の語の**一部だけ**を覆っている場合は辞書を優先する。
+  // 例:「一疋」に対しルビが「疋→ぴき」だけだと「一ぴき」になってしまうが、
+  // 辞書には「一疋→いっぴき」があるのでそちらを使う。
+  var ysp=_yomiSpans(raw);
+  if(marks.length&&ysp.length){
+    marks=marks.filter(function(m){
+      for(var i=0;i<ysp.length;i++){
+        var y=ysp[i];
+        // ルビが辞書語の**先頭から**始まっているなら、ルビの方が具体的とみなして尊重する。
+        // 見送るのは「一疋」に対する「疋」のように**語の途中だけ**を覆っている場合。
+        if(m.i>y.i&&m.i+m.l<=y.i+y.l&&(m.l<y.l)){
+          console.debug('[TTS] 辞書を優先: '+raw.substr(y.i,y.l)+'→'+y.r+' (ルビ '+raw.substr(m.i,m.l)+'→'+m.r+' を見送り)');
+          return false;
+        }
+      }
+      return true;
+    });
+  }
   if(!marks.length)return _applyYomiDict(raw);
   var out='',pos=0;
   for(var k=0;k<marks.length;k++){
