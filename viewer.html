@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v103_search_pages';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v104_tts_rate_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -470,7 +470,23 @@ function getTP(){
 function jP(n){var t=getTP();if(n>=0&&n<t&&n!==state.currentPage){state.currentPage=n;render();_saveProgress()}}
 function _saveProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var tp=getTP();var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');all[_workParam]={page:state.currentPage,total:tp,at:Date.now()};localStorage.setItem('aninovel_progress',JSON.stringify(all));}catch(e){}}
 function _restoreProgress(){try{if(typeof _workParam==='undefined'||!_workParam||state.isAuthorMode)return;var all=JSON.parse(localStorage.getItem('aninovel_progress')||'{}');var p=all[_workParam];if(p&&typeof p.page==='number'){var tp=getTP();state.currentPage=Math.max(0,Math.min(p.page,(tp>0?tp-1:0)));}}catch(e){}}
-function scrollToItem(id){if(!id)return;requestAnimationFrame(function(){var el=document.querySelector('[data-cid="'+id+'"]');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})})}
+function scrollToItem(id,opt){
+  if(!id)return;
+  requestAnimationFrame(function(){
+    var el=document.querySelector('[data-cid="'+id+'"]');
+    if(!el)return;
+    // 読み上げ中は「いま喋っている行」を画面の上寄りに置く。
+    // block:'center' だと長い台詞では中央に飛び、読んでいる箇所が画面外に出てしまう。
+    var block=(opt&&opt.top)?'start':'center';
+    try{el.scrollIntoView({behavior:'smooth',block:block,inline:'nearest'});}
+    catch(e){el.scrollIntoView(true);}
+    if(opt&&opt.top){
+      // 少し余白を残して、直前の行も見えるようにする
+      var pa=document.getElementById('pageArea');
+      if(pa&&pa.scrollBy)setTimeout(function(){try{pa.scrollBy({top:-60,behavior:'smooth'});}catch(e){}},260);
+    }
+  });
+}
 function saveData(silent){try{
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   var payload={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
@@ -2349,6 +2365,11 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
     stop:function(){if(settled)return;settled=true;cleanup();},
     pause:function(){try{audio.pause();}catch(e){}},
     resume:function(){try{audio.play();}catch(e){}},
+    // 再生中にスライダーを動かしたとき、その場で速さを変えられるようにする
+    setRate:function(r){
+      rate=Math.max(0.5,Math.min(2.5,r||1.3));
+      try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
+    },
   };
 }
 // ===== VOICEVOX ローカル生成 (投稿作品/マイ作品用) =====
@@ -2648,6 +2669,9 @@ function _speakItem(item,onEnd){
   _stopAllSpeech();
   var ch=state.characters.find(function(c){return c.id===(item.characterId||'narrator')});
   state.tts.currentItemId=item.id;
+  // いま読み上げている行を画面の上寄りに送る(カラオケのように追従させる)。
+  // 中央に合わせると長い台詞では読んでいる箇所が画面外へ出てしまう。
+  try{scrollToItem(item.id,{top:true});}catch(e){}
   // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
   state.tts.currentCharId=null;
   // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
@@ -2983,10 +3007,14 @@ function setTTSRate(v){
   state.tts.rate=parseFloat(v);
   var disp=document.getElementById('tts-rate-disp');
   if(disp)disp.textContent=state.tts.rate.toFixed(1)+'x';
-  // クラウドTTS再生中: playbackRate だけ更新して継続再生
-  if(_cloudAudioCtrl&&state.tts.active&&!state.tts.paused){
-    _cloudAudioCtrl.setRate(state.tts.rate);
-    return;
+  // 再生中なら、止めずにその場で速さだけ変える。
+  // 事前生成音声(_preAudioCtrl)を見ていなかったため、VOICEVOXで作った作品では
+  // スライダーを動かしても何も起きなかった。
+  if(state.tts.active&&!state.tts.paused){
+    var changed=false;
+    if(_preAudioCtrl&&typeof _preAudioCtrl.setRate==='function'){_preAudioCtrl.setRate(state.tts.rate);changed=true;}
+    if(_cloudAudioCtrl&&typeof _cloudAudioCtrl.setRate==='function'){_cloudAudioCtrl.setRate(state.tts.rate);changed=true;}
+    if(changed)return;
   }
   if(_ttsUtterance&&state.tts.active&&!state.tts.paused){
     var cur=state.tts.currentItemId;
