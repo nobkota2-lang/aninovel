@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v104_tts_rate_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v105_karaoke';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -81,6 +81,9 @@ ruby{ruby-align:center}
 .progress-bar{height:3px;background:var(--progress-bg);overflow:hidden}.progress-fill{height:100%;background:var(--progress-fill);transition:width .5s cubic-bezier(.4,0,.2,1)}
 .bubble{position:relative;border-radius:16px;padding:14px 18px;box-shadow:0 2px 8px var(--shadow);max-width:480px;transition:transform .2s,box-shadow .2s}.bubble.char-bubble,.bubble.char-bubble *{color:#1F2937 !important}.bubble:hover{transform:translateY(-1px);box-shadow:0 4px 16px var(--shadow-strong)}
 .bubble.bubble-mono{border:2px dashed var(--text-muted);box-shadow:none}
+/* 読み上げ中の文をカラオケのように光らせる */
+.ts{transition:background-color .18s ease}
+.ts-on{background:rgba(250,204,21,.38);border-radius:4px;box-shadow:0 0 0 2px rgba(250,204,21,.38)}
 .bubble.bubble-mono::before,.bubble.bubble-mono::after{display:none !important}
 .bubble-left::before{content:'';position:absolute;left:-8px;top:16px;border:8px solid transparent;border-right-color:inherit;border-left:0}
 .bubble-right::after{content:'';position:absolute;right:-8px;top:16px;border:8px solid transparent;border-left-color:inherit;border-right:0}
@@ -184,7 +187,7 @@ imageGalleryOpen:false,galleryTab:'photo',galleryGroup:null,galleryPage:0,galler
 searchOpen:false,searchQuery:'',searchResults:[],searchCurrentIdx:-1,
 metaEditOpen:false,fullscreen:false,darkMode:false,dupModalOpen:false,
 editingItem:null,currentPage:0,bookmarks:[],lastSaved:'未保存',draggedItem:null,readerCustom:null,readerCustomOpen:false,readerCustomCharId:null,
-tts:{active:false,paused:false,rate:1.3,currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
+tts:{active:false,paused:false,rate:1.3,karaoke:(function(){try{var v=localStorage.getItem('aninovel_tts_karaoke');return v===null?true:v==='1';}catch(e){return true;}})(),currentItemId:null,currentCharId:null,voices:[],voicePickerOpen:false},
 _scrollToId:null,
 novel:{title:'夏の日の冒険',author:'山田太郎'},
 displaySettings:{fontSize:18,lineHeight:2.0,iconSize:56,font:"'Shippori Mincho', serif",fontEn:"Georgia, 'Times New Roman', serif",orientation:'horizontal',narratorStyle:'bubble'},
@@ -2306,12 +2309,13 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
   var settled=false,started=false;
   function isStale(){return session!==_speakSessionId;}
-  function cleanup(){try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
+  function cleanup(){try{_karaStop();}catch(e){}try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
   audio.onplaying=function(){
     if(started||isStale())return;
     started=true;
     // 速度の設定は一部ブラウザで src 設定後に上書きされるため再適用
     try{audio.playbackRate=rate;}catch(e){}
+    try{_karaStart(item.id,(item.text||''),audio);}catch(e){}
     if(onStart)onStart();
   };
   audio.onended=function(){
@@ -2998,10 +3002,15 @@ function pauseTTS(){
   }
 }
 function stopTTS(){
-  state.tts.active=false;state.tts.paused=false;state.tts.currentItemId=null;state.tts.currentCharId=null;
+  state.tts.active=false;state.tts.paused=false;state.tts.currentItemId=null;state.tts.currentCharId=null;try{_karaStop();}catch(e){}
   _ttsQueue=[];speechSynthesis.cancel();_ttsUtterance=null;
   if(_cloudAudioCtrl){_cloudAudioCtrl.stop();_cloudAudioCtrl=null;}
   _clearAllLipSync();render();
+}
+function setTTSKaraoke(on){
+  state.tts.karaoke=!!on;
+  if(!on){try{_karaStop();}catch(e){}}
+  try{localStorage.setItem('aninovel_tts_karaoke',on?'1':'0');}catch(e){}
 }
 function setTTSRate(v){
   state.tts.rate=parseFloat(v);
@@ -3035,6 +3044,9 @@ function renderTTSBar(){
     '<span class="tts-label">速度: <strong id="tts-rate-disp">'+r.toFixed(1)+'x</strong></span>'+
     '<input type="range" min="0.5" max="2" step="0.1" value="'+r+'" oninput="setTTSRate(this.value)" style="width:120px;accent-color:#6366F1;padding:0;border:none;background:transparent">'+
     '<span class="tts-label" style="opacity:.5">0.5x ─ 2x</span>'+
+    '<label class="tts-label" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer" title="読み上げ中の文に色を付け、その文を画面上部へ送ります">'+
+      '<input type="checkbox" onchange="setTTSKaraoke(this.checked)"'+(state.tts.karaoke?' checked':'')+' style="accent-color:#6366F1"> 追従'+
+    '</label>'+
     '<span id="tts-status" style="margin-left:auto;font-size:12px;opacity:.6;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
     (state.tts.currentItemId?(function(){var it=getPC().find(function(i){return i.id===state.tts.currentItemId});return it?(state.lang==='en'?'Now reading: ':'読上中: ')+esc((it.text||'').substring(0,30))+'…':''}()||''):'')+
     '</span></div>';
@@ -4309,22 +4321,122 @@ function _markupToItem(v,data){
   data.text=al.text;
   data.ruby=(al.ruby&&al.ruby.length)?al.ruby:null;
 }
+// ===== 読み上げのカラオケ表示 =====
+// 音声の再生位置から「いま何文目か」を求め、その文だけ色を変えて上部へ送る。
+// 事前生成音声は1ブロック=1ファイルなので文ごとの正確な時刻は持っていない。
+// そこで**文字数に句読点の間(ま)を加えた重み**で時間を按分する。
+// VOICEVOX の話速はほぼ一定なので、この近似で実用上ずれない。
+function _ttsSplitSentences(t){
+  var s=String(t||''); if(!s)return [];
+  var out=[],cur='';
+  for(var i=0;i<s.length;i++){
+    cur+=s[i];
+    if(/[\u3002\uFF01\uFF1F]/.test(s[i])){
+      // 閉じ括弧が続くならそこまで含める
+      while(i+1<s.length&&/[\u300D\u300F\uFF09\u2019\u201D]/.test(s[i+1])){cur+=s[++i];}
+      out.push(cur);cur='';
+    }
+  }
+  if(cur)out.push(cur);
+  return out;
+}
+// 文ごとの「読み終わり」を 0〜1 の割合で返す
+function _ttsSentenceMarks(t){
+  var ss=_ttsSplitSentences(t),w=[],total=0;
+  ss.forEach(function(x){
+    var u=0;
+    for(var i=0;i<x.length;i++){
+      var c=x[i];
+      if(/[\u3002\uFF01\uFF1F]/.test(c))u+=10;        // 文末は長めの間
+      else if(/[\u3001]/.test(c))u+=5;                // 読点は短い間
+      else if(/\s/.test(c))u+=0.5;
+      else u+=1;
+    }
+    total+=u;w.push(total);
+  });
+  if(!total)return [];
+  return w.map(function(x){return x/total;});
+}
+var _kara={itemId:null,marks:null,timer:null,idx:-1,audio:null};
+function _karaStop(){
+  if(_kara.timer){clearInterval(_kara.timer);_kara.timer=null;}
+  try{
+    var on=document.querySelectorAll('.ts-on');
+    for(var i=0;i<on.length;i++)on[i].classList.remove('ts-on');
+  }catch(e){}
+  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
+}
+function _karaShow(itemId,idx){
+  if(_kara.idx===idx)return;
+  _kara.idx=idx;
+  var box=document.querySelector('[data-cid="'+itemId+'"]');
+  if(!box)return;
+  var spans=box.querySelectorAll('.ts');
+  for(var i=0;i<spans.length;i++)spans[i].classList.toggle('ts-on',i===idx);
+  var el=spans[idx];
+  if(el&&el.scrollIntoView){
+    try{el.scrollIntoView({behavior:'smooth',block:'start',inline:'nearest'});}catch(e){}
+    var pa=document.getElementById('pageArea');
+    if(pa&&pa.scrollBy)setTimeout(function(){try{pa.scrollBy({top:-72,behavior:'smooth'});}catch(e){}},240);
+  }
+}
+// 事前生成音声の再生に合わせて追従を始める
+function _karaStart(itemId,text,audio){
+  _karaStop();
+  if(!state.tts||!state.tts.karaoke)return;
+  var marks=_ttsSentenceMarks(text);
+  if(marks.length<2)return;              // 1文だけなら追従の意味がない
+  _kara.itemId=itemId;_kara.marks=marks;_kara.audio=audio;
+  _karaShow(itemId,0);
+  _kara.timer=setInterval(function(){
+    if(!audio||!audio.duration||isNaN(audio.duration))return;
+    var f=audio.currentTime/audio.duration;
+    var i=0;while(i<marks.length-1&&f>marks[i])i++;
+    _karaShow(itemId,i);
+  },120);
+}
 function _dispRuby(item,query){
   var raw=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'');
   var rb=item&&item.ruby;
   // 検索中と翻訳表示中は位置が合わないのでルビを付けない
-  if(query||!rb||!rb.length||raw!==item.text||state.rubyOff)return displayText(raw,query);
+  if(query||raw!==item.text)return displayText(raw,query);
+  if(!rb||!rb.length||state.rubyOff){
+    // ルビが無くても文の印は入れる(カラオケ表示のため)
+    var ss=_ttsSplitSentences(raw);
+    if(ss.length<2)return displayText(raw,query);
+    var en0=(state.lang==='en');
+    return ss.map(function(x,i){
+      return '<span class="ts" data-i="'+i+'">'+esc(en0?x:toFullWidth(x))+'</span>';
+    }).join('');
+  }
   try{
     var marks=_rubyMarks(raw,rb);
     var en=(state.lang==='en');
     function E(s){return esc(en?s:toFullWidth(s));}
-    var out='',pos=0;
+    // 文の切れ目にも印を入れる。読み上げ中にその文だけ色を変えるため。
+    // ルビの位置と混ぜて左から順に組み立てるので、ルビが壊れることはない。
+    var sents=_ttsSplitSentences(raw),bnd=[],acc=0;
+    for(var q=0;q<sents.length-1;q++){acc+=sents[q].length;bnd.push(acc);}
+    var out='',pos=0,si=0,open=false;
+    function openSpan(){if(!open){out+='<span class="ts" data-i="'+si+'">';open=true;}}
+    function closeSpan(){if(open){out+='</span>';open=false;si++;}}
+    function emit(from,to){
+      openSpan();
+      while(bnd.length&&bnd[0]<=to){
+        var b=Math.max(from,bnd[0]);
+        out+=E(raw.slice(from,b));closeSpan();bnd.shift();from=b;openSpan();
+      }
+      out+=E(raw.slice(from,to));
+    }
     for(var k=0;k<marks.length;k++){
       var m=marks[k];if(m.i<pos)continue;
-      out+=E(raw.slice(pos,m.i))+'<ruby>'+E(raw.substr(m.i,m.l))+'<rt>'+esc(m.r)+'</rt></ruby>';
+      emit(pos,m.i);
+      openSpan();
+      out+='<ruby>'+E(raw.substr(m.i,m.l))+'<rt>'+esc(m.r)+'</rt></ruby>';
       pos=m.i+m.l;
     }
-    out+=E(raw.slice(pos));
+    emit(pos,raw.length);
+    closeSpan();
     return out;
   }catch(e){return displayText(raw,query);}
 }
