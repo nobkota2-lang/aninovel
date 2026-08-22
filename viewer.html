@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v106_toc_karaoke2';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v107_tts_ruby';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2509,7 +2509,12 @@ async function generateVoicesLocal(opts){
       var ch=state.characters.find(function(c){return c.id===(it.characterId||'narrator');});
       // 注: voiceLang による分岐は廃止。全アイテム VOICEVOX 生成（state.lang='ja'時の再生で使用）
       var speaker=_voicevoxSpeakerFor(ch);
-      var hash=_simpleHashJS((it.text||'')+'|sp='+speaker);
+      // 合成にはルビの読みと読み辞書を当てた文を使う。
+      // 生の本文を渡していたため「考」が「こう」、「毛」が「もう」、
+      // 「出会わし」が「であうし」のように読まれていた。
+      // ハッシュも読み上げ文で取る(本文が同じでもルビを直せば作り直される)。
+      var sayText=(typeof _ttsJaText==='function')?(_ttsJaText(it)||it.text||''):(it.text||'');
+      var hash=_simpleHashJS(sayText+'|sp='+speaker);
       // 同じキーに同じハッシュで入っていれば作り直さない
       var prevRec=existingKeys[it.id]?await _idbGet(wid,it.id,'ja'):null;
       if(prevRec&&prevRec.meta&&prevRec.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
@@ -2531,7 +2536,7 @@ async function generateVoicesLocal(opts){
         if(alt0!=null)useSp=alt0;
       }
       try{
-        var blob=await _vvSynth(it.text,useSp,engineUrl,opts.sampleRate);
+        var blob=await _vvSynth(sayText,useSp,engineUrl,opts.sampleRate);
         await _idbPut(wid,it.id,blob,{lang:'ja',engine:'voicevox',speaker:useSp,hash:hash,chars:(it.text||'').length,bytes:blob.size});
         blob=null;generated++;
       }catch(e){
@@ -2545,8 +2550,8 @@ async function generateVoicesLocal(opts){
         }
         if(alt!=null){
           try{
-            var b2=await _vvSynth(it.text,alt,engineUrl,opts.sampleRate);
-            await _idbPut(wid,it.id,b2,{lang:'ja',engine:'voicevox',speaker:alt,hash:_simpleHashJS((it.text||'')+'|sp='+alt),chars:(it.text||'').length,bytes:b2.size});
+            var b2=await _vvSynth(sayText,alt,engineUrl,opts.sampleRate);
+            await _idbPut(wid,it.id,b2,{lang:'ja',engine:'voicevox',speaker:alt,hash:_simpleHashJS(sayText+'|sp='+alt),chars:(it.text||'').length,bytes:b2.size});
             b2=null;generated++;continue;
           }catch(e2){msg=(e2&&e2.message)||String(e2);}
         }
@@ -4294,8 +4299,16 @@ function _ttsJaText(item){
   for(var k=0;k<marks.length;k++){
     var m=marks[k];if(m.i<pos)continue;
     // ルビの無い区間だけ辞書を当てる(ルビが振ってあればルビが優先)
-    out+=_applyYomiDict(raw.slice(pos,m.i))+(m.r||raw.substr(m.i,m.l));
+    out+=_applyYomiDict(raw.slice(pos,m.i));
+    var yomi=m.r||raw.substr(m.i,m.l);
     pos=m.i+m.l;
+    // 「出会《でくわ》わした」のように、読みの末尾と送り仮名が重なることがある。
+    // そのまま繋ぐと「でくわわした」になるので、重なるぶんだけ送り仮名を飛ばす。
+    var tail=raw.slice(pos);
+    for(var ov=Math.min(3,yomi.length,tail.length);ov>0;ov--){
+      if(yomi.slice(-ov)===tail.slice(0,ov)){pos+=ov;break;}
+    }
+    out+=yomi;
   }
   return out+_applyYomiDict(raw.slice(pos));
 }
