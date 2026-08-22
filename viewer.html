@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v108_yomi_priority';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v109_toc_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4561,7 +4561,10 @@ function _tocEntries(){
   }
   return out;
 }
-function tocGo(page,id){
+function tocGo(el){
+  var page=parseInt(el&&el.getAttribute('data-toc-page'),10);
+  var id=(el&&el.getAttribute('data-toc-id'))||'';
+  if(isNaN(page))return;
   state.tocOpen=false;
   if(page!==state.currentPage){state.currentPage=page;render();_saveProgress();}
   else render();
@@ -4575,7 +4578,9 @@ function renderTOC(){
   }else{
     body='<div style="display:flex;flex-direction:column;gap:2px">'+es.map(function(e){
       var cur=(e.page===state.currentPage);
-      return '<button onclick="tocGo('+e.page+','+(e.id?JSON.stringify(e.id):'null')+')" '
+      // onclick に文字列を埋め込むと、id に含まれる引用符で属性が壊れる。
+      // data 属性に持たせて、押されたときに読み出す。
+      return '<button data-toc-page="'+e.page+'" data-toc-id="'+esc(e.id||'')+'" onclick="tocGo(this)" '
         +'style="text-align:left;border:0;background:'+(cur?'var(--bg-secondary)':'transparent')+';cursor:pointer;'
         +'padding:'+(e.sub?'6px 10px 6px 26px':'9px 10px')+';border-left:3px solid '+(cur?'var(--accent)':'transparent')+';'
         +'border-radius:6px;color:var(--text-'+(e.sub?'secondary':'primary')+');'
