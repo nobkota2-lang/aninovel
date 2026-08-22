@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v105_karaoke';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v106_toc_karaoke2';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -82,8 +82,12 @@ ruby{ruby-align:center}
 .bubble{position:relative;border-radius:16px;padding:14px 18px;box-shadow:0 2px 8px var(--shadow);max-width:480px;transition:transform .2s,box-shadow .2s}.bubble.char-bubble,.bubble.char-bubble *{color:#1F2937 !important}.bubble:hover{transform:translateY(-1px);box-shadow:0 4px 16px var(--shadow-strong)}
 .bubble.bubble-mono{border:2px dashed var(--text-muted);box-shadow:none}
 /* 読み上げ中の文をカラオケのように光らせる */
-.ts{transition:background-color .18s ease}
-.ts-on{background:rgba(250,204,21,.38);border-radius:4px;box-shadow:0 0 0 2px rgba(250,204,21,.38)}
+.ts{transition:color .25s ease,opacity .25s ease}
+/* 読み上げ中の文は色と濃さで示す。塗りつぶすより本文が読みやすい */
+.tts-reading .ts{opacity:.5}
+.tts-reading .ts-on{opacity:1;color:var(--accent);font-weight:600;
+  text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;
+  text-decoration-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 .bubble.bubble-mono::before,.bubble.bubble-mono::after{display:none !important}
 .bubble-left::before{content:'';position:absolute;left:-8px;top:16px;border:8px solid transparent;border-right-color:inherit;border-left:0}
 .bubble-right::after{content:'';position:absolute;right:-8px;top:16px;border:8px solid transparent;border-left-color:inherit;border-right:0}
@@ -3044,9 +3048,7 @@ function renderTTSBar(){
     '<span class="tts-label">速度: <strong id="tts-rate-disp">'+r.toFixed(1)+'x</strong></span>'+
     '<input type="range" min="0.5" max="2" step="0.1" value="'+r+'" oninput="setTTSRate(this.value)" style="width:120px;accent-color:#6366F1;padding:0;border:none;background:transparent">'+
     '<span class="tts-label" style="opacity:.5">0.5x ─ 2x</span>'+
-    '<label class="tts-label" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer" title="読み上げ中の文に色を付け、その文を画面上部へ送ります">'+
-      '<input type="checkbox" onchange="setTTSKaraoke(this.checked)"'+(state.tts.karaoke?' checked':'')+' style="accent-color:#6366F1"> 追従'+
-    '</label>'+
+
     '<span id="tts-status" style="margin-left:auto;font-size:12px;opacity:.6;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
     (state.tts.currentItemId?(function(){var it=getPC().find(function(i){return i.id===state.tts.currentItemId});return it?(state.lang==='en'?'Now reading: ':'読上中: ')+esc((it.text||'').substring(0,30))+'…':''}()||''):'')+
     '</span></div>';
@@ -4358,11 +4360,29 @@ function _ttsSentenceMarks(t){
   return w.map(function(x){return x/total;});
 }
 var _kara={itemId:null,marks:null,timer:null,idx:-1,audio:null};
+// いま読んでいる文を画面の上から約28%の位置へ、**一度の滑らかな移動で**送る。
+// 以前は scrollIntoView のあとに scrollBy で戻していたため、
+// 「一度上に出てすぐ1行下がる」という二段階の動きになって見づらかった。
+// さらに、目標位置との差が小さいうちは動かさない(細かく揺れるのを防ぐ)。
+function _karaScroll(el){
+  var pa=document.getElementById('pageArea');
+  if(!pa||!el)return;
+  try{
+    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
+    var top=r.top-pr.top+pa.scrollTop;
+    var want=Math.max(0,top-pr.height*0.28);
+    if(Math.abs(want-pa.scrollTop)<28)return;       // 十分近ければ動かさない
+    if(pa.scrollTo)pa.scrollTo({top:want,behavior:'smooth'});
+    else pa.scrollTop=want;
+  }catch(e){}
+}
 function _karaStop(){
   if(_kara.timer){clearInterval(_kara.timer);_kara.timer=null;}
   try{
     var on=document.querySelectorAll('.ts-on');
     for(var i=0;i<on.length;i++)on[i].classList.remove('ts-on');
+    var rd=document.querySelectorAll('.tts-reading');
+    for(var j=0;j<rd.length;j++)rd[j].classList.remove('tts-reading');
   }catch(e){}
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
 }
@@ -4371,14 +4391,11 @@ function _karaShow(itemId,idx){
   _kara.idx=idx;
   var box=document.querySelector('[data-cid="'+itemId+'"]');
   if(!box)return;
+  box.classList.add('tts-reading');
   var spans=box.querySelectorAll('.ts');
   for(var i=0;i<spans.length;i++)spans[i].classList.toggle('ts-on',i===idx);
   var el=spans[idx];
-  if(el&&el.scrollIntoView){
-    try{el.scrollIntoView({behavior:'smooth',block:'start',inline:'nearest'});}catch(e){}
-    var pa=document.getElementById('pageArea');
-    if(pa&&pa.scrollBy)setTimeout(function(){try{pa.scrollBy({top:-72,behavior:'smooth'});}catch(e){}},240);
-  }
+  if(el)_karaScroll(el);
 }
 // 事前生成音声の再生に合わせて追従を始める
 function _karaStart(itemId,text,audio){
@@ -4476,7 +4493,55 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
     h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border)"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(_cname(ch))+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';h+='<div class="page-footer"><button onclick="jP('+(state.currentPage-1)+')"'+(state.currentPage===0?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage===0?'opacity:.4;cursor:default':'')+'">← 前</button><div style="display:flex;align-items:center;gap:12px"><span style="font-size:13px;color:var(--text-secondary)"><strong>'+(state.currentPage+1)+'</strong> / '+tp+'</span><input type="number" min="1" max="'+tp+'" value="'+(state.currentPage+1)+'" onchange="jP(parseInt(this.value)-1)" style="width:56px;text-align:center;padding:4px;font-size:13px">'+(state.isAuthorMode?'<span style="font-size:11px;color:var(--text-muted)">💾 '+state.lastSaved+'</span>':'<button onclick="if(window.AninovelShare)AninovelShare.openMenu({title:_ntitle()||\'アニノベル\',url:location.href,text:(state.lang===\'en\'?(\'Reading \\u201c\'+_ntitle()+\'\\u201d\'):(\'「\'+_ntitle()+\'」を読んでいます\'))})" class="btn-icon" title="シェア" style="font-size:14px;color:var(--text-muted);background:transparent;border:none;cursor:pointer">📤</button>'+'')+'</div><button onclick="jP('+(state.currentPage+1)+')"'+(state.currentPage>=tp-1?' disabled':'')+' class="btn btn-ghost" style="'+(state.currentPage>=tp-1?'opacity:.4;cursor:default':'')+'">次 →</button></div>';if(state.settingsOpen)h+=renderSettings();if(state.tocOpen)h+=renderTOC();if(state.bookmarkListOpen)h+=renderBM();h+='</div>';return h}
 
 function renderSettings(){var s=state.displaySettings;return'<div class="panel-slide '+(state.settingsOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">⚙️ 表示設定</span><button onclick="state.settingsOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:20px;display:flex;flex-direction:column;gap:20px"><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">文字サイズ: <strong>'+s.fontSize+'px</strong></label><input type="range" min="12" max="32" value="'+s.fontSize+'" oninput="state.displaySettings.fontSize=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">行間: <strong>'+s.lineHeight+'</strong></label><input type="range" min="1" max="3" step="0.1" value="'+s.lineHeight+'" oninput="state.displaySettings.lineHeight=+this.value;render()" style="width:100%"></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">アイコン: <strong>'+s.iconSize+'px</strong></label><input type="range" min="32" max="96" value="'+s.iconSize+'" oninput="state.displaySettings.iconSize=+this.value;render()" style="width:100%"></div><div>'+(state.lang==='en'?'<label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">Font</label><select onchange="state.displaySettings.fontEn=this.value;render()" style="width:100%">'+_fontOpts(_EN_FONTS,s.fontEn||'')+'</select>':'<label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">フォント</label><select onchange="state.displaySettings.font=this.value;render()" style="width:100%">'+_fontOpts(_JP_FONTS,s.font)+'</select>')+'</div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">書式</label><select onchange="state.displaySettings.orientation=this.value;render()" style="width:100%"><option value="horizontal"'+(s.orientation==='horizontal'?' selected':'')+'>横書き</option><option value="vertical"'+(s.orientation==='vertical'?' selected':'')+'>縦書き</option></select></div><div><label style="display:block;font-size:13px;margin-bottom:6px;color:var(--text-secondary)">ナレーション</label><select onchange="state.displaySettings.narratorStyle=this.value;render()" style="width:100%"><option value="bubble"'+(s.narratorStyle==='bubble'?' selected':'')+'>吹き出し</option><option value="plain"'+(s.narratorStyle==='plain'?' selected':'')+'>べた書き</option></select></div><div style="border-top:1px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;color:var(--text-secondary)">環境</label><button onclick="toggleDarkMode()" class="btn btn-ghost" style="justify-content:flex-start">'+(state.darkMode?'☀️ ライトモード':'🌙 ナイトモード')+'</button><button onclick="toggleLang()" class="btn btn-ghost" style="justify-content:flex-start">🌐 '+(state.lang==='en'?'日本語':'English')+'</button><button onclick="toggleFullscreen()" class="btn btn-ghost" style="justify-content:flex-start">'+(state.fullscreen?'⊡ 通常表示':'⊞ 全画面表示')+'</button>'+((_workParam&&!state.isAuthorMode)?'<button onclick="if(window.AninovelModeration)AninovelModeration.openReportDialog({workId:_workParam||\'_local\',targetType:\'work\',targetId:_workParam||\'_local\',ctx:state.novel&&state.novel.title})" class="btn btn-ghost" style="justify-content:flex-start;color:var(--text-muted)">🚩 この作品を通報</button>':'')+'</div></div></div>'}
-function renderTOC(){return'<div class="panel-slide '+(state.tocOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📑 目次</span><button onclick="state.tocOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+(state.chapters.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">章がありません</p>':'<div style="display:flex;flex-direction:column;gap:12px">'+state.chapters.map(function(ch){return'<div style="border-left:3px solid var(--accent);padding-left:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">'+esc(ch.title)+'</div>'+ch.sections.map(function(sec){return'<div style="padding-left:12px;font-size:13px;color:var(--text-secondary);margin-top:2px">'+esc(sec.title)+'</div>'}).join('')+'</div>'}).join('')+'</div>')+'</div></div>'}
+// 目次は state.chapters ではなく**本文の見出しブロック**から組み立てる。
+// 青空文庫の取り込みは chapter_break / section_break を作るだけで
+// state.chapters を埋めないため、以前は常に「章がありません」になっていた。
+function _tocEntries(){
+  var a=state.content.slice().sort(function(x,y){return x.order-y.order});
+  var br=_pageBreaks(a),out=[];
+  function pageOf(order){
+    for(var p=0;p<br.length-1;p++){if(order>br[p]&&order<br[p+1])return p;}
+    return 0;
+  }
+  a.forEach(function(it){
+    if(it.type!=='chapter_break'&&it.type!=='section_break')return;
+    var t=(typeof _ctext==='function'?_ctext(it):it.text)||it.text||'';
+    out.push({id:it.id,title:String(t).trim(),sub:(it.type==='section_break'),page:pageOf(it.order)});
+  });
+  // 見出しが無い作品はページ送りだけでも案内する
+  if(!out.length&&br.length-1>1){
+    for(var p=0;p<br.length-1;p++)out.push({id:null,title:'ページ '+(p+1),sub:false,page:p});
+  }
+  return out;
+}
+function tocGo(page,id){
+  state.tocOpen=false;
+  if(page!==state.currentPage){state.currentPage=page;render();_saveProgress();}
+  else render();
+  if(id)setTimeout(function(){scrollToItem(id);},80);
+}
+function renderTOC(){
+  var es=_tocEntries();
+  var body;
+  if(!es.length){
+    body='<p style="color:var(--text-muted);text-align:center;padding:20px">章がありません</p>';
+  }else{
+    body='<div style="display:flex;flex-direction:column;gap:2px">'+es.map(function(e){
+      var cur=(e.page===state.currentPage);
+      return '<button onclick="tocGo('+e.page+','+(e.id?JSON.stringify(e.id):'null')+')" '
+        +'style="text-align:left;border:0;background:'+(cur?'var(--bg-secondary)':'transparent')+';cursor:pointer;'
+        +'padding:'+(e.sub?'6px 10px 6px 26px':'9px 10px')+';border-left:3px solid '+(cur?'var(--accent)':'transparent')+';'
+        +'border-radius:6px;color:var(--text-'+(e.sub?'secondary':'primary')+');'
+        +'font-size:'+(e.sub?'13px':'14px')+';font-weight:'+(e.sub?'400':'600')+'">'
+        +esc(e.title)+'<span style="float:right;font-size:11px;color:var(--text-muted)">p'+(e.page+1)+'</span></button>';
+    }).join('')+'</div>';
+  }
+  return '<div class="panel-slide '+(state.tocOpen?'open':'')+'" style="z-index:42">'
+    +'<div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-weight:700">📑 目次'+(es.length?' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">'+es.length+'件</span>':'')+'</span>'
+    +'<button onclick="state.tocOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>'
+    +'<div style="padding:12px">'+body+'</div></div>';
+}
 function renderBM(){return'<div class="panel-slide '+(state.bookmarkListOpen?'open':'')+'" style="z-index:42"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">📚 しおり一覧</span><button onclick="state.bookmarkListOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">'+((_portalMode&&!_isLoggedIn())?'<p style="font-size:12px;color:var(--text-muted);background:var(--bg-secondary);padding:8px 10px;border-radius:6px;margin-bottom:12px">ログインすると、しおりを保存して他の端末でも読めます。</p>':'<button onclick="addBookmark()" class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:12px">🔖 現在のページにしおりを追加</button>')+(state.bookmarks.length===0?'<p style="color:var(--text-muted);text-align:center;padding:20px">しおりがありません</p>':'<div style="display:flex;flex-direction:column;gap:8px">'+state.bookmarks.map(function(bm){var ba=_acts.length;_acts.push(function(){deleteBookmark(bm.id)});return'<div style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;cursor:pointer" onclick="jumpToBookmark('+bm.page+')"><span style="font-size:18px">🔖</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+esc(bm.title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+new Date(bm.timestamp).toLocaleString()+'</div></div><button onclick="event.stopPropagation();act('+ba+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-muted)">🗑️</button></div>'}).join('')+'</div>')+'</div></div>'}
 function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';var type=state.editingItem.type,data=state.editingItem.data,gender=data.gender||'male',presets=CP[gender]||CP.male;var h='<div class="modal-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">'+(type==='character'?'👤 キャラクター編集':'📝 コンテンツ編集')+'</h3><button onclick="closeEditModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';if(type!=='character'&&data.type==='image'){var _al=data.align||'center';h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">挿絵画像</label><div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap"><div style="width:120px;height:120px;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--panel-bg)">'+(data.url?'<img src="'+esc(data.url)+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:11px;color:var(--text-muted)">未設定</span>')+'</div><div style="display:flex;flex-direction:column;gap:8px"><label class="btn btn-ghost" style="cursor:pointer">📷 画像を選択<input type="file" accept="image/*" style="display:none" onchange="uploadInlineImage(this.files[0])"></label>'+(data.url?'<button onclick="state.editingItem.data.url=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️ 削除</button>':'')+'</div></div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">表示位置</label><div style="display:flex;gap:8px">'+['left','center','right'].map(function(v){var lbl={left:'左',center:'中央',right:'右'}[v];return '<button onclick="state.editingItem.data.align=\''+v+'\';render()" class="btn" style="flex:1;'+(_al===v?'background:#6366F1;color:#fff':'background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border)')+'">'+lbl+'</button>';}).join('')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャプション（任意）</label><input type="text" value="'+esc(data.caption||'')+'" placeholder="画像の説明" oninput="state.editingItem.data.caption=this.value" style="width:100%"></div><div style="margin-top:8px"><button onclick="saveEditModal();closeEditModal()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div></div>';return h;}if(type!=='character'&&data.type==='video'){var _al=data.align||'center';h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">動画</label><div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap"><div style="width:160px;height:100px;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--panel-bg)">'+(data.url?'<video src="'+esc(data.url)+'" muted loop autoplay playsinline style="max-width:100%;max-height:100%"></video>':'<span style="font-size:11px;color:var(--text-muted)">未設定</span>')+'</div><div style="display:flex;flex-direction:column;gap:8px"><label class="btn btn-ghost" style="cursor:pointer">🎬 動画を選択<input type="file" accept="video/*" style="display:none" onchange="uploadInlineVideo(this.files[0])"></label>'+(data.url?'<button onclick="state.editingItem.data.url=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️ 削除</button>':'')+'</div></div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">MP4/WebM対応・50MBまで・常時ループ再生</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">表示位置</label><div style="display:flex;gap:8px">'+['left','center','right'].map(function(v){var lbl={left:'左',center:'中央',right:'右'}[v];return '<button onclick="state.editingItem.data.align=\''+v+'\';render()" class="btn" style="flex:1;'+(_al===v?'background:#6366F1;color:#fff':'background:var(--panel-bg);color:var(--text-primary);border:1px solid var(--border)')+'">'+lbl+'</button>';}).join('')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャプション（任意）</label><input type="text" value="'+esc(data.caption||'')+'" placeholder="動画の説明" oninput="state.editingItem.data.caption=this.value" style="width:100%"></div><div style="margin-top:8px"><button onclick="saveEditModal();closeEditModal()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div></div>';return h;}if(type==='character'){h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">氏名</label><input type="text" value="'+esc(_editName(data))+'" placeholder="キャラクター名" oninput="state.editingItem.data.name=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">略称（10文字以内）</label><input type="text" value="'+esc(_editShort(data))+'" maxlength="10" placeholder="短縮名" oninput="state.editingItem.data.shortName=this.value.substring(0,10)" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">性別</label><select onchange="state.editingItem.data.gender=this.value;render()" style="width:100%"><option value="neutral"'+(gender==='neutral'||!gender?' selected':'')+'>指定なし</option><option value="male"'+(gender==='male'?' selected':'')+'>男性</option><option value="female"'+(gender==='female'?' selected':'')+'>女性</option></select></div>'+_voicePickerHtml(data)+'<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">アイコン画像</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+(data.iconImage?'<img src="'+data.iconImage+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':rIcon(data.id,56))+'<label class="btn btn-ghost" style="cursor:pointer">📷 画像選択<input type="file" accept="image/*" style="display:none" onchange="var f=this.files[0];if(f){var r=new FileReader();r.onload=function(e){state.editingItem.data.iconImage=e.target.result;render()};r.readAsDataURL(f)}"></label><button onclick="openGallery()" class="btn btn-ghost">🖼️ ギャラリー</button>'+(data.iconImage?'<button onclick="state.editingItem.data.iconImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">🗑️</button>':'')+'</div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">🎨 カラーセット<span style="font-size:11px;color:var(--muted);font-weight:400">（吹き出し色 + アイコン色のセット）</span></label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';presets.forEach(function(c){h+='<button onclick="state.editingItem.data.bubbleColor=\''+c.bubble+'\';state.editingItem.data.iconColor=\''+c.icon+'\';render()" style="width:64px;height:40px;border-radius:18px 18px 18px 4px;border:3px solid '+(data.bubbleColor===c.bubble?'var(--accent)':'var(--border)')+';background:'+c.bubble+';cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding-left:6px" title="'+c.name+'"><span style="width:18px;height:18px;border-radius:50%;background:'+c.icon+';border:1px solid rgba(0,0,0,0.1)"></span></button>'});h+='</div><button onclick="state.colorPickerOpen=!state.colorPickerOpen;render()" style="font-size:13px;color:var(--accent);cursor:pointer;background:none;border:none">🎨 色を個別に指定</button>';if(state.colorPickerOpen){h+='<div style="margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:12px"><div style="flex:1"><label style="font-size:11px">吹き出し色（背景）</label><input type="color" value="'+data.bubbleColor+'" oninput="state.editingItem.data.bubbleColor=this.value;render()" style="width:100%"></div>';if(!data.iconImage)h+='<div style="flex:1"><label style="font-size:11px">アイコン色（略称表示用）</label><input type="color" value="'+data.iconColor+'" oninput="state.editingItem.data.iconColor=this.value;render()" style="width:100%"></div>';h+='</div>';}h+='</div><div><div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button onclick="_testVoice()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button><button onclick="speechSynthesis.cancel()" class="btn btn-ghost" style="font-size:12px">⏹ 停止</button><span style="font-size:11px;color:var(--text-muted)">日本語=標準音声で試聴／英語=Auraで試聴（要デプロイ）</span></div>';h+='</div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要</label><textarea rows="3" oninput="state.editingItem.data.description=this.value" style="width:100%;resize:vertical">'+esc(data.description)+'</textarea></div></div>'}else{h+='<div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイプ</label><select onchange="state.editingItem.data.type=this.value;render()" style="width:100%"><option value="narration"'+(data.type==='narration'?' selected':'')+'>ナレーション</option><option value="dialogue"'+(data.type==='dialogue'?' selected':'')+'>セリフ</option></select></div>';if(data.type==='dialogue'){h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">キャラクター</label><select onchange="state.editingItem.data.characterId=this.value" style="width:100%">';state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'});h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト<span style="font-size:11px;color:var(--text-muted);font-weight:400">（ルビは 漢字《かな》 の形で書けます。例: 怪《け》しからん）</span></label><textarea rows="8" oninput="_markupToItem(this.value,state.editingItem.data)" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(_rubyToMarkup(data))+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
 function openGallery(){
