@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v109_toc_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v112_tts_crosspage';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2313,7 +2313,7 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
   var settled=false,started=false;
   function isStale(){return session!==_speakSessionId;}
-  function cleanup(){try{_karaStop();}catch(e){}try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
+  function cleanup(){try{_karaEndItem();}catch(e){}try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
   audio.onplaying=function(){
     if(started||isStale())return;
     started=true;
@@ -2914,8 +2914,12 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   setTimeout(function(){if(!isStale())speakNext();},300);
 }
 function _drainQueue(){
-  if(!state.tts.active||state.tts.paused||!_ttsQueue.length){
-    if(!_ttsQueue.length){state.tts.active=false;state.tts.currentItemId=null;state.tts.currentCharId=null;_clearAllLipSync();render();}
+  if(!state.tts.active||state.tts.paused)return;
+  if(!_ttsQueue.length){
+    // ページの終わりまで読んだら、**次のページへ進んで読み続ける**。
+    // 以前はここで停止していたため、ページごとに手で送る必要があった。
+    if(_ttsAdvancePage())return;
+    state.tts.active=false;state.tts.currentItemId=null;state.tts.currentCharId=null;_clearAllLipSync();render();
     return;
   }
   // Edgeの onend は発話完了前に発火することがある。speechSynthesis.speaking が落ちるまで待機してから次 item
@@ -2935,6 +2939,26 @@ function _drainQueue(){
     _speakItem(item,function(){_drainQueue();});
   }
   waitIdle();
+}
+// 読み上げ中にページの終わりへ来たら次ページを読み込んでキューに積む。
+// 見つからなければ false(作品の終わり)。
+function _ttsAdvancePage(){
+  try{
+    var tp=getTP();
+    for(var np=state.currentPage+1;np<tp;np++){
+      state.currentPage=np;
+      render();_saveProgress();
+      var items=getPC().slice().sort(function(a,b){return a.order-b.order});
+      var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
+      if(!q.length)continue;                 // 見出しだけのページは飛ばす
+      _ttsQueue=q;
+      console.info('[TTS] '+(np+1)+'ページ目に進みます ('+q.length+'件)');
+      // 描画の直後は要素が揃っていないので、少し待ってから読み始める
+      setTimeout(function(){if(state.tts.active&&!state.tts.paused)_drainQueue();},220);
+      return true;
+    }
+  }catch(e){console.warn('[TTS] ページ送りに失敗',e);}
+  return false;
 }
 function _ttsStartIndex(){
   // 現在 #pageArea に表示されている最初のコンテンツ項目の _ttsQueue インデックスを返す。
@@ -4406,7 +4430,7 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,raf:null,idx:-1,audio:null,want:null,userAt:0};
+var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null};
 // 手動でスクロールされたら数秒は自動追従を止める(奪い合わないため)
 function _karaUserScroll(){_kara.userAt=Date.now();}
 (function(){
@@ -4418,40 +4442,42 @@ function _karaUserScroll(){_kara.userAt=Date.now();}
     });
   }
 })();
-function _karaStop(){
-  if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
+function _karaClearMarks(){
   try{
     var on=document.querySelectorAll('.ts-on');
     for(var i=0;i<on.length;i++)on[i].classList.remove('ts-on');
     var rd=document.querySelectorAll('.tts-reading');
     for(var j=0;j<rd.length;j++)rd[j].classList.remove('tts-reading');
   }catch(e){}
-  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;_kara.want=null;
 }
-function _karaMark(itemId,idx){
+// 読み上げ全体を止めるとき
+function _karaStop(){
+  if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
+  _karaClearMarks();
+  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
+  _kara.spans=null;_kara.box=null;_kara.want=null;
+}
+// 1ブロックの読み上げが終わったとき(色は消すが、**スクロールのループは続ける**)。
+// ここでループごと止めると、次の吹き出しに移る瞬間に一気に飛んで見えてしまう。
+function _karaEndItem(){
+  _karaClearMarks();
+  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
+  _kara.spans=null;_kara.box=null;
+}
+function _karaMark(idx){
   if(_kara.idx===idx)return;
   _kara.idx=idx;
-  var box=document.querySelector('[data-cid="'+itemId+'"]');
-  if(!box)return;
-  box.classList.add('tts-reading');
-  var spans=box.querySelectorAll('.ts');
-  for(var i=0;i<spans.length;i++)spans[i].classList.toggle('ts-on',i===idx);
+  if(!_kara.box)return;
+  _kara.box.classList.add('tts-reading');
+  var s=_kara.spans||[];
+  for(var i=0;i<s.length;i++)s[i].classList.toggle('ts-on',i===idx);
 }
-// 事前生成音声の再生に合わせて追従する。
-// 文の切れ目でページを飛ばすと目がちらつくので、**再生の進み具合に応じて
-// 目標位置を連続的に動かし**、そこへ毎フレーム少しずつ寄せる(指数的な減衰)。
-// これでページ全体がゆっくり流れるように見える。
-function _karaStart(itemId,text,audio){
-  _karaStop();
-  if(!state.tts||!state.tts.karaoke)return;
-  var marks=_ttsSentenceMarks(text);
-  if(!marks.length)return;
-  _kara.itemId=itemId;_kara.marks=marks;_kara.audio=audio;
+// 目標位置へ毎フレーム少しずつ寄せ続けるループ。
+// **読み上げ中は止めない**ので、吹き出しをまたぐときも滑らかに繋がる。
+function _karaEnsureLoop(){
+  if(_kara.raf)return;
   var pa=document.getElementById('pageArea');
-  var box=document.querySelector('[data-cid="'+itemId+'"]');
-  if(!pa||!box)return;
-  var spans=box.querySelectorAll('.ts');
-  _karaMark(itemId,0);
+  if(!pa)return;
   function topOf(el){
     var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
     return r.top-pr.top+pa.scrollTop;
@@ -4462,29 +4488,58 @@ function _karaStart(itemId,text,audio){
   }
   function tick(){
     _kara.raf=requestAnimationFrame(tick);
-    if(!audio||!audio.duration||isNaN(audio.duration))return;
-    var f=Math.min(1,Math.max(0,audio.currentTime/audio.duration));
-    // いま何文目か、その文の中でどこまで進んだか
-    var i=0;while(i<marks.length-1&&f>marks[i])i++;
-    var from=(i>0?marks[i-1]:0),to=marks[i];
-    var p=(to>from)?((f-from)/(to-from)):0;
-    _karaMark(itemId,i);
-    // 目標は「その文の上端 → 次の文の上端」を進み具合で補間した位置
-    var a=spans[i]?topOf(spans[i]):topOf(box);
-    var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?bottomOf(spans[i]):bottomOf(box));
-    var target=a+(b-a)*p;
-    var want=Math.max(0,target-pa.clientHeight*0.30);
-    var max=pa.scrollHeight-pa.clientHeight;
-    if(want>max)want=max;
-    // 手動操作の直後は触らない
-    if(Date.now()-_kara.userAt<4000)return;
+    if(!state.tts||!state.tts.active){_karaStop();return;}
+    // ---- 目標位置を更新（読み上げ中のブロックがあるときだけ） ----
+    // ページ送りや再描画で DOM が入れ替わると、掴んでいた要素が外れてしまう。
+    // その場合は同じ id で取り直す(取れなければ追従を休む)。
+    if(_kara.itemId&&(!_kara.box||!_kara.box.isConnected)){
+      var nb=document.querySelector('[data-cid="'+_kara.itemId+'"]');
+      if(nb){_kara.box=nb;_kara.spans=nb.querySelectorAll('.ts');_kara.idx=-1;nb.classList.add('tts-reading');}
+      else{_kara.want=null;}
+    }
+    var au=_kara.audio,box=_kara.box;
+    if(au&&box&&au.duration&&!isNaN(au.duration)){
+      var marks=_kara.marks||[],spans=_kara.spans||[];
+      var f=Math.min(1,Math.max(0,au.currentTime/au.duration));
+      var i=0;while(i<marks.length-1&&f>marks[i])i++;
+      var from=(i>0?marks[i-1]:0),to=marks[i]||1;
+      var p=(to>from)?((f-from)/(to-from)):0;
+      _karaMark(i);
+      var a=spans[i]?topOf(spans[i]):topOf(box);
+      var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?bottomOf(spans[i]):bottomOf(box));
+      _kara.want=a+(b-a)*p;
+    }
+    if(_kara.want==null)return;
+    if(Date.now()-_kara.userAt<4000)return;      // 手動操作の直後は触らない
+    var want=Math.max(0,_kara.want-pa.clientHeight*0.30);
+    var max=Math.max(0,pa.scrollHeight-pa.clientHeight);
+    if(want>max)want=max;   // ページ末尾では下端で頭打ちになる(次ページへ進めば解消する)
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    // 大きく離れているときだけ速く寄せ、普段はゆっくり流す
-    var k=(Math.abs(d)>pa.clientHeight)?0.25:0.06;
-    pa.scrollTop=cur+d*k;
+    // 1フレームの移動量に上限を設ける。これが無いと、次の吹き出しへ移る瞬間に
+    // 遠い目標へ一気に飛んで「急にスクロールした」ように見える。
+    var step=d*0.08;
+    var cap=Math.max(2,pa.clientHeight*0.012);   // 600pxの画面で約7px/フレーム
+    if(step>cap)step=cap; else if(step<-cap)step=-cap;
+    pa.scrollTop=cur+step;
   }
   _kara.raf=requestAnimationFrame(tick);
+}
+// 事前生成音声の再生に合わせて追従を始める
+function _karaStart(itemId,text,audio){
+  if(!state.tts||!state.tts.karaoke)return;
+  _karaClearMarks();
+  var box=document.querySelector('[data-cid="'+itemId+'"]');
+  if(!box)return;
+  _kara.itemId=itemId;
+  _kara.marks=_ttsSentenceMarks(text);
+  if(!_kara.marks.length)_kara.marks=[1];
+  _kara.audio=audio;
+  _kara.box=box;
+  _kara.spans=box.querySelectorAll('.ts');
+  _kara.idx=-1;
+  _karaMark(0);
+  _karaEnsureLoop();
 }
 
 function _dispRuby(item,query){
