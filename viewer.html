@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v120_gentle_gap';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v122_gender_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3317,7 +3317,22 @@ function showToast(msg){var t=document.createElement('div');t.className='anim-sl
 async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.audioStore){var wid=_currentWorkId();var ids=Object.keys(d.audioStore),cnt=0;var pg=_showProgress('🔊 音声データ取込中');try{for(var k=0;k<ids.length;k++){var iid=ids[k],rec=d.audioStore[iid];_updateProgress(pg,k+1,ids.length,iid);try{var blob=_b64ToBlob(rec.b64,rec.mime||'audio/wav');await _idbPut(wid,iid,blob,rec.meta||{});cnt++;}catch(ie){console.warn('音声取込失敗',iid,ie);}}}finally{_hideProgress(pg);}console.info('[Import] 音声'+cnt+'件をIndexedDBに保存 workId='+wid);}showToast('インポート完了'+(d.audioStore?' (音声'+Object.keys(d.audioStore).length+'件)':''));render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert((state.lang==='en'?'Error: ':'エラー: ')+e.message)}}
 async function detEnc(file){return new Promise(function(r){var rd=new FileReader;rd.onload=function(e){var a=new Uint8Array(e.target.result);if(a.length>=3&&a[0]===0xEF&&a[1]===0xBB&&a[2]===0xBF)return r('UTF-8');r('UTF-8')};rd.readAsArrayBuffer(file)})}
 async function rdTxt(f,e){return new Promise(function(r,j){var rd=new FileReader;rd.onload=function(ev){r(ev.target.result)};rd.onerror=j;rd.readAsText(f,e||'UTF-8')})}
-function detGender(n){if(/^お[一-鿿ぁ-ゖァ-ヺ]{1,2}$/.test(n))return'female';if(/女|姫|嬢|娘/.test(n))return'female';if(/[子美香織恵愛花里奈沙菜実梨彩由佳理代紀雪]/.test(n))return'female';if(/[郎太介助男雄彦司夫治朗吉蔵造丞衛]/.test(n))return'male';return'male'}
+function detGender(n){
+  var s=String(n||'');
+  if(!s)return'male';
+  // ① 続柄・役どころで決まるもの(いちばん確か)。まず女性、次に男性。
+  if(/(細君|妻君|奥様|奥さん|夫人|女将|女房|姉|妹|母|娘|嬢|婆|媼|尼|巫女|芸者|下女|小間使|女中|御三|神さん|お上さん|かみさん|女性|婦人|少女|老婆)/.test(s))return'female';
+  if(/(主人|旦那|亭主|兄|弟|父|息子|坊|爺|翁|和尚|侍|武士|書生|少年|老人|紳士|男)/.test(s))return'male';
+  // ② 「お◯◯」の短い呼び名(お鶴・お徳など)
+  if(/^お[一-鿿ぁ-ゖァ-ヺ]{1,2}$/.test(s))return'female';
+  // ③ 名前の**末尾**で判断する。一文字でも含まれれば女性としていたため、
+  //    「美学者」の美、「苦沙弥先生」の沙で女性になってしまっていた。
+  var base=s.replace(/(君|さん|様|殿|先生|氏|ちゃん|くん)$/,'');
+  if(/[子女美香織恵愛花里奈菜実梨彩佳代紀雪江枝乃咲穂菫葵桜凛結衣舞優]$/.test(base))return'female';
+  if(/[郎太介助男雄彦司夫治朗吉蔵造丞衛平作次三市伸敏昭博]$/.test(base))return'male';
+  // ④ 手がかりが無ければ男性(作品によって偏るので、ここは既定値)
+  return'male';
+}
 function _isValidName(n){
   if(!n)return false;
   n=n.trim();
@@ -4667,9 +4682,20 @@ function _karaEnsureLoop(){
       var pr=pa.getBoundingClientRect();
       function topOf(el){var r=el.getBoundingClientRect();return r.top-pr.top+pa.scrollTop;}
       function botOf(el){var r=el.getBoundingClientRect();return r.bottom-pr.top+pa.scrollTop;}
+      // 目標は「いま読んでいる文の上端」。次の文があれば、そこへ向けて
+      // **文の後半だけ**でゆっくり寄せる(早くから引っ張ると行き過ぎる)。
+      // 最後の文では次が無いので、その文の上端に留める。
+      // 以前は「文の上端→吹き出しの下端」を補間していたため、読み進むほど
+      // 下へ引っ張られて目標を通り過ぎ、次の吹き出しでカクついていた。
       var a=spans[i]?topOf(spans[i]):topOf(_kara.box);
-      var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?botOf(spans[i]):botOf(_kara.box));
-      _kara.want=a+(b-a)*p;
+      var nx=spans[i+1]?topOf(spans[i+1]):null;
+      if(nx!=null){
+        var q=(p-0.5)/0.5;                 // 文の後半で 0→1
+        if(q<0)q=0; else if(q>1)q=1;
+        _kara.want=a+(nx-a)*q;
+      }else{
+        _kara.want=a;
+      }
     }else if(!ok){
       // 読み上げ中の要素が掴めていないので**動かさない**(古い目標へ走らせない)
       _kara.want=null;
