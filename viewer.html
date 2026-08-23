@@ -4406,34 +4406,29 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,timer:null,idx:-1,audio:null};
-// いま読んでいる文を画面の上から約28%の位置へ、**一度の滑らかな移動で**送る。
-// 以前は scrollIntoView のあとに scrollBy で戻していたため、
-// 「一度上に出てすぐ1行下がる」という二段階の動きになって見づらかった。
-// さらに、目標位置との差が小さいうちは動かさない(細かく揺れるのを防ぐ)。
-function _karaScroll(el){
+var _kara={itemId:null,marks:null,raf:null,idx:-1,audio:null,want:null,userAt:0};
+// 手動でスクロールされたら数秒は自動追従を止める(奪い合わないため)
+function _karaUserScroll(){_kara.userAt=Date.now();}
+(function(){
   var pa=document.getElementById('pageArea');
-  if(!pa||!el)return;
-  try{
-    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
-    var top=r.top-pr.top+pa.scrollTop;
-    var want=Math.max(0,top-pr.height*0.28);
-    if(Math.abs(want-pa.scrollTop)<28)return;       // 十分近ければ動かさない
-    if(pa.scrollTo)pa.scrollTo({top:want,behavior:'smooth'});
-    else pa.scrollTop=want;
-  }catch(e){}
-}
+  if(pa&&!pa._karaHooked){
+    pa._karaHooked=true;
+    ['wheel','touchstart','pointerdown'].forEach(function(ev){
+      pa.addEventListener(ev,_karaUserScroll,{passive:true});
+    });
+  }
+})();
 function _karaStop(){
-  if(_kara.timer){clearInterval(_kara.timer);_kara.timer=null;}
+  if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
   try{
     var on=document.querySelectorAll('.ts-on');
     for(var i=0;i<on.length;i++)on[i].classList.remove('ts-on');
     var rd=document.querySelectorAll('.tts-reading');
     for(var j=0;j<rd.length;j++)rd[j].classList.remove('tts-reading');
   }catch(e){}
-  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
+  _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;_kara.want=null;
 }
-function _karaShow(itemId,idx){
+function _karaMark(itemId,idx){
   if(_kara.idx===idx)return;
   _kara.idx=idx;
   var box=document.querySelector('[data-cid="'+itemId+'"]');
@@ -4441,24 +4436,57 @@ function _karaShow(itemId,idx){
   box.classList.add('tts-reading');
   var spans=box.querySelectorAll('.ts');
   for(var i=0;i<spans.length;i++)spans[i].classList.toggle('ts-on',i===idx);
-  var el=spans[idx];
-  if(el)_karaScroll(el);
 }
-// 事前生成音声の再生に合わせて追従を始める
+// 事前生成音声の再生に合わせて追従する。
+// 文の切れ目でページを飛ばすと目がちらつくので、**再生の進み具合に応じて
+// 目標位置を連続的に動かし**、そこへ毎フレーム少しずつ寄せる(指数的な減衰)。
+// これでページ全体がゆっくり流れるように見える。
 function _karaStart(itemId,text,audio){
   _karaStop();
   if(!state.tts||!state.tts.karaoke)return;
   var marks=_ttsSentenceMarks(text);
-  if(marks.length<2)return;              // 1文だけなら追従の意味がない
+  if(!marks.length)return;
   _kara.itemId=itemId;_kara.marks=marks;_kara.audio=audio;
-  _karaShow(itemId,0);
-  _kara.timer=setInterval(function(){
+  var pa=document.getElementById('pageArea');
+  var box=document.querySelector('[data-cid="'+itemId+'"]');
+  if(!pa||!box)return;
+  var spans=box.querySelectorAll('.ts');
+  _karaMark(itemId,0);
+  function topOf(el){
+    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
+    return r.top-pr.top+pa.scrollTop;
+  }
+  function bottomOf(el){
+    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
+    return r.bottom-pr.top+pa.scrollTop;
+  }
+  function tick(){
+    _kara.raf=requestAnimationFrame(tick);
     if(!audio||!audio.duration||isNaN(audio.duration))return;
-    var f=audio.currentTime/audio.duration;
+    var f=Math.min(1,Math.max(0,audio.currentTime/audio.duration));
+    // いま何文目か、その文の中でどこまで進んだか
     var i=0;while(i<marks.length-1&&f>marks[i])i++;
-    _karaShow(itemId,i);
-  },120);
+    var from=(i>0?marks[i-1]:0),to=marks[i];
+    var p=(to>from)?((f-from)/(to-from)):0;
+    _karaMark(itemId,i);
+    // 目標は「その文の上端 → 次の文の上端」を進み具合で補間した位置
+    var a=spans[i]?topOf(spans[i]):topOf(box);
+    var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?bottomOf(spans[i]):bottomOf(box));
+    var target=a+(b-a)*p;
+    var want=Math.max(0,target-pa.clientHeight*0.30);
+    var max=pa.scrollHeight-pa.clientHeight;
+    if(want>max)want=max;
+    // 手動操作の直後は触らない
+    if(Date.now()-_kara.userAt<4000)return;
+    var cur=pa.scrollTop,d=want-cur;
+    if(Math.abs(d)<0.5)return;
+    // 大きく離れているときだけ速く寄せ、普段はゆっくり流す
+    var k=(Math.abs(d)>pa.clientHeight)?0.25:0.06;
+    pa.scrollTop=cur+d*k;
+  }
+  _kara.raf=requestAnimationFrame(tick);
 }
+
 function _dispRuby(item,query){
   var raw=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'');
   var rb=item&&item.ruby;
