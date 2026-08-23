@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v117_no_reflow';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v118_prefetch_page';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -528,6 +528,19 @@ function _flowPageOf(order){
   var br=_pageBreaks(a);
   for(var i=0;i<br.length-1;i++){if(order>br[i]&&order<br[i+1])return i;}
   return state.currentPage;
+}
+// 読んでいる位置より**常に1ページ先まで**画面に用意しておく。
+// 「キューが残り2件になったら継ぎ足す」方式では、最後のブロックが長いと
+// 条件を満たさないまま読み終わってしまい、そこで描き直しが起きて途切れていた。
+function _flowPrefetch(order){
+  var p=_flowPageOf(order),added=[];
+  for(var g=0;g<20&&_flowEnd<p+1;g++){
+    var items=_flowAppend();
+    if(items===null)break;
+    var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
+    if(q.length)added=added.concat(q);
+  }
+  if(added.length)_ttsQueue=_ttsQueue.concat(added);
 }
 function _flowEnsureItem(it){
   if(!it)return false;
@@ -3053,19 +3066,10 @@ function _drainQueue(){
   function next(){
     var item=_ttsQueue.shift();
     if(!item){_drainQueue();return;}
-    // 残りが少なくなったら、次ページを先に継ぎ足しておく。
-    // 読み終わってから足すと、その瞬間だけ動きが止まって見える。
-    if(_ttsQueue.length<=2){
-      try{
-        var more=_flowAppend();
-        if(more&&more.length){
-          var q2=more.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
-          if(q2.length)_ttsQueue=_ttsQueue.concat(q2);
-        }
-      }catch(e){}
-    }
+    // 読む前に**1ページ先まで**用意しておく(継ぎ目で止まらないように)
+    try{_flowPrefetch(item.order);}catch(e){}
     _flowSyncPage(item.order);
-    _flowEnsureItem(item);      // 画面に無ければ継ぎ足す/描き直す
+    _flowEnsureItem(item);      // 万一まだ無ければ継ぎ足す/描き直す
     _speakItem(item,function(){_drainQueue();});
   }
   waitIdle();
@@ -3119,6 +3123,9 @@ function startTTS(){
   if(_startIdx>0){_ttsQueue=_ttsQueue.slice(_startIdx);console.info('[TTS] カーソル位置から再生:',(_startIdx+1)+'番目のセリフ以降');}
   state.tts.active=true;state.tts.paused=false;
   _flowReset();   // 継ぎ足しの起点を現在ページに
+  setTimeout(function(){
+    try{var f=_ttsQueue[0];if(f)_flowPrefetch(f.order);}catch(e){}
+  },0);
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
   _forceOfflineChars={};_disableNaturalForSession=false;_sessionHasOnstart=false;
   _clearAllLipSync();
