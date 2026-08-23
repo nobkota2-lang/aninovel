@@ -3043,7 +3043,7 @@ function _ttsAdvancePage(){
       var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
       if(!q.length)continue;                        // 見出しだけのページは読み飛ばす
       _ttsQueue=q;
-      setTimeout(function(){if(state.tts.active&&!state.tts.paused)_drainQueue();},60);
+      setTimeout(function(){if(state.tts.active&&!state.tts.paused)_drainQueue();},0);
       return true;
     }
   }catch(e){console.warn('[TTS] ページの継ぎ足しに失敗',e);}
@@ -4520,10 +4520,8 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null};
-// 手動でスクロールされたら数秒は自動追従を止める(奪い合わないため)
+var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0};
 function _karaUserScroll(){_kara.userAt=Date.now();}
-// render() のたびに pageArea は作り直されるので、そのつど付け直す
 function _karaHookScroll(){
   var pa=document.getElementById('pageArea');
   if(pa&&!pa._karaHooked){
@@ -4541,19 +4539,20 @@ function _karaClearMarks(){
     for(var j=0;j<rd.length;j++)rd[j].classList.remove('tts-reading');
   }catch(e){}
 }
-// 読み上げ全体を止めるとき
+// 読み上げ全体の終了
 function _karaStop(){
   if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
-  _kara.spans=null;_kara.box=null;_kara.want=null;
+  _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;
 }
-// 1ブロックの読み上げが終わったとき(色は消すが、**スクロールのループは続ける**)。
-// ここでループごと止めると、次の吹き出しに移る瞬間に一気に飛んで見えてしまう。
+// 1ブロックの終了。色は消すがループは続ける(吹き出しをまたぐ動きを繋ぐため)。
+// **目標も捨てる** — 古い目標を残すと、次のブロックが始まるまでそこへ
+// 引っ張られ続けて「読み上げと無関係にスクロールする」ことになる。
 function _karaEndItem(){
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
-  _kara.spans=null;_kara.box=null;
+  _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;
 }
 function _karaMark(idx){
   if(_kara.idx===idx)return;
@@ -4563,89 +4562,77 @@ function _karaMark(idx){
   var s=_kara.spans||[];
   for(var i=0;i<s.length;i++)s[i].classList.toggle('ts-on',i===idx);
 }
-// 目標位置へ毎フレーム少しずつ寄せ続けるループ。
-// **読み上げ中は止めない**ので、吹き出しをまたぐときも滑らかに繋がる。
+// 要素を掴む(継ぎ足し直後などで見つからないことがあるので、毎フレーム試す)
+function _karaBind(){
+  if(!_kara.itemId)return false;
+  if(_kara.box&&_kara.box.isConnected)return true;
+  var b=document.querySelector('[data-cid="'+_kara.itemId+'"]');
+  if(!b){_kara.tries++;return false;}
+  _kara.box=b;
+  _kara.spans=b.querySelectorAll('.ts');
+  _kara.idx=-1;
+  b.classList.add('tts-reading');
+  _karaMark(0);
+  return true;
+}
 function _karaEnsureLoop(){
   _karaHookScroll();
   if(_kara.raf)return;
-  var pa=document.getElementById('pageArea');
-  if(!pa)return;
-  function topOf(el){
-    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
-    return r.top-pr.top+pa.scrollTop;
-  }
-  function bottomOf(el){
-    var r=el.getBoundingClientRect(),pr=pa.getBoundingClientRect();
-    return r.bottom-pr.top+pa.scrollTop;
-  }
   function tick(){
     _kara.raf=requestAnimationFrame(tick);
     if(!state.tts||!state.tts.active){_karaStop();return;}
-    // render() で pageArea ごと作り直されることがあるので毎回取り直す
-    if(!pa||!pa.isConnected){
-      pa=document.getElementById('pageArea');
-      if(!pa)return;
-      _karaHookScroll();
-    }
-    // ---- 目標位置を更新（読み上げ中のブロックがあるときだけ） ----
-    // ページ送りや再描画で DOM が入れ替わると、掴んでいた要素が外れてしまう。
-    // その場合は同じ id で取り直す(取れなければ追従を休む)。
-    if(_kara.itemId&&(!_kara.box||!_kara.box.isConnected)){
-      var nb=document.querySelector('[data-cid="'+_kara.itemId+'"]');
-      if(nb){_kara.box=nb;_kara.spans=nb.querySelectorAll('.ts');_kara.idx=-1;nb.classList.add('tts-reading');}
-      else{_kara.want=null;}
-    }
-    var au=_kara.audio,box=_kara.box;
-    if(au&&box&&au.duration&&!isNaN(au.duration)){
-      var marks=_kara.marks||[],spans=_kara.spans||[];
+    var pa=document.getElementById('pageArea');
+    if(!pa)return;
+    _karaHookScroll();
+    // ---- 目標位置の更新 ----
+    var ok=_karaBind();
+    var au=_kara.audio;
+    if(ok&&au&&au.duration&&!isNaN(au.duration)){
+      var marks=_kara.marks||[1],spans=_kara.spans||[];
       var f=Math.min(1,Math.max(0,au.currentTime/au.duration));
       var i=0;while(i<marks.length-1&&f>marks[i])i++;
       var from=(i>0?marks[i-1]:0),to=marks[i]||1;
       var p=(to>from)?((f-from)/(to-from)):0;
       _karaMark(i);
-      var a=spans[i]?topOf(spans[i]):topOf(box);
-      var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?bottomOf(spans[i]):bottomOf(box));
+      var pr=pa.getBoundingClientRect();
+      function topOf(el){var r=el.getBoundingClientRect();return r.top-pr.top+pa.scrollTop;}
+      function botOf(el){var r=el.getBoundingClientRect();return r.bottom-pr.top+pa.scrollTop;}
+      var a=spans[i]?topOf(spans[i]):topOf(_kara.box);
+      var b=spans[i+1]?topOf(spans[i+1]):(spans[i]?botOf(spans[i]):botOf(_kara.box));
       _kara.want=a+(b-a)*p;
+    }else if(!ok){
+      // 読み上げ中の要素が掴めていないので**動かさない**(古い目標へ走らせない)
+      _kara.want=null;
     }
     if(_kara.want==null)return;
-    if(Date.now()-_kara.userAt<4000)return;      // 手動操作の直後は触らない
-    var want=Math.max(0,_kara.want-pa.clientHeight*0.20);   // 画面の上から20%に置く
+    if(Date.now()-_kara.userAt<4000)return;
+    var want=Math.max(0,_kara.want-pa.clientHeight*0.20);
     var max=Math.max(0,pa.scrollHeight-pa.clientHeight);
-    if(want>max)want=max;   // ページ末尾では下端で頭打ちになる(次ページへ進めば解消する)
+    if(want>max)want=max;
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    // 画面1.5枚ぶん以上ずれていたら、ゆっくり追いつくと読み上げに置いていかれる。
-    // 表示が失われるより即座に合わせる方がよいので、その場合だけ一気に寄せる。
-    if(Math.abs(d)>pa.clientHeight*1.5){pa.scrollTop=want;return;}
-    // 通常は1フレームの移動量に上限を設ける。これが無いと、次の吹き出しへ移る
-    // 瞬間に遠い目標へ飛んで「急にスクロールした」ように見える。
+    if(Math.abs(d)>pa.clientHeight*1.5){pa.scrollTop=want;return;}   // 大きくずれたら即復帰
     var step=d*0.08;
-    var cap=Math.max(2,pa.clientHeight*0.012);   // 600pxの画面で約7px/フレーム
+    var cap=Math.max(2,pa.clientHeight*0.012);
     if(step>cap)step=cap; else if(step<-cap)step=-cap;
     pa.scrollTop=cur+step;
   }
   _kara.raf=requestAnimationFrame(tick);
 }
-// 事前生成音声の再生に合わせて追従を始める
+// 再生開始。**要素が無くてもここでは諦めず**、ループ側で掴み直す。
 function _karaStart(itemId,text,audio){
   if(!state.tts||!state.tts.karaoke)return;
   _karaClearMarks();
-  var box=document.querySelector('[data-cid="'+itemId+'"]');
-  if(!box)return;
-  _kara.itemId=itemId;
-  // 時間の配分は**実際に合成した文字列**(ルビ・読み辞書を当てたもの)で計算する。
-  // 生の本文で按分すると、ルビの多い文ほど実際の長さとずれる。
-  // 文の数は 。！？ で切るので生本文と一致するため、span との対応は崩れない。
-  var _it=(state.content||[]).filter(function(x){return x.id===itemId;})[0];
-  var _say=(_it&&typeof _ttsJaText==='function')?(_ttsJaText(_it)||text):text;
-  _kara.marks=_ttsSentenceMarks(_say);
-  if(_kara.marks.length!==_ttsSplitSentences(text).length)_kara.marks=_ttsSentenceMarks(text);
-  if(!_kara.marks.length)_kara.marks=[1];
-  _kara.audio=audio;
-  _kara.box=box;
-  _kara.spans=box.querySelectorAll('.ts');
-  _kara.idx=-1;
-  _karaMark(0);
+  _kara.itemId=itemId;_kara.audio=audio;
+  _kara.box=null;_kara.spans=null;_kara.idx=-1;_kara.want=null;_kara.tries=0;
+  // 時間配分は**実際に合成した文字列**で計算する(ルビの多い文でずれないように)。
+  // 文の数は 。！？ で切るので生本文と一致し、span との対応は崩れない。
+  var it=(state.content||[]).filter(function(x){return x.id===itemId;})[0];
+  var say=(it&&typeof _ttsJaText==='function')?(_ttsJaText(it)||text):text;
+  var m=_ttsSentenceMarks(say);
+  if(m.length!==_ttsSplitSentences(text).length)m=_ttsSentenceMarks(text);
+  _kara.marks=m.length?m:[1];
+  _karaBind();
   _karaEnsureLoop();
 }
 
