@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v113_seamless';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v114_scroll_conflict';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2759,7 +2759,13 @@ function _speakItem(item,onEnd){
   state.tts.currentItemId=item.id;
   // いま読み上げている行を画面の上寄りに送る(カラオケのように追従させる)。
   // 中央に合わせると長い台詞では読んでいる箇所が画面外へ出てしまう。
-  try{scrollToItem(item.id,{top:true});}catch(e){}
+  // カラオケ追従が働く場面(事前生成音声＋追従ON)では**ここでスクロールしない**。
+  // scrollIntoView({behavior:'smooth'}) はブラウザ側のアニメーションで、
+  // 毎フレーム scrollTop を書くカラオケのループと取り合って位置が飛んでいた。
+  try{
+    var _kOn=(state.tts&&state.tts.karaoke)&&(typeof _hasPreAudio==='function')&&_hasPreAudio(item.id);
+    if(!_kOn)scrollToItem(item.id,{top:true});
+  }catch(e){scrollToItem(item.id,{top:true});}
   // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
   state.tts.currentCharId=null;
   // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
@@ -4517,7 +4523,8 @@ function _ttsSentenceMarks(t){
 var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null};
 // 手動でスクロールされたら数秒は自動追従を止める(奪い合わないため)
 function _karaUserScroll(){_kara.userAt=Date.now();}
-(function(){
+// render() のたびに pageArea は作り直されるので、そのつど付け直す
+function _karaHookScroll(){
   var pa=document.getElementById('pageArea');
   if(pa&&!pa._karaHooked){
     pa._karaHooked=true;
@@ -4525,7 +4532,7 @@ function _karaUserScroll(){_kara.userAt=Date.now();}
       pa.addEventListener(ev,_karaUserScroll,{passive:true});
     });
   }
-})();
+}
 function _karaClearMarks(){
   try{
     var on=document.querySelectorAll('.ts-on');
@@ -4559,6 +4566,7 @@ function _karaMark(idx){
 // 目標位置へ毎フレーム少しずつ寄せ続けるループ。
 // **読み上げ中は止めない**ので、吹き出しをまたぐときも滑らかに繋がる。
 function _karaEnsureLoop(){
+  _karaHookScroll();
   if(_kara.raf)return;
   var pa=document.getElementById('pageArea');
   if(!pa)return;
@@ -4573,6 +4581,12 @@ function _karaEnsureLoop(){
   function tick(){
     _kara.raf=requestAnimationFrame(tick);
     if(!state.tts||!state.tts.active){_karaStop();return;}
+    // render() で pageArea ごと作り直されることがあるので毎回取り直す
+    if(!pa||!pa.isConnected){
+      pa=document.getElementById('pageArea');
+      if(!pa)return;
+      _karaHookScroll();
+    }
     // ---- 目標位置を更新（読み上げ中のブロックがあるときだけ） ----
     // ページ送りや再描画で DOM が入れ替わると、掴んでいた要素が外れてしまう。
     // その場合は同じ id で取り直す(取れなければ追従を休む)。
@@ -4600,8 +4614,11 @@ function _karaEnsureLoop(){
     if(want>max)want=max;   // ページ末尾では下端で頭打ちになる(次ページへ進めば解消する)
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    // 1フレームの移動量に上限を設ける。これが無いと、次の吹き出しへ移る瞬間に
-    // 遠い目標へ一気に飛んで「急にスクロールした」ように見える。
+    // 画面1.5枚ぶん以上ずれていたら、ゆっくり追いつくと読み上げに置いていかれる。
+    // 表示が失われるより即座に合わせる方がよいので、その場合だけ一気に寄せる。
+    if(Math.abs(d)>pa.clientHeight*1.5){pa.scrollTop=want;return;}
+    // 通常は1フレームの移動量に上限を設ける。これが無いと、次の吹き出しへ移る
+    // 瞬間に遠い目標へ飛んで「急にスクロールした」ように見える。
     var step=d*0.08;
     var cap=Math.max(2,pa.clientHeight*0.012);   // 600pxの画面で約7px/フレーム
     if(step>cap)step=cap; else if(step<-cap)step=-cap;
