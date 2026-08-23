@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v114_scroll_conflict';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v117_no_reflow';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -514,12 +514,48 @@ function _flowAppend(){
   return items;
 }
 // 読んでいる位置のページ番号をフッターに反映する(再描画はしない)
+// これから読む項目が**画面に存在することを保証する**。
+// 継ぎ足しの管理(_flowEnd)と実際のDOMがずれると、要素が無いまま再生が進み
+// 追従が働かない。ずれたら前方へ継ぎ足し、それでも駄目ならそのページを描き直す。
+// 読み上げ中に render() が走ると、継ぎ足したページが消えてスクロールも巻き戻る。
+// 遅れて届く非同期処理(ギャラリーのマニフェスト読込など)からの再描画はここで抑える。
+function _renderSoft(){
+  if(state.tts&&state.tts.active){console.debug('[TTS] 読み上げ中のため再描画を見送りました');return;}
+  render();
+}
+function _flowPageOf(order){
+  var a=state.content.slice().sort(function(x,y){return x.order-y.order});
+  var br=_pageBreaks(a);
+  for(var i=0;i<br.length-1;i++){if(order>br[i]&&order<br[i+1])return i;}
+  return state.currentPage;
+}
+function _flowEnsureItem(it){
+  if(!it)return false;
+  var sel='[data-cid="'+it.id+'"]';
+  if(document.querySelector(sel))return true;
+  var p=_flowPageOf(it.order);
+  // まず前方へ継ぎ足して届かせる
+  for(var g=0;g<20&&_flowEnd<p;g++){
+    if(_flowAppend()===null)break;
+    if(document.querySelector(sel))return true;
+  }
+  if(document.querySelector(sel))return true;
+  // 届かない(戻る方向・継ぎ足しが失われた等)ならそのページを描き直す
+  console.warn('[TTS] 表示にない項目のためページを描き直します p'+(p+1));
+  state.currentPage=p;_flowEnd=p;
+  try{render();_saveProgress();}catch(e){}
+  // 描き直しで DOM が入れ替わったので、追従に掴み直させる
+  try{if(_kara&&_kara.itemId){_kara.box=null;_kara.spans=null;_kara.want=null;}}catch(e){}
+  return !!document.querySelector(sel);
+}
 function _flowSyncPage(order){
   var a=state.content.slice().sort(function(x,y){return x.order-y.order});
   var br=_pageBreaks(a),p=state.currentPage;
   for(var i=0;i<br.length-1;i++){if(order>br[i]&&order<br[i+1]){p=i;break;}}
   if(p===state.currentPage)return;
   state.currentPage=p;
+  // 継ぎ足しの起点が読んでいるページより後ろに戻らないようにする
+  if(_flowEnd<p)_flowEnd=p;
   try{
     _saveProgress();
     var f=document.querySelector('.page-footer');
@@ -3029,6 +3065,7 @@ function _drainQueue(){
       }catch(e){}
     }
     _flowSyncPage(item.order);
+    _flowEnsureItem(item);      // 画面に無ければ継ぎ足す/描き直す
     _speakItem(item,function(){_drainQueue();});
   }
   waitIdle();
@@ -4778,8 +4815,8 @@ function openGallery(){
   if(!state.galleryManifest){
     fetch('data/gallery-manifest.json',{cache:'force-cache'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-      .then(function(m){state.galleryManifest=m;render();})
-      .catch(function(e){console.warn('[Gallery] manifest読込失敗',e);state.galleryManifest={error:true};render();});
+      .then(function(m){state.galleryManifest=m;_renderSoft();})
+      .catch(function(e){console.warn('[Gallery] manifest読込失敗',e);state.galleryManifest={error:true};_renderSoft();});
   }
   render();
 }
@@ -5404,7 +5441,7 @@ function translateWork(hash){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
       state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
       try{ localStorage.setItem(_trKey(hash), JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
-      render();
+      _renderSoft();
     } else { showToast('Translation failed'); }
   }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
 }
