@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v118_prefetch_page';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v119_flow_verify';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -532,7 +532,20 @@ function _flowPageOf(order){
 // 読んでいる位置より**常に1ページ先まで**画面に用意しておく。
 // 「キューが残り2件になったら継ぎ足す」方式では、最後のブロックが長いと
 // 条件を満たさないまま読み終わってしまい、そこで描き直しが起きて途切れていた。
+// _flowEnd は「継ぎ足したはずのページ」を覚えているだけなので、
+// 途中で render() が走ると**DOMだけが消えて番号が残る**。すると消えたページは
+// 二度と補われない。継ぎ足す前に**実際のDOMと突き合わせて番号を戻す**。
+function _flowVerify(){
+  if(_flowEnd<=state.currentPage)return;
+  var items=_pageItems(_flowEnd);
+  for(var i=0;i<items.length;i++){
+    if(document.querySelector('[data-cid="'+items[i].id+'"]'))return;   // 生きている
+  }
+  console.info('[TTS] 継ぎ足しが失われていたので起点を戻します '+(_flowEnd+1)+'→'+(state.currentPage+1));
+  _flowEnd=state.currentPage;
+}
 function _flowPrefetch(order){
+  _flowVerify();
   var p=_flowPageOf(order),added=[];
   for(var g=0;g<20&&_flowEnd<p+1;g++){
     var items=_flowAppend();
@@ -540,7 +553,13 @@ function _flowPrefetch(order){
     var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
     if(q.length)added=added.concat(q);
   }
-  if(added.length)_ttsQueue=_ttsQueue.concat(added);
+  if(!added.length)return;
+  // 継ぎ足しをやり直したときに**同じ項目を二重にキューへ積まない**。
+  // (DOMが消えて起点を戻すと、同じページをもう一度足すことがある)
+  var have={};
+  _ttsQueue.forEach(function(x){have[x.id]=1;});
+  var fresh=added.filter(function(x){return !have[x.id];});
+  if(fresh.length)_ttsQueue=_ttsQueue.concat(fresh);
 }
 function _flowEnsureItem(it){
   if(!it)return false;
@@ -3123,9 +3142,10 @@ function startTTS(){
   if(_startIdx>0){_ttsQueue=_ttsQueue.slice(_startIdx);console.info('[TTS] カーソル位置から再生:',(_startIdx+1)+'番目のセリフ以降');}
   state.tts.active=true;state.tts.paused=false;
   _flowReset();   // 継ぎ足しの起点を現在ページに
+  // 先読みは startTTS の render() が終わってから(先に足すと描画で消える)
   setTimeout(function(){
     try{var f=_ttsQueue[0];if(f)_flowPrefetch(f.order);}catch(e){}
-  },0);
+  },120);
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
   _forceOfflineChars={};_disableNaturalForSession=false;_sessionHasOnstart=false;
   _clearAllLipSync();
