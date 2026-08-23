@@ -4633,7 +4633,13 @@ function _karaStart(itemId,text,audio){
   var box=document.querySelector('[data-cid="'+itemId+'"]');
   if(!box)return;
   _kara.itemId=itemId;
-  _kara.marks=_ttsSentenceMarks(text);
+  // 時間の配分は**実際に合成した文字列**(ルビ・読み辞書を当てたもの)で計算する。
+  // 生の本文で按分すると、ルビの多い文ほど実際の長さとずれる。
+  // 文の数は 。！？ で切るので生本文と一致するため、span との対応は崩れない。
+  var _it=(state.content||[]).filter(function(x){return x.id===itemId;})[0];
+  var _say=(_it&&typeof _ttsJaText==='function')?(_ttsJaText(_it)||text):text;
+  _kara.marks=_ttsSentenceMarks(_say);
+  if(_kara.marks.length!==_ttsSplitSentences(text).length)_kara.marks=_ttsSentenceMarks(text);
   if(!_kara.marks.length)_kara.marks=[1];
   _kara.audio=audio;
   _kara.box=box;
