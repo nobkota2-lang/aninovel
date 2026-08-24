@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v124_scroll_both';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v125_flow_ledger';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -508,20 +508,19 @@ function _itemsHTML(pc,opts){
 var _flowEnd=-1;
 function _flowReset(){_flowEnd=state.currentPage;_flowStart=state.currentPage;}
 function _flowAppend(){
-  var tp=getTP();
-  if(_flowEnd<0)_flowEnd=state.currentPage;
-  if(_flowEnd+1>=tp)return null;
+  var r=_flowRange();
+  var np=r.last+1;
+  if(np>=getTP())return null;
   var pa=document.getElementById('pageArea');
   var wrap=pa&&pa.firstElementChild;
   if(!wrap)return null;
-  var np=_flowEnd+1;
   var items=_pageItems(np);
-  _flowEnd=np;
-  if(!items.length)return [];
+  if(!items.length){_flowEnd=np;return [];}
   _computeSideMap();_computeMonoMap();
   wrap.insertAdjacentHTML('beforeend',_itemsHTML(items,{appended:true,page:np}));
   try{bindHandlers();}catch(e){}
-  console.info('[TTS] '+(np+1)+'ページ目を継ぎ足しました');
+  _flowEnd=np;
+  console.info('[Flow] '+(np+1)+'ページ目を末尾に追加');
   return items;
 }
 // 読んでいる位置のページ番号をフッターに反映する(再描画はしない)
@@ -549,26 +548,54 @@ function _flowPageOf(order){
 // ===== 読んでいるだけのときも、下端に近づいたら次ページを継ぎ足す =====
 // 音声再生のときと同じように、1ページの終わりで止まらず次へ流れるようにする。
 var _flowScrollHooked=false;
+// **DOMに実在するページの範囲**を、実際に並んでいるブロックから求める。
+// 番号だけを覚えていると、描画で消えたり順序が乱れても気づけず、
+// 「3ページ目の次に2ページ目が来る」ような並びになってしまう。
+function _flowRange(){
+  var pa=document.getElementById('pageArea');
+  var out={first:state.currentPage,last:state.currentPage,ok:false};
+  if(!pa)return out;
+  var els=pa.querySelectorAll('[data-cid]');
+  if(!els.length)return out;
+  var a=state.content.slice().sort(function(x,y){return x.order-y.order});
+  var br=_pageBreaks(a),byId={};
+  a.forEach(function(it){byId[it.id]=it.order;});
+  function pageOf(order){
+    for(var i=0;i<br.length-1;i++){if(order>br[i]&&order<br[i+1])return i;}
+    return 0;
+  }
+  var lo=null,hi=null;
+  for(var k=0;k<els.length;k++){
+    var o=byId[els[k].getAttribute('data-cid')];
+    if(o==null)continue;
+    var pg=pageOf(o);
+    if(lo===null||pg<lo)lo=pg;
+    if(hi===null||pg>hi)hi=pg;
+  }
+  if(lo===null)return out;
+  out.first=lo;out.last=hi;out.ok=true;
+  return out;
+}
 var _flowStart=-1;                       // 上方向にどこまで継ぎ足したか
 function _flowResetBoth(){_flowEnd=state.currentPage;_flowStart=state.currentPage;}
 // 前のページを**先頭に**足す。足したぶんスクロール位置をずらして見た目を保つ。
 function _flowPrepend(){
-  if(_flowStart<0)_flowStart=state.currentPage;
-  if(_flowStart<=0)return null;
+  var r=_flowRange();
+  var pp=r.first-1;
+  if(pp<0)return null;
   var pa=document.getElementById('pageArea');
   var wrap=pa&&pa.firstElementChild;
   if(!wrap)return null;
-  var pp=_flowStart-1;
   var items=_pageItems(pp);
-  _flowStart=pp;
-  if(!items.length)return [];
+  if(!items.length){_flowStart=pp;return [];}
   _computeSideMap();_computeMonoMap();
-  var before=wrap.scrollHeight||pa.scrollHeight;
+  var before=pa.scrollHeight;
   wrap.insertAdjacentHTML('afterbegin',_itemsHTML(items,{appended:true,page:pp}));
   var after=pa.scrollHeight;
   pa.scrollTop+=(after-before);          // 見ている位置を動かさない
   try{bindHandlers();}catch(e){}
-  console.info('[Reader] '+(pp+1)+'ページ目を先頭に足しました');
+  _flowStart=pp;
+  console.info('[Flow] '+(pp+1)+'ページ目を先頭に追加');
   return items;
 }
 // いま画面の上端にあるブロックからページ番号を求めて表示に反映する
@@ -608,26 +635,23 @@ function _flowHookRead(){
   },{passive:true});
 }
 function _flowVerify(){
-  if(_flowEnd<=state.currentPage)return;
-  var items=_pageItems(_flowEnd);
-  for(var i=0;i<items.length;i++){
-    if(document.querySelector('[data-cid="'+items[i].id+'"]'))return;   // 生きている
-  }
-  console.info('[TTS] 継ぎ足しが失われていたので起点を戻します '+(_flowEnd+1)+'→'+(state.currentPage+1));
-  _flowEnd=state.currentPage;
+  var r=_flowRange();
+  if(r.ok){_flowEnd=r.last;_flowStart=r.first;}
+  else{_flowEnd=state.currentPage;_flowStart=state.currentPage;}
 }
 function _flowPrefetch(order){
   _flowVerify();
   var p=_flowPageOf(order),added=[];
-  for(var g=0;g<20&&_flowEnd<p+1;g++){
+  // 読んでいるページの**1つ先まで**を、順序を崩さずに足す
+  for(var g=0;g<20;g++){
+    var r=_flowRange();
+    if(r.last>=p+1)break;
     var items=_flowAppend();
     if(items===null)break;
     var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
     if(q.length)added=added.concat(q);
   }
   if(!added.length)return;
-  // 継ぎ足しをやり直したときに**同じ項目を二重にキューへ積まない**。
-  // (DOMが消えて起点を戻すと、同じページをもう一度足すことがある)
   var have={};
   _ttsQueue.forEach(function(x){have[x.id]=1;});
   var fresh=added.filter(function(x){return !have[x.id];});
@@ -638,17 +662,19 @@ function _flowEnsureItem(it){
   var sel='[data-cid="'+it.id+'"]';
   if(document.querySelector(sel))return true;
   var p=_flowPageOf(it.order);
-  // まず前方へ継ぎ足して届かせる
-  for(var g=0;g<20&&_flowEnd<p;g++){
-    if(_flowAppend()===null)break;
+  // 後ろにあるなら末尾へ、前にあるなら先頭へ、順序を崩さずに足す
+  for(var g=0;g<30;g++){
+    var r=_flowRange();
+    if(p>r.last){ if(_flowAppend()===null)break; }
+    else if(p<r.first){ if(_flowPrepend()===null)break; }
+    else break;
     if(document.querySelector(sel))return true;
   }
   if(document.querySelector(sel))return true;
-  // 届かない(戻る方向・継ぎ足しが失われた等)ならそのページを描き直す
-  console.warn('[TTS] 表示にない項目のためページを描き直します p'+(p+1));
-  state.currentPage=p;_flowEnd=p;
+  // それでも無ければ、そのページだけを描き直す(最後の手段)
+  console.warn('[Flow] 表示にない項目のためページを描き直します p'+(p+1));
+  state.currentPage=p;_flowEnd=p;_flowStart=p;
   try{render();_saveProgress();}catch(e){}
-  // 描き直しで DOM が入れ替わったので、追従に掴み直させる
   try{if(_kara&&_kara.itemId){_kara.box=null;_kara.spans=null;_kara.want=null;}}catch(e){}
   return !!document.querySelector(sel);
 }
@@ -658,8 +684,6 @@ function _flowSyncPage(order){
   for(var i=0;i<br.length-1;i++){if(order>br[i]&&order<br[i+1]){p=i;break;}}
   if(p===state.currentPage)return;
   state.currentPage=p;
-  // 継ぎ足しの起点が読んでいるページより後ろに戻らないようにする
-  if(_flowEnd<p)_flowEnd=p;
   try{
     _saveProgress();
     var f=document.querySelector('.page-footer');
@@ -3218,10 +3242,9 @@ function startTTS(){
   var _startIdx=_ttsStartIndex();
   if(_startIdx>0){_ttsQueue=_ttsQueue.slice(_startIdx);console.info('[TTS] カーソル位置から再生:',(_startIdx+1)+'番目のセリフ以降');}
   state.tts.active=true;state.tts.paused=false;
-  _flowReset();   // 継ぎ足しの起点を現在ページに
-  // 先読みは startTTS の render() が終わってから(先に足すと描画で消える)
+  // 継ぎ足しの範囲は**いまDOMに出ているもの**から求める(消さない)
   setTimeout(function(){
-    try{var f=_ttsQueue[0];if(f)_flowPrefetch(f.order);}catch(e){}
+    try{_flowVerify();var f=_ttsQueue[0];if(f)_flowPrefetch(f.order);}catch(e){}
   },120);
   state.tts.currentItemId=null;state.tts.currentCharId=null; // 前回状態をクリア
   _forceOfflineChars={};_disableNaturalForSession=false;_sessionHasOnstart=false;
