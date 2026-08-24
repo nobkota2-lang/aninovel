@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v123_seamless_read';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v124_scroll_both';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -506,7 +506,7 @@ function _itemsHTML(pc,opts){
 // そこで**次ページの本文を今の画面の末尾に足す**ことで、最後まで一本の
 // 巻物のように流れるようにする。ページの概念(番号・前後ボタン)はそのまま。
 var _flowEnd=-1;
-function _flowReset(){_flowEnd=state.currentPage;}
+function _flowReset(){_flowEnd=state.currentPage;_flowStart=state.currentPage;}
 function _flowAppend(){
   var tp=getTP();
   if(_flowEnd<0)_flowEnd=state.currentPage;
@@ -549,19 +549,62 @@ function _flowPageOf(order){
 // ===== 読んでいるだけのときも、下端に近づいたら次ページを継ぎ足す =====
 // 音声再生のときと同じように、1ページの終わりで止まらず次へ流れるようにする。
 var _flowScrollHooked=false;
+var _flowStart=-1;                       // 上方向にどこまで継ぎ足したか
+function _flowResetBoth(){_flowEnd=state.currentPage;_flowStart=state.currentPage;}
+// 前のページを**先頭に**足す。足したぶんスクロール位置をずらして見た目を保つ。
+function _flowPrepend(){
+  if(_flowStart<0)_flowStart=state.currentPage;
+  if(_flowStart<=0)return null;
+  var pa=document.getElementById('pageArea');
+  var wrap=pa&&pa.firstElementChild;
+  if(!wrap)return null;
+  var pp=_flowStart-1;
+  var items=_pageItems(pp);
+  _flowStart=pp;
+  if(!items.length)return [];
+  _computeSideMap();_computeMonoMap();
+  var before=wrap.scrollHeight||pa.scrollHeight;
+  wrap.insertAdjacentHTML('afterbegin',_itemsHTML(items,{appended:true,page:pp}));
+  var after=pa.scrollHeight;
+  pa.scrollTop+=(after-before);          // 見ている位置を動かさない
+  try{bindHandlers();}catch(e){}
+  console.info('[Reader] '+(pp+1)+'ページ目を先頭に足しました');
+  return items;
+}
+// いま画面の上端にあるブロックからページ番号を求めて表示に反映する
+function _flowSyncByView(){
+  var pa=document.getElementById('pageArea');
+  if(!pa)return;
+  var els=pa.querySelectorAll('[data-cid]');
+  var pr=pa.getBoundingClientRect(),top=null;
+  for(var i=0;i<els.length;i++){
+    var r=els[i].getBoundingClientRect();
+    if(r.bottom>pr.top+8){top=els[i];break;}
+  }
+  if(!top)return;
+  var id=top.getAttribute('data-cid');
+  var it=(state.content||[]).filter(function(x){return x.id===id;})[0];
+  if(it)_flowSyncPage(it.order);
+}
 function _flowHookRead(){
   var pa=document.getElementById('pageArea');
   if(!pa||pa._flowReadHooked)return;
   pa._flowReadHooked=true;
   pa.addEventListener('scroll',function(){
     if(state.tts&&state.tts.active)return;              // 読み上げ中は既存の仕組みに任せる
-    if(pa.scrollTop+pa.clientHeight < pa.scrollHeight-600)return;   // まだ下端が遠い
     if(_flowEnd<0)_flowEnd=state.currentPage;
-    _flowVerify();
-    var before=pa.scrollHeight;
-    if(_flowAppend()===null)return;
-    // 継ぎ足したぶん、読んでいるページ番号も進める
-    _flowSyncPage(_pageItems(_flowEnd).length?_pageItems(_flowEnd)[0].order:0);
+    if(_flowStart<0)_flowStart=state.currentPage;
+    // 下端が近ければ次ページを足す
+    if(pa.scrollTop+pa.clientHeight >= pa.scrollHeight-600){
+      _flowVerify();
+      _flowAppend();
+    }
+    // 上端が近ければ前ページを足す(上へ戻れるように)
+    else if(pa.scrollTop < 600){
+      _flowPrepend();
+    }
+    // 表示位置からページ番号を更新
+    _flowSyncByView();
   },{passive:true});
 }
 function _flowVerify(){
@@ -4732,6 +4775,22 @@ function _karaEnsureLoop(){
     if(Date.now()-_kara.userAt<4000)return;
     var want=Math.max(0,_kara.want-pa.clientHeight*0.20);
     var max=Math.max(0,pa.scrollHeight-pa.clientHeight);
+    // 目標が下端を越えている＝**その先が画面に無い**。ページの最後の台詞で
+    // スクロールが止まって見えるのはこれ。足りなければ次ページを継ぎ足す。
+    if(want>max-4&&state.tts.active){
+      try{
+        if(_flowAppend()!==null){
+          max=Math.max(0,pa.scrollHeight-pa.clientHeight);
+          var pit=_pageItems(_flowEnd);
+          var q=pit.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
+          if(q.length){
+            var have={};_ttsQueue.forEach(function(x){have[x.id]=1;});
+            var fresh=q.filter(function(x){return !have[x.id];});
+            if(fresh.length)_ttsQueue=_ttsQueue.concat(fresh);
+          }
+        }
+      }catch(e){}
+    }
     // ページ末尾では下端で頭打ちになり、継ぎ足した瞬間に上限が一気に伸びる。
     // そのまま追うと「ガクッと速く動く」ので、**上限が伸びた直後は目標も
     // 少しずつ解放する**(1フレームあたり上限の伸びを cap 以内に抑える)。
@@ -4744,7 +4803,10 @@ function _karaEnsureLoop(){
     if(want>_kara.lastMax)want=_kara.lastMax;
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    if(Math.abs(d)>pa.clientHeight*1.5){pa.scrollTop=want;return;}   // 大きくずれたら即復帰
+    // 目標より**上**に大きく外れているとき(ページ移動・検索直後など)だけ即座に合わせる。
+    // 下方向は読み進みに合わせて動くので、常に緩やかに追う(ここを一律にしていたため
+    // ページを継ぎ足した瞬間に一気に飛んでいた)。
+    if(d<-pa.clientHeight*1.5){pa.scrollTop=want;return;}
     // 台詞から次の台詞へ移る瞬間は目標が段差のように飛ぶ。速く詰めると目がちらつくので
     // **その台詞を読み終わるまでに間に合う速さ**だけ出す(足りなければ最低速で進む)。
     var remain=1.2;
@@ -4754,7 +4816,7 @@ function _karaEnsureLoop(){
     }
     var need=Math.abs(d)/remain/60;                    // 1フレームあたり必要なpx
     var slow=Math.max(1,pa.clientHeight*0.003);        // 下限(600pxの画面で約1.8px=110px/秒)
-    var fast=Math.max(3,pa.clientHeight*0.010);        // 上限(約6px=360px/秒)
+    var fast=Math.max(2,pa.clientHeight*0.005);        // 上限(約3px=180px/秒)
     var cap=Math.min(fast,Math.max(slow,need*1.15));
     var step=d*0.05;
     if(step>cap)step=cap; else if(step<-cap)step=-cap;
