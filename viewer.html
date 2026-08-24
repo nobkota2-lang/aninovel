@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v125_flow_ledger';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v126_downward_only';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4826,10 +4826,15 @@ function _karaEnsureLoop(){
     if(want>_kara.lastMax)want=_kara.lastMax;
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    // 目標より**上**に大きく外れているとき(ページ移動・検索直後など)だけ即座に合わせる。
-    // 下方向は読み進みに合わせて動くので、常に緩やかに追う(ここを一律にしていたため
-    // ページを継ぎ足した瞬間に一気に飛んでいた)。
-    if(d<-pa.clientHeight*1.5){pa.scrollTop=want;return;}
+    // **読み上げ中は下方向にしか動かさない**。
+    // 長い吹き出しに移ると、その吹き出しの先頭は前の位置より上にあることがある。
+    // そこへ律儀に戻すと「いったん上げてから下げる」動きになり、目が回る。
+    // 本は上から下へ読むので、戻る必要はない。
+    if(d<0){
+      // 画面1.5枚ぶん以上ずれている＝ページ移動や検索の直後なので、そこは合わせる
+      if(d<-pa.clientHeight*1.5){pa.scrollTop=want;_kara.lastMax=null;}
+      return;
+    }
     // 台詞から次の台詞へ移る瞬間は目標が段差のように飛ぶ。速く詰めると目がちらつくので
     // **その台詞を読み終わるまでに間に合う速さ**だけ出す(足りなければ最低速で進む)。
     var remain=1.2;
