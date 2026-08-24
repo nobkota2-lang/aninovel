@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v122_gender_fix';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v123_seamless_read';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -82,6 +82,10 @@ ruby{ruby-align:center}
 .progress-bar{height:3px;background:var(--progress-bg);overflow:hidden}.progress-fill{height:100%;background:var(--progress-fill);transition:width .5s cubic-bezier(.4,0,.2,1)}
 .bubble{position:relative;border-radius:16px;padding:14px 18px;box-shadow:0 2px 8px var(--shadow);max-width:480px;transition:transform .2s,box-shadow .2s}.bubble.char-bubble,.bubble.char-bubble *{color:#1F2937 !important}.bubble:hover{transform:translateY(-1px);box-shadow:0 4px 16px var(--shadow-strong)}
 .bubble.bubble-mono{border:2px dashed var(--text-muted);box-shadow:none}
+/* ページの継ぎ目。読み進めていることが分かる程度の控えめな印 */
+.page-sep{display:flex;align-items:center;gap:10px;margin:18px 0 10px;opacity:.55}
+.page-sep::before,.page-sep::after{content:'';flex:1;border-top:1px dashed var(--border)}
+.page-sep span{font-size:11px;color:var(--text-muted);white-space:nowrap}
 /* 読み上げ中の文をカラオケのように光らせる */
 .ts{transition:color .25s ease,opacity .25s ease}
 /* 読み上げ中の文は色と濃さで示す。塗りつぶすより本文が読みやすい */
@@ -477,10 +481,16 @@ function getPC(){
   return _pageItems(state.currentPage);
 }
 // ブロック配列を本文のHTMLにする(描画とページ継ぎ足しで共用)
-function _itemsHTML(pc){
+function _itemsHTML(pc,opts){
   var h='';
   if(!pc.length)return h;
-  h+=insertRow(pc[0].order);
+  // 継ぎ足しのときは、前のページの末尾に既に挿入行があるので先頭には出さない
+  // (出すと「＋ナレーション …」が二重に並ぶ)。代わりにページの区切りを示す。
+  if(opts&&opts.appended){
+    h+='<div class="page-sep"><span>'+((opts.page||0)+1)+' ページ</span></div>';
+  }else{
+    h+=insertRow(pc[0].order);
+  }
   pc.forEach(function(item,i){
     if(item.type==='image')h+=renderImageBlock(item);
     else if(item.type==='video')h+=renderVideoBlock(item);
@@ -509,7 +519,7 @@ function _flowAppend(){
   _flowEnd=np;
   if(!items.length)return [];
   _computeSideMap();_computeMonoMap();
-  wrap.insertAdjacentHTML('beforeend',_itemsHTML(items));
+  wrap.insertAdjacentHTML('beforeend',_itemsHTML(items,{appended:true,page:np}));
   try{bindHandlers();}catch(e){}
   console.info('[TTS] '+(np+1)+'ページ目を継ぎ足しました');
   return items;
@@ -536,6 +546,24 @@ function _flowPageOf(order){
 // _flowEnd は「継ぎ足したはずのページ」を覚えているだけなので、
 // 途中で render() が走ると**DOMだけが消えて番号が残る**。すると消えたページは
 // 二度と補われない。継ぎ足す前に**実際のDOMと突き合わせて番号を戻す**。
+// ===== 読んでいるだけのときも、下端に近づいたら次ページを継ぎ足す =====
+// 音声再生のときと同じように、1ページの終わりで止まらず次へ流れるようにする。
+var _flowScrollHooked=false;
+function _flowHookRead(){
+  var pa=document.getElementById('pageArea');
+  if(!pa||pa._flowReadHooked)return;
+  pa._flowReadHooked=true;
+  pa.addEventListener('scroll',function(){
+    if(state.tts&&state.tts.active)return;              // 読み上げ中は既存の仕組みに任せる
+    if(pa.scrollTop+pa.clientHeight < pa.scrollHeight-600)return;   // まだ下端が遠い
+    if(_flowEnd<0)_flowEnd=state.currentPage;
+    _flowVerify();
+    var before=pa.scrollHeight;
+    if(_flowAppend()===null)return;
+    // 継ぎ足したぶん、読んでいるページ番号も進める
+    _flowSyncPage(_pageItems(_flowEnd).length?_pageItems(_flowEnd)[0].order:0);
+  },{passive:true});
+}
 function _flowVerify(){
   if(_flowEnd<=state.currentPage)return;
   var items=_pageItems(_flowEnd);
@@ -4605,7 +4633,7 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0};
+var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0,lastMax:null};
 function _karaUserScroll(){_kara.userAt=Date.now();}
 function _karaHookScroll(){
   var pa=document.getElementById('pageArea');
@@ -4629,7 +4657,7 @@ function _karaStop(){
   if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
-  _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;
+  _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;_kara.lastMax=null;
 }
 // 1ブロックの終了。色は消すがループは続ける(吹き出しをまたぐ動きを繋ぐため)。
 // **目標も捨てる** — 古い目標を残すと、次のブロックが始まるまでそこへ
@@ -4704,7 +4732,16 @@ function _karaEnsureLoop(){
     if(Date.now()-_kara.userAt<4000)return;
     var want=Math.max(0,_kara.want-pa.clientHeight*0.20);
     var max=Math.max(0,pa.scrollHeight-pa.clientHeight);
-    if(want>max)want=max;
+    // ページ末尾では下端で頭打ちになり、継ぎ足した瞬間に上限が一気に伸びる。
+    // そのまま追うと「ガクッと速く動く」ので、**上限が伸びた直後は目標も
+    // 少しずつ解放する**(1フレームあたり上限の伸びを cap 以内に抑える)。
+    if(_kara.lastMax==null)_kara.lastMax=max;
+    if(max>_kara.lastMax+2){
+      _kara.lastMax=Math.min(max,_kara.lastMax+Math.max(4,pa.clientHeight*0.02));
+    }else{
+      _kara.lastMax=max;
+    }
+    if(want>_kara.lastMax)want=_kara.lastMax;
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
     if(Math.abs(d)>pa.clientHeight*1.5){pa.scrollTop=want;return;}   // 大きくずれたら即復帰
@@ -5553,6 +5590,7 @@ function render(){
   document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();applyI18n();_maybeReveal();
   if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}else{var _paEl=document.getElementById('pageArea');if(_paEl)_paEl.scrollTop=_paScroll;}
+  try{_flowHookRead();}catch(e){}
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動
   if(state.tts&&state.tts.active&&state.tts.currentItemId){
     var _te=document.querySelector('[data-cid="'+state.tts.currentItemId+'"]');
