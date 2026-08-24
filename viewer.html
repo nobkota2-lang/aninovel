@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v126_downward_only';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v128_voice_variety';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2629,10 +2629,39 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
 // (http://localhost:50021) を叩いて全セリフを合成し IndexedDB に保存する。
 // 同じテキスト+話者の場合はハッシュ照合でスキップ (再生成不要)。
 var _VOICEVOX_DEFAULTS={male:13,female:8,neutral:2};
+// VOICEVOX の話者を人物ごとに散らす。
+// 以前は性別ごとに1種類しか無く(男13/女8)、登場人物全員が同じ声になっていた。
+// ナレーターは作者の性別に合わせる。
+var _VV_MALE=[13,11,12,53,42,21,84,52];
+var _VV_FEMALE=[8,2,3,14,20,54,43,68];
+var _vvAssigned={};   // その場で決めた声を覚えて、重複を避ける
 function _voicevoxSpeakerFor(ch){
   if(!ch)return _VOICEVOX_DEFAULTS.neutral;
-  if(typeof ch.voicevoxSpeaker==='number')return ch.voicevoxSpeaker;
-  return _VOICEVOX_DEFAULTS[ch.gender]||_VOICEVOX_DEFAULTS.neutral;
+  if(typeof ch.voicevoxSpeaker==='number')return ch.voicevoxSpeaker;   // 手動指定が最優先
+  var list=(ch.gender==='female')?_VV_FEMALE:_VV_MALE;
+  // ナレーターは作者の性別に従う
+  if(ch.id==='narrator'){
+    var ag=(typeof _authorGender==='function')?_authorGender():'male';
+    list=(ag==='female')?_VV_FEMALE:_VV_MALE;
+    return list[0];
+  }
+  // 同じ名前なら毎回同じ声になるよう名前から決めるが、
+  // **同性の他の人物と重ならない**ものを優先して選ぶ
+  var h=(typeof _nameHash==='function')?_nameHash(ch.name||ch.id):0;
+  var used={};
+  try{
+    (state.characters||[]).forEach(function(c){
+      if(c.id===ch.id)return;
+      if((c.gender==='female')!==(ch.gender==='female'))return;
+      var v=(typeof c.voicevoxSpeaker==='number')?c.voicevoxSpeaker:_vvAssigned[c.id];
+      if(typeof v==='number')used[v]=1;
+    });
+  }catch(e){}
+  for(var k=0;k<list.length;k++){
+    var cand=list[(h+k)%list.length];
+    if(!used[cand]){_vvAssigned[ch.id]=cand;return cand;}
+  }
+  var fb=list[h%list.length];_vvAssigned[ch.id]=fb;return fb;
 }
 var _VV_SPEAKERS=[
   {g:'女性',items:[[2,'四国めたん'],[0,'四国めたん（あまあま）'],[6,'四国めたん（ツンツン）'],[4,'四国めたん（セクシー）'],[8,'春日部つむぎ'],[10,'雨晴はう'],[9,'波音リツ'],[14,'冥鳴ひまり'],[16,'九州そら'],[20,'もち子さん'],[23,'WhiteCUL'],[29,'No.7'],[43,'櫻歌ミコ'],[46,'小夜/SAYO'],[54,'春歌ナナ'],[55,'猫使アル'],[67,'栗田まろん'],[74,'琴詠ニア']]},
@@ -4731,7 +4760,8 @@ function _karaStop(){
 function _karaEndItem(){
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
-  _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;
+  _kara.spans=null;_kara.box=null;_kara.tries=0;
+  // want は残す(次の台詞まで滑らかに繋ぐため)。単調なので戻ることはない。
 }
 function _karaMark(idx){
   if(_kara.idx===idx)return;
@@ -4776,20 +4806,23 @@ function _karaEnsureLoop(){
       var pr=pa.getBoundingClientRect();
       function topOf(el){var r=el.getBoundingClientRect();return r.top-pr.top+pa.scrollTop;}
       function botOf(el){var r=el.getBoundingClientRect();return r.bottom-pr.top+pa.scrollTop;}
-      // 目標は「いま読んでいる文の上端」。次の文があれば、そこへ向けて
-      // **文の後半だけ**でゆっくり寄せる(早くから引っ張ると行き過ぎる)。
-      // 最後の文では次が無いので、その文の上端に留める。
-      // 以前は「文の上端→吹き出しの下端」を補間していたため、読み進むほど
-      // 下へ引っ張られて目標を通り過ぎ、次の吹き出しでカクついていた。
+      // 目標は「いま読んでいる文の上端」。次の文へは文の後半だけで寄せる。
       var a=spans[i]?topOf(spans[i]):topOf(_kara.box);
       var nx=spans[i+1]?topOf(spans[i+1]):null;
+      var raw;
       if(nx!=null){
         var q=(p-0.5)/0.5;                 // 文の後半で 0→1
         if(q<0)q=0; else if(q>1)q=1;
-        _kara.want=a+(nx-a)*q;
+        raw=a+(nx-a)*q;
       }else{
-        _kara.want=a;
+        raw=a;
       }
+      // **目標は決して後戻りさせない**。
+      // 長い吹き出しの後半を読んでいるとき、次の短い台詞へ移ると
+      // 「その台詞の先頭」は前の目標より上にある。そこへ戻すと画面が上へ跳ね、
+      // 戻さないと読み上げ位置を追い越して隠れてしまう。
+      // 本文は上から下へ進むので、目標も単調に増やすのが正しい。
+      if(_kara.want==null||raw>_kara.want)_kara.want=raw;
     }else if(!ok){
       // 読み上げ中の要素が掴めていないので**動かさない**(古い目標へ走らせない)
       _kara.want=null;
@@ -4826,15 +4859,9 @@ function _karaEnsureLoop(){
     if(want>_kara.lastMax)want=_kara.lastMax;
     var cur=pa.scrollTop,d=want-cur;
     if(Math.abs(d)<0.5)return;
-    // **読み上げ中は下方向にしか動かさない**。
-    // 長い吹き出しに移ると、その吹き出しの先頭は前の位置より上にあることがある。
-    // そこへ律儀に戻すと「いったん上げてから下げる」動きになり、目が回る。
-    // 本は上から下へ読むので、戻る必要はない。
-    if(d<0){
-      // 画面1.5枚ぶん以上ずれている＝ページ移動や検索の直後なので、そこは合わせる
-      if(d<-pa.clientHeight*1.5){pa.scrollTop=want;_kara.lastMax=null;}
-      return;
-    }
+    // 目標が単調に増えるので、通常はここが負になることはない。
+    // ページ移動や検索の直後など大きく外れたときだけ合わせる。
+    if(d<-pa.clientHeight*1.5){pa.scrollTop=want;_kara.lastMax=null;return;}
     // 台詞から次の台詞へ移る瞬間は目標が段差のように飛ぶ。速く詰めると目がちらつくので
     // **その台詞を読み終わるまでに間に合う速さ**だけ出す(足りなければ最低速で進む)。
     var remain=1.2;
@@ -4857,7 +4884,8 @@ function _karaStart(itemId,text,audio){
   if(!state.tts||!state.tts.karaoke)return;
   _karaClearMarks();
   _kara.itemId=itemId;_kara.audio=audio;
-  _kara.box=null;_kara.spans=null;_kara.idx=-1;_kara.want=null;_kara.tries=0;
+  _kara.box=null;_kara.spans=null;_kara.idx=-1;_kara.tries=0;
+  // want は引き継ぐ(台詞が変わっても目標が後戻りしないように)
   // 時間配分は**実際に合成した文字列**で計算する(ルビの多い文でずれないように)。
   // 文の数は 。！？ で切るので生本文と一致し、span との対応は崩れない。
   var it=(state.content||[]).filter(function(x){return x.id===itemId;})[0];
