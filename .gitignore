@@ -12,3 +12,5 @@ legal/*.backup-*
 .wrangler/
 
 viewer.html.bak
+
+*.bak
