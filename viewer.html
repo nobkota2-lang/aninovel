@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v128_voice_variety';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v130_keep_major';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2632,34 +2632,131 @@ var _VOICEVOX_DEFAULTS={male:13,female:8,neutral:2};
 // VOICEVOX の話者を人物ごとに散らす。
 // 以前は性別ごとに1種類しか無く(男13/女8)、登場人物全員が同じ声になっていた。
 // ナレーターは作者の性別に合わせる。
-var _VV_MALE=[13,11,12,53,42,21,84,52];
-var _VV_FEMALE=[8,2,3,14,20,54,43,68];
+// 声の候補。性別と年代を添えて、人物に合うものを選べるようにする。
+// VOICEVOXは1人の話者に複数スタイルがあるので、種類は十分に確保できる。
+var _VV_POOL={
+  male:[
+    {id:13,n:'青山龍星',a:'40-60s'},   {id:84,n:'青山龍星(しっとり)',a:'40-60s'},
+    {id:83,n:'青山龍星(喜び)',a:'40-60s'},{id:11,n:'玄野武宏',a:'20-30s'},
+    {id:39,n:'玄野武宏(喜び)',a:'20-30s'},{id:41,n:'玄野武宏(悲しみ)',a:'20-30s'},
+    {id:12,n:'白上虎太郎',a:'MSchool'}, {id:32,n:'白上虎太郎(わーい)',a:'MSchool'},
+    {id:21,n:'剣崎雌雄',a:'20-30s'},   {id:52,n:'雀松朱司',a:'40-60s'},
+    {id:53,n:'麒ヶ島宗麟',a:'40-60s'}, {id:42,n:'ちび式じい',a:'70s-'},
+    {id:81,n:'青山龍星(熱血)',a:'20-30s'},{id:82,n:'青山龍星(不機嫌)',a:'40-60s'}
+  ],
+  female:[
+    {id:2,n:'四国めたん',a:'MSchool'},  {id:0,n:'四国めたん(あまあま)',a:'MSchool'},
+    {id:6,n:'四国めたん(ツンツン)',a:'MSchool'},{id:8,n:'春日部つむぎ',a:'MSchool'},
+    {id:10,n:'雨晴はう',a:'20-30s'},   {id:9,n:'波音リツ',a:'20-30s'},
+    {id:65,n:'波音リツ(クイーン)',a:'40-60s'},{id:14,n:'冥鳴ひまり',a:'MSchool'},
+    {id:16,n:'九州そら',a:'20-30s'},   {id:15,n:'九州そら(あまあま)',a:'ESchool'},
+    {id:20,n:'もち子さん',a:'20-30s'}, {id:80,n:'もち子さん(のんびり)',a:'40-60s'},
+    {id:23,n:'WhiteCUL',a:'20-30s'},  {id:24,n:'WhiteCUL(たのしい)',a:'20-30s'},
+    {id:29,n:'No.7',a:'20-30s'},      {id:31,n:'No.7(読み聞かせ)',a:'40-60s'},
+    {id:43,n:'櫻歌ミコ',a:'MSchool'},  {id:46,n:'小夜/SAYO',a:'MSchool'},
+    {id:54,n:'春歌ナナ',a:'20-30s'},   {id:55,n:'猫使アル',a:'MSchool'},
+    {id:67,n:'栗田まろん',a:'ESchool'},{id:74,n:'琴詠ニア',a:'20-30s'}
+  ]
+};
 var _vvAssigned={};   // その場で決めた声を覚えて、重複を避ける
+var _vvUseCache=null; // 既存の音声で実際に使われている話者(人物ID→speaker)
+// 既に生成済みの音声から、その人物に使われている話者を拾う。
+// 一度だけ調べてキャッシュする(同期で呼ばれるので事前に読み込んでおく)。
+// 既存の声を引き継ぐのは**台詞の多い人物だけ**。
+// 全員を引き継ぐと声が分かれないし、全員を変えると作り直しが膨大になる。
+// 作り直しの量と聴きやすさの折り合いとして、上位数名だけ据え置く。
+var VV_KEEP_TOP=1;         // 台詞数の多い上位何名を据え置くか(最多の1名だけ)
+function _vvInUse(charId){
+  if(!_vvUseCache)return null;
+  var v=_vvUseCache[charId];
+  if(typeof v!=='number')return null;
+  if(!_vvKeepSet)_vvBuildKeepSet();
+  return _vvKeepSet[charId]?v:null;
+}
+var _vvKeepSet=null;
+function _vvBuildKeepSet(){
+  var n={};
+  (state.content||[]).forEach(function(it){
+    var cid=it.characterId||'narrator';
+    if((it.text||'').trim())n[cid]=(n[cid]||0)+1;
+  });
+  var rank=Object.keys(n).sort(function(a,b){return n[b]-n[a];});
+  _vvKeepSet={};
+  for(var i=0;i<Math.min(VV_KEEP_TOP,rank.length);i++)_vvKeepSet[rank[i]]=1;
+  var names=rank.slice(0,VV_KEEP_TOP).map(function(id){
+    var c=(state.characters||[]).filter(function(x){return x.id===id;})[0];
+    return (c?c.name:id)+'('+n[id]+'件)';
+  });
+  console.info('[TTS] 声を据え置く人物: '+names.join(', '));
+}
+async function _vvScanExisting(){
+  var map={};
+  try{
+    var wid=_currentWorkId();
+    var keys=await _idbKeysByWork(wid);
+    var byChar={};
+    (state.content||[]).forEach(function(it){
+      if(it.characterId)byChar[it.id]=it.characterId;
+    });
+    var seen={};
+    for(var i=0;i<keys.length&&i<400;i++){       // 先頭400件で十分わかる
+      var k=keys[i];
+      var cid=byChar[k.itemId]||'narrator';
+      if(seen[cid])continue;
+      var rec=await _idbGet(wid,k.itemId,k.lang);
+      if(rec&&rec.meta&&typeof rec.meta.speaker==='number'){
+        map[cid]=rec.meta.speaker;seen[cid]=1;
+      }
+    }
+  }catch(e){console.warn('[TTS] 既存音声の話者を調べられませんでした',e);}
+  _vvUseCache=map;
+  console.info('[TTS] 既存の声を引き継ぎます: '+Object.keys(map).length+'名');
+  return map;
+}
 function _voicevoxSpeakerFor(ch){
   if(!ch)return _VOICEVOX_DEFAULTS.neutral;
   if(typeof ch.voicevoxSpeaker==='number')return ch.voicevoxSpeaker;   // 手動指定が最優先
-  var list=(ch.gender==='female')?_VV_FEMALE:_VV_MALE;
-  // ナレーターは作者の性別に従う
-  if(ch.id==='narrator'){
+  var want=(ch.gender==='female')?'female':'male';
+  // ナレーターは作者の性別に従い、落ち着いた読み聞かせ向きの声を使う。
+  // この声は**語り手専用**として、他の人物には割り当てない。
+  var narId=null;
+  try{
     var ag=(typeof _authorGender==='function')?_authorGender():'male';
-    list=(ag==='female')?_VV_FEMALE:_VV_MALE;
-    return list[0];
-  }
+    narId=(ag==='female')?31:13;           // No.7(読み聞かせ) / 青山龍星
+  }catch(e){narId=13;}
+  if(ch.id==='narrator'){_vvAssigned[ch.id]=narId;return narId;}
+  var pool=_VV_POOL[want]||_VV_POOL.male;
+  // 年代が一致するものを優先し、無ければ全体から
+  var age=ch.age||((typeof _guessAge==='function')?_guessAge(ch.name||''):'20-30s');
+  var same=pool.filter(function(x){return x.a===age;});
+  var list=(same.length?same:pool).map(function(x){return x.id;});
+  var all=pool.map(function(x){return x.id;});
   // 同じ名前なら毎回同じ声になるよう名前から決めるが、
   // **同性の他の人物と重ならない**ものを優先して選ぶ
   var h=(typeof _nameHash==='function')?_nameHash(ch.name||ch.id):0;
+  // **既に音声を作ってある人物は、今の声をそのまま使う**。
+  // 声が変わるとハッシュも変わり、その人物の台詞を全部作り直すことになる。
+  // 台詞の多い人物(猫の「吾輩」は地の文1,561件)ほど作り直しの代償が大きい。
+  var keep=_vvInUse(ch.id);
+  if(keep!=null){_vvAssigned[ch.id]=keep;return keep;}
   var used={};
+  if(narId!=null)used[narId]=1;            // 語り手の声は予約済み
   try{
     (state.characters||[]).forEach(function(c){
       if(c.id===ch.id)return;
-      if((c.gender==='female')!==(ch.gender==='female'))return;
+      if(((c.gender==='female')?'female':'male')!==want)return;
       var v=(typeof c.voicevoxSpeaker==='number')?c.voicevoxSpeaker:_vvAssigned[c.id];
       if(typeof v==='number')used[v]=1;
     });
   }catch(e){}
+  // ①年代の合うもの ②同性の全体 の順に、使われていない声を探す
   for(var k=0;k<list.length;k++){
-    var cand=list[(h+k)%list.length];
-    if(!used[cand]){_vvAssigned[ch.id]=cand;return cand;}
+    var c1=list[(h+k)%list.length];
+    if(!used[c1]){_vvAssigned[ch.id]=c1;return c1;}
+  }
+  for(var k2=0;k2<all.length;k2++){
+    var c2=all[(h+k2)%all.length];
+    if(!used[c2]){_vvAssigned[ch.id]=c2;return c2;}
   }
   var fb=list[h%list.length];_vvAssigned[ch.id]=fb;return fb;
 }
@@ -2747,6 +2844,7 @@ function _showVoicevoxCorsHelp(engineUrl){
   }
 }
 async function generateVoicesLocal(opts){
+  try{ if(!_vvUseCache) await _vvScanExisting(); }catch(e){}
   opts=opts||{};
   var engineUrl=opts.engineUrl||'http://localhost:50021';
   var wid=_currentWorkId();
