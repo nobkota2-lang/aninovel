@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v131_unknown_speaker';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v132_no_empty_page';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -455,15 +455,19 @@ var PAGE_CHARS=1800;
 //   ・長い作品は PAGE_CHARS ごとに自動で改ページ
 // 見出しがページ末尾に取り残されないよう、見出しは次ページの先頭に置く。
 function _pageBreaks(a){
-  var br=[-1],chars=0,started=false;
+  var br=[-1],chars=0,started=false,onlyHead=true;
   for(var i=0;i<a.length;i++){
     var it=a[i];
-    if(it.type==='pageBreak'){br.push(it.order);chars=0;started=false;continue;}
+    if(it.type==='pageBreak'){br.push(it.order);chars=0;started=false;onlyHead=true;continue;}
     var isHead=(it.type==='chapter_break'||it.type==='section_break');
-    if(isHead&&started){br.push(it.order-0.5);chars=0;}       // 見出しの前で切る
-    else if(!isHead&&started&&chars>=PAGE_CHARS){br.push(it.order-0.5);chars=0;}
+    // 見出しの前で改ページする。ただし**そのページがまだ見出しだけ**なら切らない。
+    // 「章 → 節 → 本文」と続く構成(綺堂むかし語りは章41・節69)で切ってしまうと、
+    // 見出し1件だけの空ページができ、本文が何も出ないページになる。
+    if(isHead&&started&&!onlyHead){br.push(it.order-0.5);chars=0;onlyHead=true;}
+    else if(!isHead&&started&&chars>=PAGE_CHARS){br.push(it.order-0.5);chars=0;onlyHead=true;}
     chars+=((it.text||'').length);
     started=true;
+    if(!isHead)onlyHead=false;      // 本文が入ったので、次の見出しでは切ってよい
   }
   br.push(Infinity);
   return br;
