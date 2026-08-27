@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v132_no_empty_page';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v133_dedup_heading';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5064,6 +5064,22 @@ function _dispRuby(item,query){
 }
 
 function renderHeading(item){
+  // 青空文庫では作品名が大見出しと中見出しの両方に指定されることがあり、
+  // 同じ文言の見出しが2つ続く(綺堂むかし語りの「思い出草」)。
+  // **ブロックは消さない**(消すと英訳のキーが変わり、注入済みの手訳が孤児になる)。
+  // 直前が同じ文言の見出しなら、表示だけ省く。
+  try{
+    var _a=state.content, _pi=-1;
+    for(var _i=0;_i<_a.length;_i++){ if(_a[_i].id===item.id){_pi=_i;break;} }
+    if(_pi>0){
+      var _pv=_a[_pi-1];
+      if(_pv&&(_pv.type==='chapter_break'||_pv.type==='section_break')
+         &&String(_pv.text||'').trim()===String(item.text||'').trim()){
+        return '';
+      }
+    }
+  }catch(e){}
+
   var big=(item.type==='chapter_break');
   var ds=state.displaySettings,ft=_font(ds.font),or=ds.orientation;
   var sz=big?Math.round(ds.fontSize*1.5):Math.round(ds.fontSize*1.2);
@@ -5108,10 +5124,13 @@ function _tocEntries(){
     for(var p=0;p<br.length-1;p++){if(order>br[p]&&order<br[p+1])return p;}
     return 0;
   }
+  var prevTitle=null;
   a.forEach(function(it){
-    if(it.type!=='chapter_break'&&it.type!=='section_break')return;
-    var t=(typeof _ctext==='function'?_ctext(it):it.text)||it.text||'';
-    out.push({id:it.id,title:String(t).trim(),sub:(it.type==='section_break'),page:pageOf(it.order)});
+    if(it.type!=='chapter_break'&&it.type!=='section_break'){prevTitle=null;return;}
+    var t=String((typeof _ctext==='function'?_ctext(it):it.text)||it.text||'').trim();
+    if(t===prevTitle)return;      // 直前と同じ見出しは目次にも出さない
+    prevTitle=t;
+    out.push({id:it.id,title:t,sub:(it.type==='section_break'),page:pageOf(it.order)});
   });
   // 見出しが無い作品はページ送りだけでも案内する
   if(!out.length&&br.length-1>1){
