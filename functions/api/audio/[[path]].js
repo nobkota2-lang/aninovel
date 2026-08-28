@@ -20,7 +20,11 @@
  * 注: CORS / レート制限 は functions/_middleware.js が処理する。
  */
 
-const ID_RE = /^pub_[A-Za-z0-9_]{1,80}$/;
+// 作品ID。viewer 側の上書き公開が使う _OWNER_ID_RE と同じ形式を受け入れる。
+//   pub_1784818723945 … 投稿作品
+//   summer-adventure  … 同梱作品(スラッグ形式・ハイフンを含む)
+// R2のキーは pubId + '/' + itemId なので、'/' を含まないことだけが要件。
+const ID_RE = /^(?:pub_[A-Za-z0-9_]{1,80}|[A-Za-z][A-Za-z0-9_-]{0,99})$/;
 const ITEM_RE = /^[A-Za-z0-9_\-]{1,120}$/;
 
 // 1リクエストあたりの一括アップロード上限 (クライアントは25件ずつ送る)
