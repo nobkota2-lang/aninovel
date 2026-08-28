@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v133_dedup_heading';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v134_race_aware';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3657,15 +3657,36 @@ function _nameHash(s){
 function _pickIconGroup(gender,age,usedGroups,seedName){
   var g=_galleryManifest||[];
   var G=gender==='female'?'Female':'Male';
-  var races=['Japanese','White','Black','India','Latin','Arab','Micronesia'];
+  // 作品に民族が設定されていればそれを最優先にする。
+// 日本語の作品(青空文庫の日本文学など)に外国人の顔が並ぶと世界観が壊れる。
+var races=['Japanese','White','Black','India','Latin','Arab','Micronesia'];
+try{
+  var _wr;
+  if(state.artRace===''){ _wr=null; }                    // 「こだわらない」を明示
+  else if(state.artRace){ _wr=state.artRace; }           // 作品で指定済み
+  else {                                                  // 未設定なら原文の言語から
+    var _sl=(state.novel&&state.novel.sourceLang)||'ja';
+    _wr=(_sl==='ja')?'Japanese':null;
+  }
+  if(_wr){
+    races=[_wr].concat(races.filter(function(r){return r!==_wr;}));
+  }else{
+    // 優先が無いときは常に先頭(Japanese)から取ると偏るので、名前で始点をずらす
+    var _off=_nameHash(seedName)%races.length;
+    races=races.slice(_off).concat(races.slice(0,_off));
+  }
+}catch(e){}
   var types=['Anime','Manga','Photo'];
+try{ if(state.artStyle)types=[state.artStyle].concat(types.filter(function(t){return t!==state.artStyle;})); }catch(e){}
   var ages=_ageNeighbors(age);
   var seed=_nameHash(seedName);
-  // まず「まだ誰も使っていないグループ」だけを探す。年齢近傍→race→type の順に緩める。
-  // 同じ条件のグループが複数あるときは名前ハッシュで散らす(常に先頭を取ると偏るため)。
-  for(var ai=0;ai<ages.length;ai++){
-    for(var ri=0;ri<races.length;ri++){
-      for(var ti=0;ti<types.length;ti++){
+  // まず「まだ誰も使っていないグループ」だけを探す。
+  // **民族と画風は作品の設定なので最後まで崩さない**。年齢だけを緩めていく。
+  // (以前は年齢を最優先にしていたため、日本人の在庫が残っていても
+  //  年齢が合わないと外国人へ移ってしまい、世界観が壊れていた)
+  for(var ri=0;ri<races.length;ri++){
+    for(var ti=0;ti<types.length;ti++){
+      for(var ai=0;ai<ages.length;ai++){
         var hit=g.filter(function(x){
           return x.gender===G && x.age===ages[ai] && x.race===races[ri] && (x.type===types[ti]||x.style===types[ti]);
         });
