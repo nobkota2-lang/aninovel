@@ -24,6 +24,8 @@
 //   pub_1784818723945 … 投稿作品
 //   summer-adventure  … 同梱作品(スラッグ形式・ハイフンを含む)
 // R2のキーは pubId + '/' + itemId なので、'/' を含まないことだけが要件。
+import { requireWrite } from '../../_auth.js';
+
 const ID_RE = /^(?:pub_[A-Za-z0-9_]{1,80}|[A-Za-z][A-Za-z0-9_-]{0,99})$/;
 const ITEM_RE = /^[A-Za-z0-9_\-]{1,120}$/;
 
@@ -81,6 +83,8 @@ export async function onRequestGet(context) {
 
 // PUT /api/audio/{pubId} — 音声を一括アップロード
 export async function onRequestPut(context) {
+  const denied = requireWrite(context);      // 音声の上書きも作者・オーナーのみ
+  if (denied) return denied;
   const parts = context.params.path || [];
   const bucket = context.env.AUDIO_R2;
   if (!bucket) return json({ error: 'R2 bucket "AUDIO_R2" が未バインドです' }, 500);

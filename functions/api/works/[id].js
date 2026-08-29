@@ -18,6 +18,8 @@
  *   DELETE /api/works/pub_xxxxx              … 削除
  */
 
+import { requireWrite } from '../../_auth.js';
+
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 const CATALOG_KEY = '__catalog__';
@@ -112,6 +114,8 @@ export async function onRequestGet(context) {
 
 // PUT /api/works/:id — 保存 + バージョン履歴作成
 export async function onRequestPut(context) {
+  const denied = requireWrite(context);      // 作者・オーナー以外の書き込みを拒否
+  if (denied) return denied;
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
@@ -201,6 +205,8 @@ export async function onRequestPut(context) {
 
 // DELETE /api/works/:id
 export async function onRequestDelete(context) {
+  const denied = requireWrite(context);      // 削除はとくに厳重に
+  if (denied) return denied;
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);

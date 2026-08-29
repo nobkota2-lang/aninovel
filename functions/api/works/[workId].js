@@ -1,3 +1,5 @@
+import { requireWrite } from '../../_auth.js';
+
 /**
  * Cloudflare Function: 作品データのサーバー保存
  * 
@@ -59,6 +61,10 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
+  // このファイルは [id].js と同じ work: キーに書く重複ルート。
+  // 検証が甘く CORS も * なので、まず認証で塞ぐ。将来的には削除を検討。
+  const denied = requireWrite(context);
+  if (denied) return denied;
   const { request, params, env } = context;
   const workId = params.workId;
   
@@ -123,7 +129,7 @@ export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://aninovel.com',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       'Access-Control-Max-Age': '86400'
