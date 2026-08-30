@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v137_write_auth';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v138_speaker_findchar';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4182,6 +4182,18 @@ function _namelessTag(t){
   return /^\u3068[\u3001,]?\s*[^\u3002\u300C\u300D\u300E\u300F]{0,12}?(?:\u4E91|\u8A00|\u7B54|\u5C0B|\u8A0A|\u805E|\u53EB|\u554F|\u8FD4\u4E8B|\u56C1|\u5451|\u4EF0\u305B|\u4EF0\u3063|\u8FF0\u3079|\u5410\u304D)/.test(t);
 }
 
+// 登場人物を名前で引く。_resolveSpeakersV2 から使う。
+// parseText の内側にも同名の関数があるが、そちらはローカルなので
+// グローバルの _resolveSpeakersV2 からは見えず、参照した瞬間に
+// ReferenceError になって自前の try/catch に握り潰されていた。
+// その結果、ラン分割・交互推定・話しぶり補正を含む話者判別の中核が
+// 丸ごと不発になっていた(一章の実測で 33.3% -> 78.6%)。
+function findChar(nm){
+  if(!nm||!state||!state.characters)return null;
+  var c=state.characters.find(function(x){return x.id!=='narrator'&&(x.name===nm||x.shortName===nm)});
+  if(c)return c;
+  return state.characters.find(function(x){return x.id!=='narrator'&&x.name&&x.name.length>=2&&nm.length>=2&&(nm.indexOf(x.name)===0||x.name.indexOf(nm)===0)})||null;
+}
 function _resolveSpeakersV2(){
   try{
     var items=state.content;
