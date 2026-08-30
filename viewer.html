@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v139_speaker_participants';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v140_merge_no_alias';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3878,8 +3878,13 @@ function _mergeAliasCharacters(){
       for(var j=i+1;j<cs.length;j++){
         if(dead[cs[j].id])continue;
         var bj=base(cs[j].name);
-        if(bi.length<2||bj.length<2)continue;
-        var same=(bi===bj)||
+        // 「車屋の黒」と「黒」のような 修飾語+の+名前 は同一人物とみなす。
+        // 短い方が1文字でも成立させたいので、長さ2以上の条件より先に判定する。
+        // 「隣の太郎」「うちの花子」など作品を問わず現れる形。
+        var noOf=(bj.length>bi.length&&bj.slice(-(bi.length+1))==='\u306E'+bi)||
+                 (bi.length>bj.length&&bi.slice(-(bj.length+1))==='\u306E'+bj);
+        if(!noOf&&(bi.length<2||bj.length<2))continue;
+        var same=noOf||(bi===bj)||
           (bj.length>bi.length&&bj.length-bi.length<=2&&bj.slice(-bi.length)===bi)||
           (bi.length>bj.length&&bi.length-bj.length<=2&&bi.slice(-bj.length)===bj);
         if(same){dead[cs[j].id]=cs[i].id;console.info('[merge] '+cs[j].name+' -> '+cs[i].name);}
