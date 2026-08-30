@@ -23,6 +23,11 @@ const RATE_LIMIT = {
   '/api/reports': { max: 10, windowSec: 600 },     // 10分10回まで
   '/api/errors': { max: 50, windowSec: 600 },      // 10分50回まで
   '/api/billing': { max: 20, windowSec: 600 },     // 課金フロー
+  // 音声は1ブロック1ファイル。読者は5秒に1件ほどしか要らない (約12回/分)。
+  // 40回/分なら読者に3倍の余裕がありつつ、全作品(約7,600件)の一括取得には
+  // 1IPあたり3時間以上かかる。ただし複数IPを使う相手には効かない。
+  // 本命はホットリンク防止のほうで、これは補助。
+  '/api/audio': { max: 40, windowSec: 60 },
   default: { max: 60, windowSec: 60 },             // 1分60回
 };
 

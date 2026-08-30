@@ -39,8 +39,41 @@ function json(obj, status) {
   });
 }
 
+// 自サイトからの再生か確認する (ホットリンク防止)
+// --------------------------------------------------
+// 海賊サイトが自分のページから当サイトの音声URLを直接読み込むと、
+// ブラウザは Referer に相手のドメインを載せて送ってくる。そこで弾く。
+// 相手が自前で再ホストするなら 2GB の保管と転送を自分で負担することになり、
+// 丸ごと複製する旨みが薄れる。
+//
+// Referer が「無い」場合は通す。プライバシー設定で送らない読者が実在するため、
+// ここで拒否すると正規の読者が音を聞けなくなる。
+// つまり Referer を消せる相手は素通りできる。完全な封鎖ではなく、
+// 「他所のページに貼るだけ」を止めるための措置。
+const ALLOWED_REFERER = [
+  'aninovel.com',
+  'www.aninovel.com',
+  'aninovel.pages.dev',
+  'localhost',
+  '127.0.0.1',
+];
+
+function refererAllowed(request) {
+  const ref = request.headers.get('Referer') || request.headers.get('Origin') || '';
+  if (!ref) return true;                       // 送ってこない読者は通す
+  let host;
+  try { host = new URL(ref).hostname.toLowerCase(); } catch (e) { return true; }
+  return ALLOWED_REFERER.some(function (a) { return host === a || host.endsWith('.' + a); });
+}
+
 // GET — マニフェスト / 音声ファイル
 export async function onRequestGet(context) {
+  if (!refererAllowed(context.request)) {
+    return json({
+      error: 'hotlink_denied',
+      message: 'この音声は aninovel.com でのみ再生できます。'
+    }, 403);
+  }
   const parts = context.params.path || [];
   const bucket = context.env.AUDIO_R2;
   if (!bucket) return json({ error: 'R2 bucket "AUDIO_R2" が未バインドです' }, 500);
