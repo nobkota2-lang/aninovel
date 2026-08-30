@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v138_speaker_findchar';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v139_speaker_participants';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -4315,6 +4315,14 @@ function _resolveSpeakersV2(){
         };
         var _add=function(list){for(var y2=0;y2<list.length&&who.length<2;y2++){if(who.indexOf(list[y2])<0)who.push(list[y2]);}};
         _add(_collect(qs[run[0]],qs[run[run.length-1]]));
+        // ラン内で足りなければ、会話が終わった直後の地の文まで範囲を広げる。
+        // 会話の相手はそこで紹介されることが多い(「車屋の黒はこの近辺で…」)。
+        // 直前側は見ない — その場に居るだけで話していない人物(子供など)を
+        // 相手として拾ってしまい、かえって精度が落ちた(実測 83.3% 対 90.5%)。
+        if(who.length<2){
+          var hi0=Math.min(items.length-1,qs[run[run.length-1]]+2);
+          _add(_collect(qs[run[run.length-1]]+1,hi0));
+        }
       }
       // ランの地の文で主語になっている既知の人物(=その場にいる人物)
       var present={};
