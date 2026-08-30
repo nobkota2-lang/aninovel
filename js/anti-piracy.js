@@ -25,7 +25,10 @@
       '127.0.0.1'
     ],
     // 通報用エンドポイント (将来 Supabase Edge Function に置換)
-    reportEndpoint:null, // 例: 'https://api.aninovel.com/report-piracy'
+    // 検知を知らせる先。<img> で取得するので Origin ヘッダが付かず、
+    // ミドルウェアのオリジン検証に弾かれずに海賊サイトからでも届く。
+    // (POST にするとプリフライトで 403 になり、検知しても気づけない)
+    reportEndpoint:'https://aninovel.com/api/piracy',
     // 右クリック・コピー抑止 (UX 影響大、デフォOFF)
     blockRightClick:false,
     blockCopy:false,
@@ -57,7 +60,17 @@
     console.warn('[Anti-Piracy] 不審アクセス検知:',data);
     if(CONFIG.reportEndpoint){
       try{
-        navigator.sendBeacon(CONFIG.reportEndpoint,JSON.stringify(data));
+        // sendBeacon は POST になりオリジン検証で弾かれるため画像で送る
+        var canary='';
+        try{canary=sessionStorage.getItem('aninovel_canary')||'';}catch(e){}
+        var q='?h='+encodeURIComponent(data.host)
+             +'&u='+encodeURIComponent(String(data.url).slice(0,400))
+             +'&r='+encodeURIComponent(String(data.referrer).slice(0,300))
+             +'&c='+encodeURIComponent(canary)
+             +'&why='+encodeURIComponent(reason||'');
+        var img=new Image();
+        img.referrerPolicy='no-referrer-when-downgrade';
+        img.src=CONFIG.reportEndpoint+q;
       }catch(e){}
     }
   }
