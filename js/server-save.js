@@ -190,7 +190,16 @@
     var uid=getCurrentUserId(); if(!uid){ if(!silent) alert(_t('ログイン要','Sign-in required')); return false; }
     var s=collectReaderSettings(); var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
     try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:s,note:note||'読者設定'})});
-      var d=await r.json(); if(r.ok && d.ok){ if(!silent) alert(_t('☁ 保存完了','☁ Saved')); else showToast(_t('☁ 保存完了','☁ Saved'),'#0ea5e9'); return true; } return false;
+      var d=await r.json(); if(r.ok && d.ok){ if(!silent) alert(_t('☁ 保存完了','☁ Saved')); else showToast(_t('☁ 保存完了','☁ Saved'),'#0ea5e9'); return true; }
+      // クラウド保存は作者・オーナー専用。読者の設定はこの端末に保存する方針。
+      if(r.status===401||r.status===403){
+        if(!silent) alert(_t('読者の設定はサーバーには保存しません。\nこの端末に保存されます。お気に入りを残したい場合は、書き出し機能でご自身のPCに保存してください。',
+                             'Reader settings are not stored on the server.\nThey are kept on this device. Use export to save them to your own PC.'));
+        else showToast(_t('設定はこの端末に保存されます','Settings are kept on this device'),'#64748b');
+        return false;
+      }
+      if(!silent) alert(_t('保存に失敗しました (HTTP '+r.status+')','Save failed (HTTP '+r.status+')'));
+      return false;
     } catch(e){ return false; }
   }
   async function loadReaderSettingsCloud(){

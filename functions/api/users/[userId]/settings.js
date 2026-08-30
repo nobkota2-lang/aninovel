@@ -15,6 +15,8 @@
  *   DELETE /api/users/USER_ID/settings              … 削除
  */
 
+import { requireWrite } from '../../../_auth.js';
+
 const USER_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_VERSIONS = 20;
@@ -31,6 +33,9 @@ async function readVersions(kv, uid){
   } catch(e){ return []; }
 }
 
+// 注意: GET は現状だれでも読める。読者本人をサーバーが識別できないため
+// 制限しようがない。ログイン基盤ができた時点で本人限定にする。
+// いまは書き込み側を塞ぐことで、他人の設定を壊される事故だけを防ぐ。
 export async function onRequestGet(context){
   const uid = context.params.userId;
   if(!uid || !USER_ID_RE.test(uid)) return json({ error: 'invalid user id' }, 400);
@@ -62,6 +67,10 @@ export async function onRequestGet(context){
 }
 
 export async function onRequestPut(context){
+  // 読者の設定はサーバーに置かない方針。書けるのは作者・オーナーのみ。
+  // (端末をまたいだ読者設定の同期は、本物のログインを作ってから解禁する)
+  const denied = requireWrite(context);
+  if (denied) return denied;
   const uid = context.params.userId;
   if(!uid || !USER_ID_RE.test(uid)) return json({ error: 'invalid user id' }, 400);
   const kv = getKV(context.env);
@@ -99,6 +108,8 @@ export async function onRequestPut(context){
 }
 
 export async function onRequestDelete(context){
+  const denied = requireWrite(context);
+  if (denied) return denied;
   const uid = context.params.userId;
   if(!uid || !USER_ID_RE.test(uid)) return json({ error: 'invalid user id' }, 400);
   const kv = getKV(context.env);
