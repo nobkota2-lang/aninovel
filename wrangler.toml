@@ -1,3 +1,5 @@
 [[kv_namespaces]]
 binding = "WORKS"
 id = "98931e4dfa8045828d502e8f83e6c98d"
+binding = "RATE_LIMIT_KV"
+id = "7094071d67e24f4e9d91ce3cde4b5fa6"

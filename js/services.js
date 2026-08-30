@@ -466,8 +466,8 @@
       if (pub[workId]) { delete pub[workId]; setLS(KEYS.publishedWorks, pub); }
       // サーバー(KV)からも削除
       return fetch('/api/works/' + encodeURIComponent(workId), { method: 'DELETE' })
-        .then(function(r) { return { success: true, serverSynced: !!(r && r.ok) }; })
-        .catch(function() { return { success: true, serverSynced: false }; });
+        .then(function(r) { return { success: true, serverSynced: !!(r && r.ok), status: (r && r.status) || 0 }; })
+        .catch(function() { return { success: true, serverSynced: false, status: 0 }; });
     },
 
     /** 作品を公開停止／再開 */
@@ -769,11 +769,14 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ data: work.data, meta: catalogEntry })
           }).then(function(r) {
+            // status も返す。401/403 は「この端末に書き込み権限が無い」意味で、
+            // 通信の一時的な失敗とは区別して伝える必要がある。
             return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
-                     overwrote: !!existing, serverSynced: !!(r && r.ok) };
+                     overwrote: !!existing, serverSynced: !!(r && r.ok),
+                     status: (r && r.status) || 0 };
           }).catch(function() {
             return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
-                     overwrote: !!existing, serverSynced: false };
+                     overwrote: !!existing, serverSynced: false, status: 0 };
           });
         });
     },
@@ -797,9 +800,9 @@
       return fetch('/api/works/' + encodeURIComponent(pubId), {
         method: 'DELETE'
       }).then(function(r) {
-        return { success: true, serverSynced: !!(r && r.ok) };
+        return { success: true, serverSynced: !!(r && r.ok), status: (r && r.status) || 0 };
       }).catch(function() {
-        return { success: true, serverSynced: false };
+        return { success: true, serverSynced: false, status: 0 };
       });
     },
 
