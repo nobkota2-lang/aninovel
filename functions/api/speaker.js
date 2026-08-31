@@ -119,15 +119,34 @@ export async function onRequestPost(context){
 
   const messages = buildMessages(chunk, dialogues, known, hints, prevSpeaker);
 
-  const MODELS = [
-    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-    '@cf/meta/llama-4-scout-17b-16e-instruct',
+  // モデルは呼び出し側から指定できる。指定が無ければ小さいモデルを先に試す。
+  // ニューロン単価がモデルで大きく違うため(70B は 8B の約6倍)、
+  // 既定を 70B にしていると1作品で1日の無料枠(10,000)を使い切る。
+  const MODEL_ALIAS = {
+    '70b': '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '8b':  '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+    '3b':  '@cf/meta/llama-3.2-3b-instruct',
+    'scout':'@cf/meta/llama-4-scout-17b-16e-instruct',
+    'gemma':'@cf/google/gemma-3-12b-it',
+    'mistral':'@cf/mistralai/mistral-small-3.1-24b-instruct'
+  };
+  const DEFAULT_MODELS = [
+    '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+    '@cf/meta/llama-3.2-3b-instruct',
     '@cf/google/gemma-3-12b-it',
-    '@cf/mistralai/mistral-small-3.1-24b-instruct',
-    '@cf/meta/llama-3.2-3b-instruct'
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
   ];
-  let res = null, lastErr = null;
+  let MODELS;
+  if (typeof body.model === 'string' && body.model) {
+    const one = MODEL_ALIAS[body.model] || body.model;
+    // 指定されたモデルだけを使う。勝手に高価なモデルへ落ちないようにする
+    MODELS = body.strict ? [one] : [one].concat(DEFAULT_MODELS.filter(m => m !== one));
+  } else {
+    MODELS = DEFAULT_MODELS;
+  }
+  let res = null, lastErr = null, usedModel = null;
   for (const model of MODELS) {
+    usedModel = model;
     // まずJSONスキーマ強制で試し、未対応モデルなら素のまま再試行
     try {
       res = await env.AI.run(model, {
@@ -163,7 +182,7 @@ export async function onRequestPost(context){
     if (!text) return json({ok:false, reason:'no_text', shape: JSON.stringify(res).slice(0,300)});
     const speakers = extractSpeakers(text, dialogues.length);
     if(!speakers) return json({ok:false, reason:'no_json', raw: text.slice(0,300)});
-    return json({ok:true, speakers: speakers});
+    return json({ok:true, speakers: speakers, model: usedModel});
   } catch(e) {
     const msg = (e && e.message || '')+'';
     const quota = /quota|limit|rate|exceed|429/i.test(msg);

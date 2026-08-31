@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v140_merge_no_alias';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v141_ai_speaker_ondemand';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3972,15 +3972,76 @@ async function _aiCurateCharacters(){
     render();
   }catch(e){console.warn('[curate] 失敗:',e);}
 }
-async function _aiRefineSpeakers(){
+// AIに聞くべき「迷った箇所」だけを選ぶ。
+// 今日の実測では、規則の誤りはすべて「地の文で会話が途切れた直後の1件目」だった。
+// 逆に直後の地の文が「と〜」で始まるものは根拠が強く、規則で正しく判定できる。
+// 猫(台詞2,992件)で 647件・API 54回まで絞れる(全件だと250回で無料枠を使い切る)。
+// コンソールからの入口。作者・オーナーのみ。
+//   aiRefineSpeakers()                    迷った箇所だけをAIで補正(推奨)
+//   aiRefineSpeakers({limit:60})          先頭60件だけ(お試し・測定用)
+//   aiRefineSpeakers({model:'8b'})        モデル指定 70b / 8b / 3b / gemma
+//   aiRefineSpeakers({model:'8b',strict:true})  そのモデルだけ使う(他へ落ちない)
+//   aiSpeakerStatus()                     残り件数と見込みAPI回数
+window.aiRefineSpeakers=function(o){
+  o=o||{};
+  if(typeof _isOwner==='function'&&!_isOwner()&&!state.isAuthorMode){
+    alert('この機能は作者・オーナーのみ利用できます。');return;
+  }
+  var st=_aiSpeakerProgress();
+  if(!o.limit&&!o.quiet&&!confirm('AIに聞く箇所: '+st.remaining+' 件\n見込みの呼び出し回数: '+Math.ceil(st.remaining/12)+' 回\n\n実行しますか？'))return;
+  return _aiRefineSpeakers(o);
+};
+window.aiSpeakerStatus=function(){
+  var st=_aiSpeakerProgress();
+  console.log('AIに聞くべき残り: '+st.remaining+' 件 / 見込み '+Math.ceil(st.remaining/12)+' 回');
+  console.log('処理済みの印が付いたブロック: '+st.done+' 件');
+  return st;
+};
+function _aiSpeakerCandidates(items){
+  var out=[],prevD=false;
+  for(var i=0;i<items.length;i++){
+    var b=items[i];
+    var isD=(b.type==='dialogue');
+    var isQuoteN=(b.type==='narration'&&(/\u300C.+?\u300D/.test(b.text||'')||/\u300E.+?\u300F/.test(b.text||''))&&!_isNamingQuote(b.text||''));
+    if(isD||isQuoteN){
+      if(!prevD&&!b._aiDone){
+        // 直後の地の文が「と〜」で始まるなら明示タグがある = 規則で足りる
+        var nx=items[i+1];
+        var hasTag=!!(nx&&nx.type==='narration'&&/^\u3068/.test((nx.text||'').trim()));
+        if(!hasTag)out.push(i);
+      }
+      prevD=true;
+    }else{
+      prevD=false;
+    }
+  }
+  return out;
+}
+// AI補正の進捗を作品データから読む(端末をまたいでも続きから再開できる)
+function _aiSpeakerProgress(){
+  var items=state.content||[];
+  var done=0,cand=0;
+  var all=_aiSpeakerCandidates(items.slice().sort(function(a,b){return (a.order||0)-(b.order||0);}));
+  items.forEach(function(b){if(b._aiDone)done++;});
+  return {remaining:all.length, done:done};
+}
+async function _aiRefineSpeakers(opts){
+  opts=opts||{};
+  var _report={checked:0,changed:0,unknown:0,suspect:[],quota:false,model:null,calls:0};
   try{
     var items=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
-    var targets=[];
-    items.forEach(function(it,i){
-      if(it.type==='dialogue'){targets.push(i);}
-      else if(it.type==='narration'&&(/「.+?」/.test(it.text||'')||/『.+?』/.test(it.text||''))&&!_isNamingQuote(it.text||'')){targets.push(i);}
-    });
-    if(targets.length===0){await _autoAssignIcons();return;}
+    // 既定は「迷った箇所」だけ。opts.all=true で従来どおり全件。
+    var targets=opts.all
+      ? (function(){var t=[];items.forEach(function(it,i){
+          if(it.type==='dialogue'){t.push(i);}
+          else if(it.type==='narration'&&(/「.+?」/.test(it.text||'')||/『.+?』/.test(it.text||''))&&!_isNamingQuote(it.text||'')){t.push(i);}
+        });return t;})()
+      : _aiSpeakerCandidates(items);
+    if(opts.limit)targets=targets.slice(0,opts.limit);
+    if(targets.length===0){
+      if(!opts.quiet)alert('AIに聞くべき箇所は残っていません。');
+      return _report;
+    }
     var chunks=[];var cur=[];
     targets.forEach(function(i){cur.push(i);if(cur.length>=12){chunks.push(cur);cur=[]}});
     if(cur.length)chunks.push(cur);
@@ -4007,13 +4068,19 @@ async function _aiRefineSpeakers(){
       var known=state.characters.filter(function(x){return x.id!=='narrator'}).map(function(x){return x.name});
       var j=null;
       try{
-        var r=await fetch('/api/speaker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chunk:chunkText,dialogues:dialogues,known:known,hints:hints,prevSpeaker:lastResolved})});
+        var r=await fetch('/api/speaker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chunk:chunkText,dialogues:dialogues,known:known,hints:hints,model:(opts.model||null),strict:!!opts.strict,prevSpeaker:lastResolved})});
         j=await r.json();
       }catch(e){j={ok:false,reason:'network'};}
-      if(!j||!j.ok){failed=true;if(j&&j.reason==='quota'){quotaHit=true;try{var _prev=localStorage.getItem('aninovel_ai_quota_hit');var _now=new Date();if(_prev){var _pd=new Date(_prev);if(Math.floor(_now.getTime()/86400000)>Math.floor(_pd.getTime()/86400000)){console.warn('[AI-quota] リセット未確認: 前回quota='+_prev+' 今回='+_now.toISOString()+' → 00:00 UTC(日本時間午前9時)を跨いだのに再びquota。24時間ローリングの可能性。案内文の見直しを検討。');}}localStorage.setItem('aninovel_ai_quota_hit',_now.toISOString());}catch(e){}}break;}
+      if(!j||!j.ok){failed=true;if(j&&(j.reason==='quota'||/4006|daily free allocation|neurons/i.test(j.detail||''))){quotaHit=true;_report.quota=true;try{var _prev=localStorage.getItem('aninovel_ai_quota_hit');var _now=new Date();if(_prev){var _pd=new Date(_prev);if(Math.floor(_now.getTime()/86400000)>Math.floor(_pd.getTime()/86400000)){console.warn('[AI-quota] リセット未確認: 前回quota='+_prev+' 今回='+_now.toISOString()+' → 00:00 UTC(日本時間午前9時)を跨いだのに再びquota。24時間ローリングの可能性。案内文の見直しを検討。');}}localStorage.setItem('aninovel_ai_quota_hit',_now.toISOString());}catch(e){}}break;}
+      if(quotaHit)break;   // 枠切れ。残りを叩いても全部失敗するので即座に止める(印は付いた分だけ残る)
+      _report.calls++;
+      if(j&&j.model)_report.model=j.model;
+      // このチャンクは処理済みとして印を付ける(枠切れで中断しても続きから再開できる)
+      idxs.forEach(function(ii){items[ii]._aiDone=1;});
+      _report.checked+=idxs.length;
       j.speakers.forEach(function(sp,n){
         sp=(sp||'').trim();
-        if(!sp||sp==='不明'||sp==='ナレーター'||sp==='語り手')return;
+        if(!sp||sp==='不明'||sp==='ナレーター'||sp==='語り手'){if(!sp||sp==='不明')_report.unknown++;return;}
         if(!_isValidName(sp))return;
         var it4=items[idxs[n]];
         var _dltxt=(it4.type==='dialogue')?(it4.text||''):((((it4.text||'').match(/「(.+?)」/)||(it4.text||'').match(/『(.+?)』/))||[null,''])[1]||'');
@@ -4026,6 +4093,15 @@ async function _aiRefineSpeakers(){
           var pr=(CP[g]||CP.male)[state.characters.length%5];
           ch={id:'char'+Date.now()+'_ai'+idxs[n],name:sp,shortName:sp.substring(0,2),gender:g,description:'',bubbleColor:pr.bubble,iconColor:pr.icon,iconImage:null};
           state.characters.push(ch);
+        }
+        // 規則の判定と食い違ったものは、人が見るべき箇所として控えておく
+        var _before=null;
+        try{var _bc=state.characters.find(function(x){return x.id===it4.characterId;});_before=_bc?_bc.name:null;}catch(e){}
+        if(_before&&_before!==ch.name){
+          _report.changed++;
+          _report.suspect.push({order:(it4.order||0),rule:_before,ai:ch.name,text:(_dltxt||'').slice(0,40)});
+        }else if(!_before){
+          _report.changed++;
         }
         if(it4.type==='narration'){
           var q2=((it4.text||'').match(/「(.+?)」/)||(it4.text||'').match(/『(.+?)』/));
@@ -4043,10 +4119,30 @@ async function _aiRefineSpeakers(){
     ov.remove();
     var all=state.content.slice().sort(function(a,b){return (a.order||0)-(b.order||0)});
     all.forEach(function(it5,i5){it5.order=i5;});
-    if(failed){
+    // 完了報告。何件見て、何件変えて、どこが怪しいかを必ず伝える
+    if(!opts.quiet){
+      var _msg='AI話者判定が終わりました。\n\n'
+        +'・調べた箇所: '+_report.checked+' 件 ('+_report.calls+' 回の呼び出し)\n'
+        +'・話者を補正: '+_report.changed+' 件\n'
+        +'・AIも判断できず: '+_report.unknown+' 件\n'
+        +'・規則と食い違った箇所: '+_report.suspect.length+' 件\n';
+      var _rest=_aiSpeakerProgress().remaining;
+      if(_rest>0)_msg+='\n未処理が '+_rest+' 件残っています。'+(_report.quota?'本日の上限に達したためです。日本時間の翌朝9時以降にもう一度実行すると、続きから処理します。':'もう一度実行すると続きから処理します。');
+      if(_report.suspect.length){
+        _msg+='\n\n【確認をおすすめする箇所】(先頭10件)\n';
+        _report.suspect.slice(0,10).forEach(function(s){
+          _msg+=' @'+s.order+' 規則='+s.rule+' → AI='+s.ai+' 「'+s.text+'」\n';
+        });
+        console.info('[AI話者] 食い違った全'+_report.suspect.length+'件:',_report.suspect);
+      }
+      _msg+='\n※ この結果を残すには 📢 上書き公開 を押してください。';
+      alert(_msg);
+    }
+    if(failed&&!opts.quiet){
       if(quotaHit){alert('AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。');}else{alert('AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。');}
     }
     _rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();await _aiCurateCharacters();await _autoAssignIcons();render();
+    return _report;
   }catch(e){
     var o=document.getElementById('ai-speaker-progress');if(o)o.remove();
     console.warn('[AIspeaker] 失敗:',e);
@@ -4592,7 +4688,7 @@ function parseText(text){
       lastWasDialogue=(_lastType==='d');
     }
   });
-  state.currentPage=0;_resolveSpeakersV2();_rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();render();_autoAssignIcons();_aiRefineSpeakers();
+  state.currentPage=0;_resolveSpeakersV2();_rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();render();_autoAssignIcons();/* AI補正は自動実行しない。取り込むたびに数百回APIを叩き、1日の無料枠(10,000ニューロン)を使い切るため。作者・オーナーが aiRefineSpeakers() を明示的に呼んだときだけ動かす。 */
 }
 
 async function uploadInlineVideo(file){
