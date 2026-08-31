@@ -29,15 +29,33 @@ export async function onRequestPost(context){
     '回答は次のJSON形式のみ。他の文章は一切書かない:\n'+
     '{"keep":["名前1","名前2"],"merge":{"別表記":"統合先","別表記2":"統合先"}}';
   const messages = [ {role:'system',content:sys}, {role:'user',content:user} ];
-  const MODELS = [
-    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-    '@cf/meta/llama-4-scout-17b-16e-instruct',
+  // 小さいモデルから順に試す。
+  // 70B は 8B の約6倍のニューロンを消費し、この処理を先頭に置いていたために
+  // 1日の無料枠(10,000)を作品数件で使い切っていた。
+  // 登場人物の絞り込みと別名統合は、話者判定ほど繊細な判断を要さないため
+  // 小さいモデルで足りる。呼び出し側から model を指定することもできる。
+  const MODEL_ALIAS = {
+    '70b': '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '8b':  '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+    '3b':  '@cf/meta/llama-3.2-3b-instruct',
+    'gemma':'@cf/google/gemma-3-12b-it'
+  };
+  const DEFAULT_MODELS = [
+    '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+    '@cf/meta/llama-3.2-3b-instruct',
     '@cf/google/gemma-3-12b-it',
-    '@cf/mistralai/mistral-small-3.1-24b-instruct',
-    '@cf/meta/llama-3.2-3b-instruct'
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
   ];
-  let res=null, lastErr=null;
+  let MODELS;
+  if (typeof body.model === 'string' && body.model) {
+    const one = MODEL_ALIAS[body.model] || body.model;
+    MODELS = body.strict ? [one] : [one].concat(DEFAULT_MODELS.filter(m => m !== one));
+  } else {
+    MODELS = DEFAULT_MODELS;
+  }
+  let res=null, lastErr=null, usedModel=null;
   for (const model of MODELS) {
+    usedModel = model;
     try { res = await env.AI.run(model, { messages: messages, max_tokens: 800, temperature: 0.1 }); if(res) break; }
     catch(e){ lastErr=e; res=null; }
   }
@@ -61,10 +79,10 @@ export async function onRequestPost(context){
     const keep = Array.isArray(parsed.keep) ? parsed.keep.map(function(s){return String(s||'').trim().slice(0,10);}).filter(Boolean) : [];
     const merge = (parsed.merge&&typeof parsed.merge==='object') ? parsed.merge : {};
     if(!keep.length) return json({ok:false, reason:'empty_keep'});
-    return json({ok:true, keep:keep, merge:merge});
+    return json({ok:true, keep:keep, merge:merge, model:usedModel});
   } catch(e) {
     const msg=(e&&e.message||'')+'';
-    const quota=/quota|limit|rate|exceed|429/i.test(msg);
+    const quota=/quota|limit|rate|exceed|429|4006|daily free allocation|neurons/i.test(msg);
     return json({ok:false, reason: quota?'quota':'ai_error', detail: msg.slice(0,200)});
   }
 }
