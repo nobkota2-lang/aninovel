@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v142_ai_button';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v143_curate_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3950,6 +3950,12 @@ async function _aiCurateCharacters(){
     var j=await r.json();
     if(!j||!j.ok||!Array.isArray(j.keep)){console.warn('[curate] AI監修スキップ:',j&&j.reason);return;}
     var keepSet={};j.keep.forEach(function(n){keepSet[n]=true;});
+    // 台詞を多く持つ人物は、AIが何と言おうと残す。
+    // 実測で、寒月君(252件)・東風君(190件)・独仙君(68件)といった主要人物が
+    // AI監修に除外され、その台詞が「不明」へ流れて829件に達した。
+    // これだけ喋る相手が登場人物でないことは、まずあり得ない。
+    var PROTECT_MIN=5;
+    list.forEach(function(c){ if((counts[c.id]||0)>=PROTECT_MIN) keepSet[c.name]=true; });
     var merge=j.merge||{};
     var byName={};list.forEach(function(c){byName[c.name]=c;});
     var unk=null;
@@ -3961,12 +3967,14 @@ async function _aiCurateCharacters(){
       if(!keepSet[c.name]&&!merge[c.name]){remap[c.id]=null;removedIds.push(c.id);}
     });
     if(!removedIds.length){console.info('[curate] 変更なし');return;}
-    (state.content||[]).forEach(function(it){
       if(it.type==='dialogue'&&remap.hasOwnProperty(it.characterId)){
         var to=remap[it.characterId];
-        it.characterId=to||getUnk().id;
+        // 統合先があるならそちらへ。無ければ話者なしに戻す。
+        // 「不明」という架空の人物を作って押し込むと、
+        // 読者には存在しない人物が喋っているように見えるうえ、
+        // 誰の台詞か分からなくなって復旧もできない。
+        it.characterId=to||null;
       }
-    });
     state.characters=(state.characters||[]).filter(function(c){return removedIds.indexOf(c.id)<0;});
     console.info('[curate] AI監修: 除外/統合',removedIds.length,'件 → 登場人物',(state.characters||[]).filter(function(c){return c.id!=='narrator';}).length,'人');
     render();
