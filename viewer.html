@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v143_curate_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v144_ios_audio_unlock';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1976,7 +1976,7 @@ function _speakCloud(text,ch,rate,session,onEnd,onError,onStart){
       console.warn('[TTS] chunk',i,'スキップ');playIdx(i+1,0);return;
     }
     try{if(audio){audio.onended=null;audio.onerror=null;audio.pause();audio.src='';}}catch(e){}
-    audio=new Audio();
+    audio=(typeof _ttsAudioElement==='function')?_ttsAudioElement():new Audio();  // iOS対策: 解錠済みの要素を使う
     var done=false;
     var timer=setTimeout(function(){
       if(done||stopped)return;done=true;
@@ -2078,7 +2078,8 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
   function stale(){return session!==_speakSessionId||stopped;}
   function playUrl(url){
     if(stale())return;
-    var a=new Audio();curAudio=a;a.src=url;
+    var a=(typeof _ttsAudioElement==='function')?_ttsAudioElement():new Audio();  // iOS対策
+  curAudio=a;a.src=url;
     try{var r=Math.max(0.5,Math.min(2.5,state.tts.rate||1.3));a.playbackRate=r;a.defaultPlaybackRate=r;}catch(e){}
     a.onplay=function(){if(stale())return;if(!started){started=true;if(onStart)onStart();}};
     a.onended=function(){if(stale())return;idx++;playNext();};
@@ -2571,13 +2572,15 @@ function _speakItemAudio(item,ch,session,onStart,onEnd,onError){
   var spk=src&&src.meta&&src.meta.speaker;
   var fromW=src&&src.fromWorkId;
   console.info('[TTS] 再生開始 item='+item.id+' chId='+(ch&&ch.id)+' chName='+(ch&&ch.name)+' txt="'+(item.text||'').substring(0,20)+'…" type='+(src&&src.type)+(spk!=null?' speaker='+spk:'')+(fromW?' fromWorkId='+fromW:''));
-  var audio=new Audio();
+  // 新しく要素を作らず、startTTS で解錠済みの要素を使い回す。
+  // 新規に作った要素は iOS で再生を拒まれる。
+  var audio=(typeof _ttsAudioElement==='function')?_ttsAudioElement():new Audio();
   audio.preload='auto';
   var rate=Math.max(0.5,Math.min(2.5,state.tts.rate||1.4));
   try{audio.playbackRate=rate;audio.defaultPlaybackRate=rate;}catch(e){}
   var settled=false,started=false;
   function isStale(){return session!==_speakSessionId;}
-  function cleanup(){try{_karaEndItem();}catch(e){}try{audio.pause();}catch(e){}audio.src='';if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
+  function cleanup(){try{_karaEndItem();}catch(e){}try{audio.pause();}catch(e){}try{audio.removeAttribute('src');audio.load();}catch(e){}if(needsRevoke){try{URL.revokeObjectURL(url);}catch(e){}}}
   audio.onplaying=function(){
     if(started||isStale())return;
     started=true;
@@ -3371,7 +3374,34 @@ function _ttsStartIndex(){
   }catch(e){console.warn('[TTS] カーソル位置の判定に失敗:',e);}
   return 0;
 }
+// iOS(とくに Chrome)は、ユーザー操作から離れた時点での audio.play() を拒む。
+// 事前生成音声は R2 から取り出してから src を入れるため、その待ち時間で
+// 操作との結びつきが切れ、"The request is not allowed by the user agent" で
+// 再生できずに Web Speech へ落ちていた(iOS Chrome で無音になる原因)。
+//
+// 対策: 再生ボタンを押した「その場」で無音の音声を一度鳴らして要素を解錠し、
+//       以降はその要素の src を差し替えて使い回す。
+//       一度ユーザー操作で play() を通した要素は、後から src を変えても再生できる。
+var _ttsAudioEl=null;
+var _SILENT_WAV='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+function _ttsUnlockAudio(){
+  try{
+    if(!_ttsAudioEl){ _ttsAudioEl=new Audio(); _ttsAudioEl.preload='auto'; }
+    _ttsAudioEl.src=_SILENT_WAV;
+    var p=_ttsAudioEl.play();
+    if(p&&p.catch)p.catch(function(e){ console.info('[TTS] 音声の解錠に失敗(続行します):', e&&e.message); });
+  }catch(e){ console.info('[TTS] 音声の解錠で例外(続行します):', e&&e.message); }
+  return _ttsAudioEl;
+}
+// 解錠済みの要素を、前回の設定を消してから返す
+function _ttsAudioElement(){
+  var a=_ttsAudioEl||(_ttsAudioEl=new Audio());
+  a.onplaying=null;a.onended=null;a.onerror=null;a.onpause=null;
+  try{ a.pause(); }catch(e){}
+  return a;
+}
 function startTTS(){
+  _ttsUnlockAudio();   // ← ユーザー操作のこの場で解錠しておく
   if(!window.speechSynthesis){alert('このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。');return;}
   speechSynthesis.cancel();
   _preAudioFailStreak=0;_preAudioDisabled=false; // 事前生成音声の退避スイッチを解除(再挑戦)
@@ -6624,6 +6654,5 @@ window.onload=function(){
 </script>
 <script src="js/analytics.js" defer></script>
 <script src="js/server-save.js?v=1.17.0"></script>
-<script src="js/DIAG_ios_tts_v3.js"></script>
 </body>
 </html>
