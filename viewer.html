@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v147_scroll_down_only';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v148_prune_by_share';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3858,6 +3858,7 @@ function _pruneWeakCharacters(){
   try{
     var counts={};
     (state.content||[]).forEach(function(it){if(it.type==='dialogue'&&it.characterId){counts[it.characterId]=(counts[it.characterId]||0)+1;}});
+    var totalDl=(state.content||[]).filter(function(b){return b.type==='dialogue';}).length;
     var removed=[];
     var keep=[];
     (state.characters||[]).forEach(function(c){
@@ -3869,15 +3870,24 @@ function _pruneWeakCharacters(){
       var core=/^(?:\u543e\u8f29|\u4e3b\u4eba|\u7d30\u541b|\u5993\u541b|\u5fa1\u4e09|\u59c9|\u59bb\u541b|\u795e\u3055\u3093|\u8ff7\u4ead|\u82e6\u6c99\u5f25|\u6d5c\u7530)$/.test(c.name);
       var kanji2=/^[\u4E00-\u9FFF]{1,2}$/.test(c.name);
       var frag=(c.name.length>=4&&hira>=2)||/^(?:\u7a81\u7136|\u6b63\u76f4\u306a|\u4e00\u4f53)/.test(c.name);
-      var ok=core||nameish||(kanji2&&n>=3)||((c._ev||0)>=1&&n>=1);
+      // 台詞をまとまって持つ人物は、名前の形に関わらず登場人物とみなす。
+      // 「お雪」はひらがな+漢字なので core/nameish/kanji2 のどれにも当てはまらず、
+      // 台詞を4件持っていても除去されていた(雪女で正体を明かす台詞が話者を失った)。
+      // 基準は作品の規模に合わせる。全台詞の2%か2件のうち多いほう。
+      var share=(n>=Math.max(2,Math.ceil(totalDl*0.02)));
+      var ok=core||nameish||share||(kanji2&&n>=3)||((c._ev||0)>=1&&n>=1);
       if(!ok||frag){removed.push(c.id);}else{delete c._ev;keep.push(c);}
     });
     if(!removed.length)return;
     var unk=keep.find(function(c){return c.name==='不明';});
     (state.content||[]).forEach(function(it){
-      if(it.type==='dialogue'&&removed.indexOf(it.characterId)>=0){
+      if(removed.indexOf(it.characterId)<0)return;
+      if(it.type==='dialogue'){
         if(unk){it.characterId=unk.id;}
-        else{it.type='narration';it.text='「'+(it.text||'')+'」';}
+        else{it.type='narration';it.text='「'+(it.text||'')+'」';it.characterId=null;}
+      }else{
+        // 地の文が消えた人物を指したままだと、声も口パクも決まらない迷子になる
+        it.characterId=null;
       }
     });
     state.characters=keep;
