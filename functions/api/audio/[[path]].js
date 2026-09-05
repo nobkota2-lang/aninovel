@@ -86,10 +86,18 @@ export async function onRequestGet(context) {
     const items = {};
     let cursor;
     do {
-      const listed = await bucket.list({ prefix: pubId + '/', cursor: cursor, limit: 1000 });
+      // customMetadata を含めて一覧する。ここにハッシュ(本文+話者)が入っている。
+      // これが無いと「既にサーバにある」としか判定できず、
+      // 中身を作り直しても itemId が同じなら送られない(実際に2度この事故が起きた)。
+      const listed = await bucket.list({
+        prefix: pubId + '/', cursor: cursor, limit: 1000,
+        include: ['customMetadata'],
+      });
       for (const obj of listed.objects) {
         const itemId = obj.key.slice(pubId.length + 1);
-        if (itemId) items[itemId] = {};
+        if (!itemId) continue;
+        const h = obj.customMetadata && obj.customMetadata.hash;
+        items[itemId] = h ? { hash: h } : {};
       }
       cursor = listed.truncated ? listed.cursor : null;
     } while (cursor);
@@ -139,16 +147,28 @@ export async function onRequestPut(context) {
     return json({ error: 'multipart/form-data として読み取れませんでした' }, 400);
   }
 
+  // 送信側は "h:<itemId>" という名前でハッシュを一緒に送る。
+  // 音声そのものと同じ束に入れておけば、1往復で済む。
+  const hashes = {};
+  for (const [k, v] of form.entries()) {
+    if (typeof v === 'string' && k.indexOf('h:') === 0) hashes[k.slice(2)] = v.slice(0, 64);
+  }
+
   let saved = 0;
   const errors = [];
   for (const [itemId, file] of form.entries()) {
+    // ハッシュの項目は ITEM_RE に合わないので、ID検証より先に飛ばす。
+    // 順序を逆にすると「不正なID」として弾かれ、ハッシュが記録されない。
+    if (itemId.indexOf('h:') === 0) continue;
     if (!ITEM_RE.test(itemId)) { errors.push(itemId + ': 不正なID'); continue; }
     if (typeof file === 'string' || !file.arrayBuffer) { errors.push(itemId + ': ファイルではありません'); continue; }
     try {
       const buf = await file.arrayBuffer();
-      await bucket.put(pubId + '/' + itemId, buf, {
+      const put = {
         httpMetadata: { contentType: file.type || 'audio/wav' },
-      });
+      };
+      if (hashes[itemId]) put.customMetadata = { hash: hashes[itemId] };
+      await bucket.put(pubId + '/' + itemId, buf, put);
       saved++;
     } catch (e) {
       errors.push(itemId + ': ' + e.message);

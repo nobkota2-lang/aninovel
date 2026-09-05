@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v145_scroll_smooth';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v146_upload_hash';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2380,8 +2380,13 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
       var mr=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{cache:'no-store'});
       if(mr.ok){
         var mj=await mr.json();
-        Object.keys((mj&&mj.items)||{}).forEach(function(id){already[id]=1;});
-        if(Object.keys(already).length)console.info('[Upload] サーバに既に '+Object.keys(already).length+'件。その分は送りません');
+        var _items=(mj&&mj.items)||{};
+        // itemId の有無ではなく「ハッシュが一致するか」で判定する。
+        // 有無だけで見ていたため、音声を作り直しても同じidなら送られず、
+        // 新しい声がサーバに届かない事故が2度起きた。
+        // 古いデータにはハッシュが無いので、その場合は従来どおり送らない。
+        Object.keys(_items).forEach(function(id){ already[id]=(_items[id]&&_items[id].hash)||1; });
+        if(Object.keys(already).length)console.info('[Upload] サーバに既に '+Object.keys(already).length+'件');
       }
     }catch(e){}
   }
@@ -2416,7 +2421,17 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
   }
   for(var i=0;i<total;i++){
     var kk=keys[i],rec=null;
-    if(already[kk.itemId]&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){skipped++;sent++;continue;}
+    // ハッシュを持っていない古い記録(値が 1)は従来どおり「あり」とみなす
+    var _srvH=already[kk.itemId];
+    if(_srvH&&_srvH!==1&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){
+      // 中身が同じか、ローカルのハッシュと突き合わせて決める
+      var _lr=null; try{_lr=await _idbGet(srcWorkId,kk.itemId,kk.lang);}catch(e){}
+      var _lh=_lr&&_lr.meta&&_lr.meta.hash;
+      if(_lh&&_lh===_srvH){skipped++;sent++;_lr=null;continue;}
+      _lr=null;   // 違うので送る
+    } else if(_srvH===1&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){
+      skipped++;sent++;continue;
+    }
     try{rec=await _idbGet(srcWorkId,kk.itemId,kk.lang);}catch(e){}
     if(!rec||!rec.blob)continue;
     if(opts.copyTo&&opts.copyTo!==srcWorkId){
@@ -2430,6 +2445,7 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
       console.warn('[Upload] 単体で '+Math.round(sz/1e6)+'MB あります (item='+rec.itemId+')。単独で送ります');
     }
     fd.append(rec.itemId,rec.blob,rec.itemId+'.wav');
+    if(rec.meta&&rec.meta.hash)fd.append('h:'+rec.itemId,String(rec.meta.hash));
     bytes+=sz;acc+=sz;n++;rec=null;
     if(acc>=MAXB||n>=MAXN)await flush();
   }
