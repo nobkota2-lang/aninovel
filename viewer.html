@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v151_scroll_0018';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v152_kara_single';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1917,7 +1917,9 @@ function _updateTTSDisplay(){
   document.querySelectorAll('.tts-highlight').forEach(function(el){el.classList.remove('tts-highlight');});
   if(state.tts.currentItemId){
     var te=document.querySelector('[data-cid="'+state.tts.currentItemId+'"]');
-    if(te){te.classList.add('tts-highlight');te.scrollIntoView({behavior:'smooth',block:'center'});}
+    // 位置合わせはカラオケの追従ループが担当する。ここで中央へ寄せると、
+      // 上へ流した直後に下へ引き戻されて画面が上下する。
+      if(te){te.classList.add('tts-highlight');if(!(state.tts&&state.tts.active&&state.tts.karaoke))te.scrollIntoView({behavior:'smooth',block:'center'});}
   }
   // ステータステキスト更新
   var statusEl=document.getElementById('tts-status');
@@ -5289,7 +5291,10 @@ function _dispRuby(item,query){
   if(!rb||!rb.length||state.rubyOff){
     // ルビが無くても文の印は入れる(カラオケ表示のため)
     var ss=_ttsSplitSentences(raw);
-    if(ss.length<2)return displayText(raw,query);
+    // 1文だけでも印を入れる。以前は付けていなかったため、句点の無い短いブロック
+    // (「作者はさっき、」「すれば」など)でカラオケの強調がまったく出なかった。
+    // 実測では羅生門の23件中12件がこれに該当した。
+    if(!ss.length)return displayText(raw,query);
     var en0=(state.lang==='en');
     return ss.map(function(x,i){
       return '<span class="ts" data-i="'+i+'">'+esc(en0?x:toFullWidth(x))+'</span>';
@@ -6118,7 +6123,7 @@ function render(){
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動
   if(state.tts&&state.tts.active&&state.tts.currentItemId){
     var _te=document.querySelector('[data-cid="'+state.tts.currentItemId+'"]');
-    if(_te){_te.classList.add('tts-highlight');_te.scrollIntoView({behavior:'smooth',block:'center'});}
+    if(_te){_te.classList.add('tts-highlight');if(!(state.tts&&state.tts.karaoke))_te.scrollIntoView({behavior:'smooth',block:'center'});}  // 追従ループに任せる
     // 再生中に DOM が再構築された場合のみ LipSync を再起動。
     // _clearAllLipSync が直前で呼ばれているので、currentCharId に対して未起動のはず。
     // _startLipSyncChar 内のガードに任せず、_updateLipSync 経由で起動すると
