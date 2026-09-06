@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v149_scroll_constant';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v150_scroll_slower';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5233,7 +5233,7 @@ function _karaEnsureLoop(){
     // 台詞ごとに残り時間が変わるので速度も変わり、動きがぎくしゃくしていた。
     // 常に同じ速さで下へ流し、吹き出しの間隔が広い箇所は移動時間が延びるだけにする。
     // 目標に追いついたら止まり、次の台詞へ移ると再び同じ速さで動き出す。
-    var SPEED=pa.clientHeight*0.0035;              // 1フレームあたり(600pxの画面で2.1px=毎秒約126px)
+    var SPEED=pa.clientHeight*0.002;               // 1フレームあたり(600pxの画面で1.2px=毎秒約72px)
     var step=Math.min(d,SPEED);
     if(step<=0)return;
     pa.scrollTop=cur+step;
