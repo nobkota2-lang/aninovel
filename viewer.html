@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v152_kara_single';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v153_scroll_pps';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5089,7 +5089,7 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0,lastMax:null};
+var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0,lastMax:null,lastT:null,frac:0};
 function _karaUserScroll(){_kara.userAt=Date.now();}
 function _karaHookScroll(){
   var pa=document.getElementById('pageArea');
@@ -5114,6 +5114,7 @@ function _karaStop(){
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
   _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;_kara.lastMax=null;
+  _kara.lastT=null;_kara.frac=0;   // 経過時間と端数もリセット(再開時に一気に動かないように)
 }
 // 1ブロックの終了。色は消すがループは続ける(吹き出しをまたぐ動きを繋ぐため)。
 // **目標も捨てる** — 古い目標を残すと、次のブロックが始まるまでそこへ
@@ -5241,10 +5242,21 @@ function _karaEnsureLoop(){
     //   0.0018 … 毎秒 65px  ← 現在
     // 下げすぎると読み上げに置いていかれる。読み上げ位置が画面の下へ
     // 寄っていくようなら上げること。
-    var SPEED=pa.clientHeight*0.0018;              // 1フレームあたり(600pxの画面で1.08px=毎秒約65px)
-    var step=Math.min(d,SPEED);
-    if(step<=0)return;
-    pa.scrollTop=cur+step;
+    // 速度は画面の高さに比例させない。
+    // 以前は clientHeight*0.0018 だったため、画面の小さいスマホほど遅くなり
+    // (PC 841px→1.5px/フレーム、スマホ 490px→0.88px/フレーム)、
+    // scrollTop の丸めで加算が消えて「まったく動かない」ように見えていた。
+    // 実距離で毎秒 SCROLL_PPS px に固定する。
+    var SCROLL_PPS=64;                                   // 毎秒の移動量(px)
+    var now=(window.performance&&performance.now)?performance.now():Date.now();
+    var dt=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
+    _kara.lastT=now;
+    if(dt>100)dt=100;                                    // タブが裏に回った直後などを抑える
+    var step=Math.min(d,SCROLL_PPS*dt/1000);
+    // 端数を持ち越す。1フレームが 1px 未満だと scrollTop の丸めで消えるため。
+    _kara.frac=(_kara.frac||0)+step;
+    var move=Math.floor(_kara.frac);
+    if(move>0){ _kara.frac-=move; pa.scrollTop=cur+move; }
     _kara.lastMax=(d>pa.clientHeight*1.5)?null:_kara.lastMax;
     return;
     /* 以下は旧実装。速度を可変にしていた部分。
@@ -6717,6 +6729,5 @@ window.onload=function(){
 </script>
 <script src="js/analytics.js" defer></script>
 <script src="js/server-save.js?v=1.17.0"></script>
-<script src="js/DIAG_scroll_mobile.js"></script>
 </body>
 </html>
