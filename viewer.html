@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v148_prune_by_share';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v149_scroll_constant';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5228,16 +5228,18 @@ function _karaEnsureLoop(){
     // 本文は上から下へ進むので、画面も下へ流れるだけでよい。
     // 目標が上にあるときは、読み上げが追いつくまでその場で待つ。
     if(d<0){ _kara.lastMax=null; return; }
-    if(d>pa.clientHeight*1.5){
-      // 速く詰めたいが、1フレームで飛ばすと画面が跳ねる。
-      // 1フレームあたり画面の6%(600pxの画面で36px=毎秒約2,160px)までに抑える。
-      var big=Math.min(d*0.25,pa.clientHeight*0.06);
-      pa.scrollTop=cur+big;
-      _kara.lastMax=null;
-      return;
-    }
-    // 台詞から次の台詞へ移る瞬間は目標が段差のように飛ぶ。速く詰めると目がちらつくので
-    // **その台詞を読み終わるまでに間に合う速さ**だけ出す(足りなければ最低速で進む)。
+    // ---- 速度は一定にする ----
+    // 以前は「その台詞を読み終わるまでに間に合う速さ」を毎フレーム計算していた。
+    // 台詞ごとに残り時間が変わるので速度も変わり、動きがぎくしゃくしていた。
+    // 常に同じ速さで下へ流し、吹き出しの間隔が広い箇所は移動時間が延びるだけにする。
+    // 目標に追いついたら止まり、次の台詞へ移ると再び同じ速さで動き出す。
+    var SPEED=pa.clientHeight*0.0035;              // 1フレームあたり(600pxの画面で2.1px=毎秒約126px)
+    var step=Math.min(d,SPEED);
+    if(step<=0)return;
+    pa.scrollTop=cur+step;
+    _kara.lastMax=(d>pa.clientHeight*1.5)?null:_kara.lastMax;
+    return;
+    /* 以下は旧実装。速度を可変にしていた部分。
     var remain=1.2;
     if(au&&au.duration&&!isNaN(au.duration)){
       remain=(au.duration-au.currentTime)/(au.playbackRate||1);
@@ -5247,10 +5249,11 @@ function _karaEnsureLoop(){
     var slow=Math.max(1,pa.clientHeight*0.003);        // 下限(600pxの画面で約1.8px=110px/秒)
     var fast=Math.max(2,pa.clientHeight*0.005);        // 上限(約3px=180px/秒)
     var cap=Math.min(fast,Math.max(slow,need*1.15));
-    var step=d*0.05;
-    if(step>cap)step=cap;
-    if(step<0)step=0;          // 上方向へは一切動かさない
-    if(step>0)pa.scrollTop=cur+step;
+    var step2=d*0.05;
+    if(step2>cap)step2=cap;
+    if(step2<0)step2=0;
+    if(step2>0)pa.scrollTop=cur+step2;
+    */
   }
   _kara.raf=requestAnimationFrame(tick);
 }
