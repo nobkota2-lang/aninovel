@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v157_vertical_pager';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v158_stop_keeps_place';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -742,12 +742,20 @@ function scrollToItem(id,opt){
       // 読み上げ中は中央寄せを使わない。長い吹き出しでは読んでいる箇所が
     // 画面外へ出てしまい、追従ループとの取り合いにもなる。
     var block=((opt&&opt.top)||(state.tts&&state.tts.active))?'start':'center';
-    try{el.scrollIntoView({behavior:'smooth',block:block,inline:'nearest'});}
-    catch(e){el.scrollIntoView(true);}
+    // 縦書きは横スクロールなので、寄せる軸が block ではなく inline になる。
+    var _V=(state.displaySettings&&state.displaySettings.orientation==='vertical');
+    try{
+      if(_V)el.scrollIntoView({behavior:'smooth',block:'nearest',inline:block});
+      else el.scrollIntoView({behavior:'smooth',block:block,inline:'nearest'});
+    }catch(e){el.scrollIntoView(true);}
     if(opt&&opt.top){
-      // 少し余白を残して、直前の行も見えるようにする
+      // 少し余白を残して、直前の行も見えるようにする。
+      // 縦書きは右から左へ進むので、戻す方向は右(正)。
       var pa=document.getElementById('pageArea');
-      if(pa&&pa.scrollBy)setTimeout(function(){try{pa.scrollBy({top:-60,behavior:'smooth'});}catch(e){}},260);
+      if(pa&&pa.scrollBy)setTimeout(function(){try{
+        if(_V)pa.scrollBy({left:60,behavior:'smooth'});
+        else pa.scrollBy({top:-60,behavior:'smooth'});
+      }catch(e){}},260);
     }
   });
 }
@@ -3494,11 +3502,19 @@ function pauseTTS(){
     btn.classList.toggle('tts-active',!state.tts.paused);
   }
 }
+var _ttsLastItemId=null;   // 停止したときに戻る先
 function stopTTS(){
+  if(state.tts&&state.tts.currentItemId)_ttsLastItemId=state.tts.currentItemId;
   state.tts.active=false;state.tts.paused=false;state.tts.currentItemId=null;state.tts.currentCharId=null;try{_karaStop();}catch(e){}
   _ttsQueue=[];speechSynthesis.cancel();_ttsUtterance=null;
   if(_cloudAudioCtrl){_cloudAudioCtrl.stop();_cloudAudioCtrl=null;}
-  _clearAllLipSync();_flowEnd=-1;render();   // 継ぎ足した分を片付けて現在ページだけに戻す
+  // 停止しても「今読んだところ」に留まる。
+  // 以前は _flowEnd=-1 で継ぎ足したページを捨てていたため、
+  // 再描画で読み上げ開始時の位置まで戻っていた。
+  var _lastId=_ttsLastItemId||null;
+  _clearAllLipSync();
+  render();
+  if(_lastId){try{scrollToItem(_lastId,{top:true,force:true});}catch(e){}}
 }
 function setTTSKaraoke(on){
   state.tts.karaoke=!!on;
@@ -6164,11 +6180,16 @@ if(typeof showToast==='function'){ var _origShowToast=showToast; showToast=funct
 function render(){
   _clearAllLipSync(); // DOM再構築前にcanvasアニメ停止
   state._curHash=_contentHash();
-  _ec={};_acts=[];var _paScroll=(document.getElementById('pageArea')||{}).scrollTop||0;
+  // 縦書きは横スクロールなので scrollLeft も控える。
+  // これを保存しないと、再描画のたびに先頭(右端)へ戻ってしまう。
+  _ec={};_acts=[];
+  var _paEl0=document.getElementById('pageArea');
+  var _paScroll=(_paEl0&&_paEl0.scrollTop)||0;
+  var _paScrollX=(_paEl0&&_paEl0.scrollLeft)||0;
   document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
   document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();applyI18n();_maybeReveal();
-  if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}else{var _paEl=document.getElementById('pageArea');if(_paEl)_paEl.scrollTop=_paScroll;}
+  if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}else{var _paEl=document.getElementById('pageArea');if(_paEl){_paEl.scrollTop=_paScroll;if(_paScrollX)_paEl.scrollLeft=_paScrollX;}}
   try{_flowHookRead();}catch(e){}
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動
   if(state.tts&&state.tts.active&&state.tts.currentItemId){
