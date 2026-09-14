@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v155_mono_edit';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v156_vertical_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1745,6 +1745,10 @@ function _lipWrapsForCurrent(cid){
       if(any)return[any];
     }
   }
+  // 発話中のブロックが特定できているのに、その中にアイコンが無い場合は
+  // **何も返さない**。ここで全マッチへ落ちると、画面にある同じ話者の
+  // アイコンが全部いっせいに口を動かしてしまう(縦書きで顕著だった)。
+  if(itemId)return[];
   return document.querySelectorAll('.char-icon-wrap[data-charid="'+cid+'"]');
 }
 function _applyLipGif(cid,gifUrl){
@@ -5167,8 +5171,19 @@ function _karaEnsureLoop(){
       var p=(to>from)?((f-from)/(to-from)):0;
       _karaMark(i);
       var pr=pa.getBoundingClientRect();
-      function topOf(el){var r=el.getBoundingClientRect();return r.top-pr.top+pa.scrollTop;}
-      function botOf(el){var r=el.getBoundingClientRect();return r.bottom-pr.top+pa.scrollTop;}
+      // 縦書きは flex-direction:row-reverse の横スクロール。本文は右から左へ進み、
+      // scrollLeft は負の方向へ動く。距離として扱えるよう符号を反転して測る。
+      var _V=(state.displaySettings&&state.displaySettings.orientation==='vertical');
+      function topOf(el){
+        var r=el.getBoundingClientRect();
+        if(_V)return -(r.right-pr.right)-pa.scrollLeft;
+        return r.top-pr.top+pa.scrollTop;
+      }
+      function botOf(el){
+        var r=el.getBoundingClientRect();
+        if(_V)return -(r.left-pr.right)-pa.scrollLeft;
+        return r.bottom-pr.top+pa.scrollTop;
+      }
       // 目標は「いま読んでいる文の上端」。次の文へは文の後半だけで寄せる。
       var a=spans[i]?topOf(spans[i]):topOf(_kara.box);
       var nx=spans[i+1]?topOf(spans[i+1]):null;
@@ -5192,14 +5207,18 @@ function _karaEnsureLoop(){
     }
     if(_kara.want==null)return;
     if(Date.now()-_kara.userAt<4000)return;
-    var want=Math.max(0,_kara.want-pa.clientHeight*0.20);
-    var max=Math.max(0,pa.scrollHeight-pa.clientHeight);
+    // 縦書きでは「画面の高さ」ではなく「幅」で先読みの余白を取る。
+    var _V2=(state.displaySettings&&state.displaySettings.orientation==='vertical');
+    var _len=_V2?pa.clientWidth:pa.clientHeight;
+    var _all=_V2?pa.scrollWidth:pa.scrollHeight;
+    var want=Math.max(0,_kara.want-_len*0.20);
+    var max=Math.max(0,_all-_len);
     // 目標が下端を越えている＝**その先が画面に無い**。ページの最後の台詞で
     // スクロールが止まって見えるのはこれ。足りなければ次ページを継ぎ足す。
     if(want>max-4&&state.tts.active){
       try{
         if(_flowAppend()!==null){
-          max=Math.max(0,pa.scrollHeight-pa.clientHeight);
+          max=Math.max(0,(_V2?pa.scrollWidth:pa.scrollHeight)-_len);
           var pit=_pageItems(_flowEnd);
           var q=pit.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
           if(q.length){
@@ -5215,12 +5234,14 @@ function _karaEnsureLoop(){
     // 少しずつ解放する**(1フレームあたり上限の伸びを cap 以内に抑える)。
     if(_kara.lastMax==null)_kara.lastMax=max;
     if(max>_kara.lastMax+2){
-      _kara.lastMax=Math.min(max,_kara.lastMax+Math.max(4,pa.clientHeight*0.02));
+      _kara.lastMax=Math.min(max,_kara.lastMax+Math.max(4,_len*0.02));
     }else{
       _kara.lastMax=max;
     }
     if(want>_kara.lastMax)want=_kara.lastMax;
-    var cur=pa.scrollTop,d=want-cur;
+    // 縦書きの scrollLeft は 0 から負へ動くので、符号を反転して距離で扱う。
+    var cur=_V2?(-pa.scrollLeft):pa.scrollTop;
+    var d=want-cur;
     if(Math.abs(d)<0.5)return;
     // 目標が単調に増えるので、通常はここが負になることはない。
     // ページ移動や検索の直後など大きく外れたときだけ合わせる。
@@ -5257,8 +5278,11 @@ function _karaEnsureLoop(){
     // 端数を持ち越す。1フレームが 1px 未満だと scrollTop の丸めで消えるため。
     _kara.frac=(_kara.frac||0)+step;
     var move=Math.floor(_kara.frac);
-    if(move>0){ _kara.frac-=move; pa.scrollTop=cur+move; }
-    _kara.lastMax=(d>pa.clientHeight*1.5)?null:_kara.lastMax;
+    if(move>0){
+      _kara.frac-=move;
+      if(_V2)pa.scrollLeft=-(cur+move); else pa.scrollTop=cur+move;
+    }
+    _kara.lastMax=(d>_len*1.5)?null:_kara.lastMax;
     return;
     /* 以下は旧実装。速度を可変にしていた部分。
     var remain=1.2;
