@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v159_vertical_keys';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v160_vertical_flow';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -599,10 +599,13 @@ function _flowPrepend(){
   var items=_pageItems(pp);
   if(!items.length){_flowStart=pp;return [];}
   _computeSideMap();_computeMonoMap();
-  var before=pa.scrollHeight;
+  // 縦書きは横スクロールなので幅で測り、scrollLeft を補正する。
+  // scrollLeft は負の方向へ動くので、増えた分を引く。
+  var _fpV=(state.displaySettings&&state.displaySettings.orientation==='vertical');
+  var before=_fpV?pa.scrollWidth:pa.scrollHeight;
   wrap.insertAdjacentHTML('afterbegin',_itemsHTML(items,{appended:true,page:pp}));
-  var after=pa.scrollHeight;
-  pa.scrollTop+=(after-before);          // 見ている位置を動かさない
+  var after=_fpV?pa.scrollWidth:pa.scrollHeight;
+  if(_fpV)pa.scrollLeft-=(after-before); else pa.scrollTop+=(after-before);  // 見ている位置を動かさない
   try{bindHandlers();}catch(e){}
   _flowStart=pp;
   console.info('[Flow] '+(pp+1)+'ページ目を先頭に追加');
@@ -613,10 +616,12 @@ function _flowSyncByView(){
   var pa=document.getElementById('pageArea');
   if(!pa)return;
   var els=pa.querySelectorAll('[data-cid]');
+  // 縦書きは右から左へ読むので、画面の上端ではなく右端を見る。
+  var _fsV=(state.displaySettings&&state.displaySettings.orientation==='vertical');
   var pr=pa.getBoundingClientRect(),top=null;
   for(var i=0;i<els.length;i++){
     var r=els[i].getBoundingClientRect();
-    if(r.bottom>pr.top+8){top=els[i];break;}
+    if(_fsV?(r.left<pr.right-8):(r.bottom>pr.top+8)){top=els[i];break;}
   }
   if(!top)return;
   var id=top.getAttribute('data-cid');
@@ -631,13 +636,19 @@ function _flowHookRead(){
     if(state.tts&&state.tts.active)return;              // 読み上げ中は既存の仕組みに任せる
     if(_flowEnd<0)_flowEnd=state.currentPage;
     if(_flowStart<0)_flowStart=state.currentPage;
-    // 下端が近ければ次ページを足す
-    if(pa.scrollTop+pa.clientHeight >= pa.scrollHeight-600){
+    // 縦書きは右から左へ進む横スクロール。
+    // 進行方向の距離を -scrollLeft として扱い、幅で端を判定する。
+    var _fhV=(state.displaySettings&&state.displaySettings.orientation==='vertical');
+    var _cur=_fhV?(-pa.scrollLeft):pa.scrollTop;
+    var _len=_fhV?pa.clientWidth:pa.clientHeight;
+    var _all=_fhV?pa.scrollWidth:pa.scrollHeight;
+    // 先頭から遠い端が近ければ次ページを足す
+    if(_cur+_len >= _all-600){
       _flowVerify();
       _flowAppend();
     }
-    // 上端が近ければ前ページを足す(上へ戻れるように)
-    else if(pa.scrollTop < 600){
+    // 手前の端が近ければ前ページを足す(戻れるように)
+    else if(_cur < 600){
       _flowPrepend();
     }
     // 表示位置からページ番号を更新
