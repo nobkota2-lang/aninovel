@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v161_vertical_all';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v162_bg_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5159,7 +5159,11 @@ function _karaClearMarks(){
 }
 // 読み上げ全体の終了
 function _karaStop(){
-  if(_kara.raf){cancelAnimationFrame(_kara.raf);_kara.raf=null;}
+  // 裏では setTimeout で回しているので、両方を止める
+  if(_kara.raf){
+    if(_kara.byTimer)clearTimeout(_kara.raf); else cancelAnimationFrame(_kara.raf);
+    _kara.raf=null;_kara.byTimer=false;
+  }
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
   _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;_kara.lastMax=null;
@@ -5198,8 +5202,20 @@ function _karaBind(){
 function _karaEnsureLoop(){
   _karaHookScroll();
   if(_kara.raf)return;
+  // タブが裏に回ると requestAnimationFrame は呼ばれなくなるが、
+  // 音声は鳴り続けるので、戻ったときに追いつこうとして早送りになる。
+  // 裏に回っている間は setTimeout で継いで、スクロールを進めておく。
+  function _karaNext(){
+    if(document.hidden){
+      _kara.raf=setTimeout(tick,50);   // 裏では 20fps 程度で十分
+      _kara.byTimer=true;
+    }else{
+      _kara.raf=requestAnimationFrame(tick);
+      _kara.byTimer=false;
+    }
+  }
   function tick(){
-    _kara.raf=requestAnimationFrame(tick);
+    _karaNext();
     if(!state.tts||!state.tts.active){_karaStop();return;}
     var pa=document.getElementById('pageArea');
     if(!pa)return;
@@ -5317,7 +5333,9 @@ function _karaEnsureLoop(){
     var now=(window.performance&&performance.now)?performance.now():Date.now();
     var dt=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
     _kara.lastT=now;
-    if(dt>100)dt=100;                                    // タブが裏に回った直後などを抑える
+    // 裏では呼ばれる間隔が開くので、上限を少し広げる。
+    // ただし長すぎる中断で一気に飛ばないように 250ms で止める。
+    if(dt>250)dt=250;
     var step=Math.min(d,SCROLL_PPS*dt/1000);
     // 端数を持ち越す。1フレームが 1px 未満だと scrollTop の丸めで消えるため。
     _kara.frac=(_kara.frac||0)+step;
@@ -5344,7 +5362,7 @@ function _karaEnsureLoop(){
     if(step2>0)pa.scrollTop=cur+step2;
     */
   }
-  _kara.raf=requestAnimationFrame(tick);
+  _karaNext();
 }
 // 再生開始。**要素が無くてもここでは諦めず**、ループ側で掴み直す。
 function _karaStart(itemId,text,audio){
