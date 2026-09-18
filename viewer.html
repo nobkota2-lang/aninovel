@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v162_bg_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v163_trans_cache';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -6080,6 +6080,47 @@ function _contentHash(){
 function _srcLang(){ return (state.novel&&state.novel.sourceLang)||'ja'; }
 function _isTranslatedView(){ return state.lang!==_srcLang(); }
 function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'6_'+h; }
+// 長い作品(猫は英文で約 3.6MB)は localStorage の 5MB 制限に入りきらず、
+// 保存に失敗して毎回 1.5MB を送り直していた。IndexedDB に退避する。
+var _TRDB='aninovel_trans',_TRDBV=1,_TRSTORE='trans';
+function _trDBOpen(){
+  return new Promise(function(res,rej){
+    if(!window.indexedDB){rej(new Error('no indexedDB'));return;}
+    var rq=indexedDB.open(_TRDB,_TRDBV);
+    rq.onupgradeneeded=function(e){
+      var db=e.target.result;
+      if(!db.objectStoreNames.contains(_TRSTORE))db.createObjectStore(_TRSTORE,{keyPath:'key'});
+    };
+    rq.onsuccess=function(){res(rq.result);};
+    rq.onerror=function(){rej(rq.error);};
+  });
+}
+function _trCacheGet(k){
+  return _trDBOpen().then(function(db){
+    return new Promise(function(res){
+      var tx=db.transaction(_TRSTORE,'readonly');
+      var rq=tx.objectStore(_TRSTORE).get(k);
+      rq.onsuccess=function(){res(rq.result?rq.result.data:null);};
+      rq.onerror=function(){res(null);};
+    });
+  }).catch(function(){return null;});
+}
+function _trCachePut(k,data){
+  return _trDBOpen().then(function(db){
+    return new Promise(function(res){
+      var tx=db.transaction(_TRSTORE,'readwrite');
+      tx.objectStore(_TRSTORE).put({key:k,data:data,at:Date.now()});
+      tx.oncomplete=function(){res(true);};
+      tx.onerror=function(){res(false);};
+    });
+  }).catch(function(){return false;});
+}
+function _trCacheDel(k){
+  return _trDBOpen().then(function(db){
+    var tx=db.transaction(_TRSTORE,'readwrite');
+    tx.objectStore(_TRSTORE).delete(k);
+  }).catch(function(){});
+}
 function _ctext(item){
   if(_isTranslatedView() && state.workTrans && state.workTransHash===state._curHash && state.workTrans[item.id]!=null) return state.workTrans[item.id];
   return item.text;
@@ -6171,7 +6212,17 @@ function maybeTranslateWork(){
     var cached=localStorage.getItem(_trKey(hash));
     if(cached){ var c=JSON.parse(cached); var _im=c.items||{}; var _tot=Object.keys(_im).length; var _jp=0; if(state.lang!=='en'){_tot=0;} Object.keys(_im).forEach(function(k){if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(_im[k]))_jp++;}); if(_tot>0 && _jp>_tot*0.1){ localStorage.removeItem(_trKey(hash)); }else{ state.workTrans=_im; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; } }
   }catch(e){}
-  translateWork(hash);
+  // localStorage に無ければ IndexedDB も見る。
+  // 長い作品は localStorage に入らず、こちらに保存されている。
+  _trCacheGet(_trKey(hash)).then(function(c){
+    if(c&&c.items&&Object.keys(c.items).length){
+      state.workTrans=c.items; state.workTransMeta={title:c.title,author:c.author};
+      state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash;
+      render();
+      return;
+    }
+    translateWork(hash);
+  });
 }
 function translateWork(hash){
   if(state.translating) return;
@@ -6187,7 +6238,15 @@ function translateWork(hash){
     if(d&&d.items&&d.items.length){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
       state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
-      try{ localStorage.setItem(_trKey(hash), JSON.stringify({items:map,title:d.title,author:d.author,chars:cmap})); }catch(e){}
+      var _payload={items:map,title:d.title,author:d.author,chars:cmap};
+      // 小さい作品は従来通り localStorage、入らなければ IndexedDB へ。
+      var _saved=false;
+      try{ localStorage.setItem(_trKey(hash), JSON.stringify(_payload)); _saved=true; }catch(e){}
+      if(!_saved){
+        _trCachePut(_trKey(hash),_payload).then(function(ok){
+          console.info('[translate] 大きいため IndexedDB に保存:', ok?'成功':'失敗');
+        });
+      }
       _renderSoft();
     } else { showToast('Translation failed'); }
   }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
