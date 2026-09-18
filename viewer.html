@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v163_trans_cache';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v164_trans_chunk';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -6221,7 +6221,47 @@ function maybeTranslateWork(){
       render();
       return;
     }
-    translateWork(hash);
+    // 分割キャッシュを先に見る。無ければ従来の経路へ。
+    _trChunkLoad(hash).then(function(ok){ if(!ok)translateWork(hash); });
+  });
+}
+// 大きい作品は「作品IDとチャンク番号」で分けて保存してある。
+// 全文を送るキャッシュキー方式は 2.8MB を超えて Cloudflare に拒まれるため。
+var _TR_CHUNK=1000;
+function _trChunkLoad(hash){
+  var wid=_currentWorkId();
+  if(!wid)return Promise.resolve(false);
+  var items={},chars={},meta={},part=0,total=0;
+  function step(){
+    return fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({target:state.lang,workId:wid,chunk:{part:part}})})
+      .then(function(r){
+        if(r.status===404)return null;
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(j){
+        if(!j)return null;
+        Object.assign(items,j.items||{});
+        Object.assign(chars,j.chars||{});
+        if(j.title)meta.title=j.title;
+        if(j.author)meta.author=j.author;
+        total=j.total||total;
+        part++;
+        if(total && part<total)return step();
+        return true;
+      });
+  }
+  return step().then(function(ok){
+    if(!ok||!Object.keys(items).length)return false;
+    state.workTrans=items; state.workTransMeta=meta;
+    state.workTransHash=hash; state.charTrans=chars; state.charTransHash=hash;
+    console.info('[translate] 分割キャッシュから読み込み: '+Object.keys(items).length+'件');
+    render();
+    return true;
+  }).catch(function(e){
+    console.info('[translate] 分割キャッシュなし: '+e.message);
+    return false;
   });
 }
 function translateWork(hash){
