@@ -33,6 +33,41 @@ export async function onRequestPost({ request, env }) {
   const dbg = []; // デバッグログ
   try {
     const body = await request.json().catch(() => ({}));
+    // ===== 大きい作品向け: 分割して保存・取得する =====
+    // 猫のように 4,700 件ある作品は、全件を 1 回の POST で送ると
+    // ボディが 2.8MB を超えて Cloudflare に拒まれる(即座に 503)。
+    // そこで、本文を送らずに「作品IDとチャンク番号」だけで読み書きできる
+    // 別経路を用意する。キーは作品IDに紐づくので、人物の増減で変わらない。
+    if (body.chunk && body.workId) {
+      const wid = String(body.workId).slice(0, 80);
+      const part = parseInt(body.chunk.part, 10) || 0;
+      const ckey = `worktr_chunk:${(body.target||'en').toLowerCase()}:${wid}:${part}`;
+      const KV2 = env.WORKS || env.WORKS_KV;
+      if (!KV2) return json({ error: 'no_kv' }, 500);
+
+      // 書き込み
+      if (body.chunk.write) {
+        if (body.writeKey !== 'aninovel-owner-2026') {
+          return json({ error: 'forbidden' }, 403);
+        }
+        const payload = JSON.stringify({
+          items: body.chunk.items || {},        // { blockId: 英訳 }
+          chars: body.chunk.chars || {},        // { charId: 英名 }
+          title: body.titleTr || '',
+          author: body.authorTr || '',
+          total: parseInt(body.chunk.total, 10) || 0,
+        });
+        await KV2.put(ckey, payload, { expirationTtl: 60 * 60 * 24 * 365 });
+        return new Response(JSON.stringify({ ok: true, part, bytes: payload.length }),
+          { headers: { ...JSON_HEADERS, 'X-Cache': 'WRITE-CHUNK' } });
+      }
+
+      // 読み出し
+      const got = await KV2.get(ckey);
+      if (!got) return json({ error: 'not_found', part }, 404);
+      return new Response(got, { headers: { ...JSON_HEADERS, 'X-Cache': 'HIT-CHUNK' } });
+    }
+
     const target = (body.target || 'en').toLowerCase();
     const source = (body.source || body.sourceLang || 'ja').toLowerCase();
     const title = (body.title || '').toString();
@@ -75,40 +110,6 @@ export async function onRequestPost({ request, env }) {
     const hash = (await sha256hex(canonical)).slice(0, 40);
     const cacheKey = `worktr7:${target}:${hash}`;
 
-
-    // ===== 大きい作品向け: 分割して保存・取得する =====
-    // 猫のように 4,700 件ある作品は、全件を 1 回の POST で送ると
-    // ボディが 2.8MB を超えて Cloudflare に拒まれる(即座に 503)。
-    // そこで、本文を送らずに「作品IDとチャンク番号」だけで読み書きできる
-    // 別経路を用意する。キーは作品IDに紐づくので、人物の増減で変わらない。
-    if (body.chunk && body.workId) {
-      const wid = String(body.workId).slice(0, 80);
-      const part = parseInt(body.chunk.part, 10) || 0;
-      const ckey = `worktr_chunk:${target}:${wid}:${part}`;
-      if (!KV) return json({ error: 'no_kv' }, 500);
-
-      // 書き込み
-      if (body.chunk.write) {
-        if (body.writeKey !== 'aninovel-owner-2026') {
-          return json({ error: 'forbidden' }, 403);
-        }
-        const payload = JSON.stringify({
-          items: body.chunk.items || {},        // { blockId: 英訳 }
-          chars: body.chunk.chars || {},        // { charId: 英名 }
-          title: body.titleTr || '',
-          author: body.authorTr || '',
-          total: parseInt(body.chunk.total, 10) || 0,
-        });
-        await KV.put(ckey, payload, { expirationTtl: 60 * 60 * 24 * 365 });
-        return new Response(JSON.stringify({ ok: true, part, bytes: payload.length }),
-          { headers: { ...JSON_HEADERS, 'X-Cache': 'WRITE-CHUNK' } });
-      }
-
-      // 読み出し
-      const got = await KV.get(ckey);
-      if (!got) return json({ error: 'not_found', part }, 404);
-      return new Response(got, { headers: { ...JSON_HEADERS, 'X-Cache': 'HIT-CHUNK' } });
-    }
 
     // ===== オーナー英訳の直接書き込み(AIを使わない・quota消費なし) =====
     if (body.providedTranslations && typeof body.providedTranslations === 'object') {
