@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v166_hidden_track';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v167_slower_scroll';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5344,7 +5344,11 @@ function _karaEnsureLoop(){
     // (PC 841px→1.5px/フレーム、スマホ 490px→0.88px/フレーム)、
     // scrollTop の丸めで加算が消えて「まったく動かない」ように見えていた。
     // 実距離で毎秒 SCROLL_PPS px に固定する。
-    var SCROLL_PPS=64;                                   // 毎秒の移動量(px)
+    // 毎秒の移動量(px)。吹き出しから次の吹き出しへ移る瞬間が
+    // 速すぎたため 64 → 40 へ下げた。
+    // 下げすぎると読み上げに置いていかれるので、
+    // 読み上げ位置が画面の下へ寄っていくようなら戻すこと。
+    var SCROLL_PPS=40;
     var now=(window.performance&&performance.now)?performance.now():Date.now();
     var dtRaw=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
     var dt=dtRaw;
