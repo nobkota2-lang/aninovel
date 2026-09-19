@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v165_catchup';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v166_hidden_track';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5222,7 +5222,7 @@ function _karaEnsureLoop(){
   // 裏に回っている間は setTimeout で継いで、スクロールを進めておく。
   function _karaNext(){
     if(document.hidden){
-      _kara.raf=setTimeout(tick,50);   // 裏では 20fps 程度で十分
+      _kara.raf=setTimeout(tick,500);  // 裏では直接合わせるので頻度は低くてよい
       _kara.byTimer=true;
     }else{
       _kara.raf=requestAnimationFrame(tick);
@@ -5346,32 +5346,25 @@ function _karaEnsureLoop(){
     // 実距離で毎秒 SCROLL_PPS px に固定する。
     var SCROLL_PPS=64;                                   // 毎秒の移動量(px)
     var now=(window.performance&&performance.now)?performance.now():Date.now();
-    var dt=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
+    var dtRaw=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
+    var dt=dtRaw;
     _kara.lastT=now;
-    // スクリーンセーバーやタブ切替でこのループが止まると、
-    // 音声だけが進んで大きく遅れる。dt を切り詰めると
-    // 毎秒 64px でしか追えず、いつまでも追いつかない。
-    // 遅れている量に応じて速度を上げる。
-    if(dt>250)dt=250;
-    // 画面が戻った直後は無条件で合わせる。
-    if(_kara.snap){
+    if(dt>250)dt=250;   // 滑らかに動かすときの 1 回あたりの上限
+    // 画面が見えていないときは、滑らかに動かす意味がない。
+    // その場で目標位置へ直接合わせる。こうすれば戻ったときには
+    // すでに読み上げ位置が画面上部 20% にある。
+    // (隠れていても scrollTop / scrollLeft の書き込み自体は有効)
+    // あわせて、rAF が長く止まっていた場合(スクリーンセーバーなどで
+    // document.hidden にならないこともある)も同じく直接合わせる。
+    var frozen=(dtRaw>900);
+    if(document.hidden||frozen||_kara.snap){
       _kara.snap=false;
       if(_V2)pa.scrollLeft=-Math.min(want,max); else pa.scrollTop=Math.min(want,max);
       _kara.frac=0;
       return;
     }
-    // d は目標までの距離。画面の 1.5 倍より離れたら一気に寄せる。
-    if(d>_len*1.5){
-      if(_V2)pa.scrollLeft=-Math.min(want,max); else pa.scrollTop=Math.min(want,max);
-      _kara.frac=0;
-      return;
-    }
-    // それ未満でも遅れていれば速くする。
-    // 画面の 20% を超えた分だけ倍率をかけ、最大 8 倍まで。
-    var pps=SCROLL_PPS;
-    var far=_len*0.20;
-    if(d>far)pps=SCROLL_PPS*Math.min(8,1+(d-far)/far*2);
-    var step=Math.min(d,pps*dt/1000);
+    // 見えているときは従来通り一定速度で滑らかに。
+    var step=Math.min(d,SCROLL_PPS*dt/1000);
     // 端数を持ち越す。1フレームが 1px 未満だと scrollTop の丸めで消えるため。
     _kara.frac=(_kara.frac||0)+step;
     var move=Math.floor(_kara.frac);
