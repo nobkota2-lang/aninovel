@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v168_no_jump';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v169_no_replay';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -673,10 +673,11 @@ function _flowPrefetch(order){
     if(q.length)added=added.concat(q);
   }
   if(!added.length)return;
-  var have={};
-  _ttsQueue.forEach(function(x){have[x.id]=1;});
-  var fresh=added.filter(function(x){return !have[x.id];});
-  if(fresh.length)_ttsQueue=_ttsQueue.concat(fresh);
+  var fresh=added.filter(function(x){return !_ttsSeen[x.id];});
+  if(fresh.length){
+    fresh.forEach(function(x){_ttsSeen[x.id]=1;});
+    _ttsQueue=_ttsQueue.concat(fresh);
+  }
 }
 function _flowEnsureItem(it){
   if(!it)return false;
@@ -945,6 +946,10 @@ window.showExportMenu=showExportMenu;window.exportTxt=exportTxt;window.exportEpu
 
 // ===== TTS ENGINE =====
 var _ttsQueue=[];var _ttsUtterance=null;
+// すでにキューに入れた id。ページを継ぎ足す経路が 3 つあり、
+// 互いを知らない。「キューに残っているか」だけで重複を見ていたため、
+// 読み終わった台詞が再び入って二度再生されていた。
+var _ttsSeen={};
 
 // --- 音声性別判定 ---
 function _voiceGender(v){
@@ -3418,7 +3423,10 @@ function _ttsAdvancePage(){
       if(items===null)return false;                 // 最終ページまで来た
       var q=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
       if(!q.length)continue;                        // 見出しだけのページは読み飛ばす
-      _ttsQueue=q;
+      var fresh=q.filter(function(x){return !_ttsSeen[x.id];});
+      if(!fresh.length)continue;                    // すべて読み済みなら次のページへ
+      fresh.forEach(function(x){_ttsSeen[x.id]=1;});
+      _ttsQueue=fresh;
       setTimeout(function(){if(state.tts.active&&!state.tts.paused)_drainQueue();},0);
       return true;
     }
@@ -3478,6 +3486,7 @@ function startTTS(){
   // 別項目と同じIDを持つと、音声がIDで解決され同じ音声を二重再生してしまう。
   // キュー段階で空項目を外すことで、既存データでも二重再生を防ぐ。
   _ttsQueue=items.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
+  _ttsSeen={};_ttsQueue.forEach(function(x){_ttsSeen[x.id]=1;});
   if(!_ttsQueue.length){alert('読み上げ可能なテキストがありません');return;}
   // カーソル位置（画面に表示中の最初のセリフ）から再生を開始する。
   // 先頭固定ではなく、読者が今見ている位置から読み上げる。
@@ -3534,7 +3543,7 @@ function pauseTTS(){
 var _ttsLastItemId=null;   // 停止したときに戻る先
 function stopTTS(){
   state.tts.active=false;state.tts.paused=false;state.tts.currentItemId=null;state.tts.currentCharId=null;try{_karaStop();}catch(e){}
-  _ttsQueue=[];speechSynthesis.cancel();_ttsUtterance=null;
+  _ttsQueue=[];_ttsSeen={};speechSynthesis.cancel();_ttsUtterance=null;
   if(_cloudAudioCtrl){_cloudAudioCtrl.stop();_cloudAudioCtrl=null;}
   // 停止しても「今読んだところ」に留まる。
   // 以前は _flowEnd=-1 で継ぎ足したページを捨てていたため、
@@ -5297,9 +5306,11 @@ function _karaEnsureLoop(){
           var pit=_pageItems(_flowEnd);
           var q=pit.filter(function(i){return (i.type==='dialogue'||i.type==='narration')&&(i.text||'').trim()!=='';});
           if(q.length){
-            var have={};_ttsQueue.forEach(function(x){have[x.id]=1;});
-            var fresh=q.filter(function(x){return !have[x.id];});
-            if(fresh.length)_ttsQueue=_ttsQueue.concat(fresh);
+            var fresh=q.filter(function(x){return !_ttsSeen[x.id];});
+            if(fresh.length){
+              fresh.forEach(function(x){_ttsSeen[x.id]=1;});
+              _ttsQueue=_ttsQueue.concat(fresh);
+            }
           }
         }
       }catch(e){}
