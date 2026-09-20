@@ -62,37 +62,6 @@ async function readVersionList(kv, id) {
 }
 
 // GET /api/works/:id
-import { verifyAccess } from '../../_access.js';
-
-/**
- * 作者ごとの権限 (2026-09)
- *   作品に ownerEmail を持たせ、書き込み時に Cloudflare Access が
- *   渡すメールアドレスと照合する。ブラウザ側は何も送らない。
- *   ACCESS_TEAM_DOMAIN / ACCESS_AUD が未設定のうちは従来どおり全通し。
- */
-async function checkOwner(context, kv, id) {
-  const { request, env } = context;
-  let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
-  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
-  if (accessOn && !who) {
-    return { deny: json({ error: 'unauthorized', message: '保存にはログインが必要です。' }, 401) };
-  }
-  if (!who) return { who: null };
-  let ownerEmail = null;
-  try {
-    const prev = await kv.get('work:' + id);
-    if (prev) {
-      const pj = JSON.parse(prev);
-      if (pj && pj.ownerEmail) ownerEmail = String(pj.ownerEmail).toLowerCase();
-    }
-  } catch (e) {}
-  if (ownerEmail && ownerEmail !== who.email && !who.isOwner) {
-    return { deny: json({ error: 'forbidden', message: 'この作品を編集する権限がありません。' }, 403) };
-  }
-  return { who: who, ownerEmail: ownerEmail };
-}
-
 export async function onRequestGet(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
@@ -142,126 +111,20 @@ export async function onRequestGet(context) {
 }
 
 // PUT /api/works/:id — 保存 + バージョン履歴作成
+// 書き込み (PUT / DELETE) は /api/author/works/:id へ移した。
+// ここは読み取り専用。読者はログインなしで作品を開ける。
+// 古いクライアントが PUT してきたら、新しい宛先を案内する。
 export async function onRequestPut(context) {
-  const id = context.params.id;
-  if (!id || !ID_RE.test(id)) {
-    return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
-  }
-  const kv = getKV(context.env);
-  if (!kv) {
-    return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
-  }
-
-  // ===== 作者の確認 =====
-  const chk = await checkOwner(context, kv, id);
-  if (chk.deny) return chk.deny;
-
-  let raw;
-  try {
-    raw = await context.request.text();
-  } catch (e) {
-    return json({ error: 'リクエストボディの読み取りに失敗しました' }, 400);
-  }
-
-  if (new TextEncoder().encode(raw).length > MAX_BYTES) {
-    return json({ error: '作品データが大きすぎます (上限10MB)' }, 413);
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    return json({ error: '不正なJSONです' }, 400);
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    return json({ error: '作品データの形式が不正です' }, 400);
-  }
-
-  const data = (parsed.data && parsed.data.content) ? parsed.data : parsed;
-  const meta = (parsed.meta && typeof parsed.meta === 'object') ? parsed.meta : null;
-  const note = (parsed.note && typeof parsed.note === 'string') ? parsed.note : '';
-  if (!data || !Array.isArray(data.content)) {
-    return json({ error: '作品データの形式が不正です (content配列が必要)' }, 400);
-  }
-
-  // 1) 現在の最新版をバージョン履歴に退避（存在する場合）
-  const versionList = await readVersionList(kv, id);
-  const prevStored = await kv.get('work:' + id);
-  if (prevStored !== null) {
-    try {
-      const prevData = JSON.parse(prevStored);
-      const nextVer = versionList.length > 0
-        ? Math.max.apply(null, versionList.map(function (v) { return v.version; })) + 1
-        : 1;
-      versionList.push({
-        version: nextVer,
-        savedAt: new Date().toISOString(),
-        note: note,
-        data: prevData,
-      });
-      // 最大件数を超えたら古いものを削除
-      while (versionList.length > MAX_VERSIONS) {
-        versionList.shift();
-      }
-      await kv.put('versions:' + id, JSON.stringify(versionList));
-    } catch (e) {
-      // 履歴保存失敗は本体保存を妨げない
-    }
-  }
-
-  // 2) 作品本体を保存
-  //    作者は一度刻んだら変えない。未設定なら今書いている人が作者になる。
-  if (chk.ownerEmail) data.ownerEmail = chk.ownerEmail;
-  else if (chk.who) data.ownerEmail = chk.who.email;
-  await kv.put('work:' + id, JSON.stringify(data));
-
-  // 3) サーバーカタログを更新
-  if (meta) {
-    const catalog = await readCatalog(kv);
-    const entry = Object.assign({}, meta, {
-      id: id,
-      updatedAt: new Date().toISOString(),
-    });
-    const idx = catalog.findIndex(function (w) { return w && w.id === id; });
-    if (idx >= 0) catalog[idx] = entry;
-    else catalog.push(entry);
-    await kv.put(CATALOG_KEY, JSON.stringify(catalog));
-  }
-
-  const currentVersions = await readVersionList(kv, id);
   return json({
-    ok: true,
-    id: id,
-    savedAt: new Date().toISOString(),
-    versionCount: currentVersions.length,
-  });
+    error: 'moved',
+    message: '保存先が /api/author/works/:id に変わりました。画面を再読込してください。'
+  }, 308);
 }
 
-// DELETE /api/works/:id
 export async function onRequestDelete(context) {
-  const id = context.params.id;
-  if (!id || !ID_RE.test(id)) {
-    return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
-  }
-  const kv = getKV(context.env);
-  if (!kv) {
-    return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
-  }
-
-  // 削除も作者本人かオーナーだけ
-  {
-    const chkD = await checkOwner(context, kv, id);
-    if (chkD.deny) return chkD.deny;
-  }
-
-  await kv.delete('work:' + id);
-
-  const catalog = await readCatalog(kv);
-  const next = catalog.filter(function (w) { return !w || w.id !== id; });
-  const removed = catalog.length - next.length;
-  if (removed > 0) {
-    await kv.put(CATALOG_KEY, JSON.stringify(next));
-  }
-
-  return json({ ok: true, id: id, removed: removed });
+  return json({
+    error: 'moved',
+    message: '削除先が /api/author/works/:id に変わりました。'
+  }, 308);
 }
+

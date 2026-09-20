@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v169_no_replay';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v170_author_path';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -6810,7 +6810,7 @@ async function publishMyWork(){
             if(state.novel&&state.novel.sourceLang)_ce.sourceLang=state.novel.sourceLang;
             console.info('[Publish] catalogEntry tags =',_ce.tags);
           }catch(_e){console.warn('[Publish] タグ引き継ぎ失敗(公開は続行):',_e);}
-          var _up=await fetch('/api/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp,meta:_ce})});
+          var _up=await fetch('/api/author/works/'+encodeURIComponent(res.publishedId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp,meta:_ce})});
           if(!_up.ok){var _ue=await _up.json().catch(function(){return{};});throw new Error(_ue.error||('HTTP '+_up.status));}
           console.info('[Publish] サーバーへアップロード完了:',res.publishedId);
         }catch(e){console.error('[Publish] サーバーアップロード失敗:',e);alert('投稿はこの端末に保存されましたが、サーバーへの公開に失敗しました。\n'+e.message+'\n\n他の人が閲覧できるようにするには、もう一度「投稿」してください。');return;}
@@ -6868,7 +6868,7 @@ async function publishMyWork(){
           console.info('[Publish-Owner] 原文に変更なし → 手書きの訳を維持しました');
         }
       }catch(_e){console.warn('[Publish-Owner] カード訳の更新をスキップ(公開は続行):',_e);}
-      var _up2=await fetch('/api/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
+      var _up2=await fetch('/api/author/works/'+encodeURIComponent(_workParam),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:_wp2,meta:_meta})});
       if(!_up2.ok){var _ue2=await _up2.json().catch(function(){return{};});throw new Error(_ue2.error||('HTTP '+_up2.status));}
       console.info('[Publish-Owner] サーバーへ上書き公開完了:',_workParam);
       alert('公開保存しました！\n作品ID: '+_workParam);
