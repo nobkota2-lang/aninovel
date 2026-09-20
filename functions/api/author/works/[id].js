@@ -102,6 +102,25 @@ async function checkOwner(context, kv, id) {
   return { who: who, ownerEmail: ownerEmail };
 }
 
+/**
+ * GET は確認用。Access を通ったか、誰として見えているかを返す。
+ * 作品の中身は返さない(読み取りは /api/works/:id)。
+ */
+export async function onRequestGet(context) {
+  const { request, env } = context;
+  let who = null;
+  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
+  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+  return json({
+    ok: true,
+    accessEnabled: accessOn,
+    hasToken: !!request.headers.get('Cf-Access-Jwt-Assertion'),
+    email: who ? who.email : null,
+    isOwner: who ? who.isOwner : false,
+    workId: context.params.id,
+  });
+}
+
 export async function onRequestPut(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
