@@ -18,8 +18,6 @@
  *   DELETE /api/works/pub_xxxxx              … 削除
  */
 
-import { requireWrite } from '../../_auth.js';
-
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 const CATALOG_KEY = '__catalog__';
@@ -64,6 +62,37 @@ async function readVersionList(kv, id) {
 }
 
 // GET /api/works/:id
+import { verifyAccess } from '../../_access.js';
+
+/**
+ * 作者ごとの権限 (2026-09)
+ *   作品に ownerEmail を持たせ、書き込み時に Cloudflare Access が
+ *   渡すメールアドレスと照合する。ブラウザ側は何も送らない。
+ *   ACCESS_TEAM_DOMAIN / ACCESS_AUD が未設定のうちは従来どおり全通し。
+ */
+async function checkOwner(context, kv, id) {
+  const { request, env } = context;
+  let who = null;
+  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
+  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+  if (accessOn && !who) {
+    return { deny: json({ error: 'unauthorized', message: '保存にはログインが必要です。' }, 401) };
+  }
+  if (!who) return { who: null };
+  let ownerEmail = null;
+  try {
+    const prev = await kv.get('work:' + id);
+    if (prev) {
+      const pj = JSON.parse(prev);
+      if (pj && pj.ownerEmail) ownerEmail = String(pj.ownerEmail).toLowerCase();
+    }
+  } catch (e) {}
+  if (ownerEmail && ownerEmail !== who.email && !who.isOwner) {
+    return { deny: json({ error: 'forbidden', message: 'この作品を編集する権限がありません。' }, 403) };
+  }
+  return { who: who, ownerEmail: ownerEmail };
+}
+
 export async function onRequestGet(context) {
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
@@ -114,8 +143,6 @@ export async function onRequestGet(context) {
 
 // PUT /api/works/:id — 保存 + バージョン履歴作成
 export async function onRequestPut(context) {
-  const denied = requireWrite(context);      // 作者・オーナー以外の書き込みを拒否
-  if (denied) return denied;
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
@@ -124,6 +151,10 @@ export async function onRequestPut(context) {
   if (!kv) {
     return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
   }
+
+  // ===== 作者の確認 =====
+  const chk = await checkOwner(context, kv, id);
+  if (chk.deny) return chk.deny;
 
   let raw;
   try {
@@ -179,6 +210,9 @@ export async function onRequestPut(context) {
   }
 
   // 2) 作品本体を保存
+  //    作者は一度刻んだら変えない。未設定なら今書いている人が作者になる。
+  if (chk.ownerEmail) data.ownerEmail = chk.ownerEmail;
+  else if (chk.who) data.ownerEmail = chk.who.email;
   await kv.put('work:' + id, JSON.stringify(data));
 
   // 3) サーバーカタログを更新
@@ -205,8 +239,6 @@ export async function onRequestPut(context) {
 
 // DELETE /api/works/:id
 export async function onRequestDelete(context) {
-  const denied = requireWrite(context);      // 削除はとくに厳重に
-  if (denied) return denied;
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
@@ -214,6 +246,12 @@ export async function onRequestDelete(context) {
   const kv = getKV(context.env);
   if (!kv) {
     return json({ error: 'KV namespace ("WORKS") が未バインドです' }, 500);
+  }
+
+  // 削除も作者本人かオーナーだけ
+  {
+    const chkD = await checkOwner(context, kv, id);
+    if (chkD.deny) return chkD.deny;
   }
 
   await kv.delete('work:' + id);
