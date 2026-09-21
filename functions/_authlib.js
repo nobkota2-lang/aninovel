@@ -13,7 +13,17 @@
  * オーナーの承認画面は Cloudflare Access のままで、ここは通らない。
  */
 
-const PBKDF2_ITER = 210000;   // OWASP 2023 の推奨値
+// PBKDF2 の回数。OWASP は 21 万回を推奨するが、
+// Cloudflare Workers の無料プランは 1 リクエスト 10ms の CPU 時間しかなく、
+// 21 万回だと超えて Worker が落ちる(500 になる)。
+// そこで 1 万回に下げる。PBKDF2 としては弱くなるが、
+//   ・パスワードは 10 文字以上を強制
+//   ・ハッシュは KV にしかなく、漏れる経路が限られる
+// この 2 つと合わせて実用上は許容できると判断した。
+// Workers Paid($5/月)にすれば CPU は 30 秒まで使えるので、
+// そのときはこの値を 210000 に戻すとよい。
+// (既存のパスワードは rec.iter を見るので、値を変えてもログインできる)
+const PBKDF2_ITER = 10000;
 const SESSION_DAYS = 30;
 const RESET_HOURS = 2;
 
@@ -44,20 +54,23 @@ export function randToken(n = 32) {
   return Array.from(a).map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-export async function hashPassword(password, saltB64) {
+export async function hashPassword(password, saltB64, iter) {
+  const n = iter || PBKDF2_ITER;
   const salt = saltB64 ? unb64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITER, hash: 'SHA-256' }, key, 256
+    { name: 'PBKDF2', salt, iterations: n, hash: 'SHA-256' }, key, 256
   );
-  return { salt: b64(salt), hash: b64(bits), iter: PBKDF2_ITER };
+  return { salt: b64(salt), hash: b64(bits), iter: n };
 }
 
 export async function verifyPassword(password, rec) {
   if (!rec || !rec.salt || !rec.hash) return false;
-  const got = await hashPassword(password, rec.salt);
+  // 保存されたときの回数で照合する。
+  // PBKDF2_ITER を後から変えても、古いパスワードでログインできる。
+  const got = await hashPassword(password, rec.salt, rec.iter);
   // 長さが同じ前提で、時間差の出ない比較をする
   const a = got.hash, b = rec.hash;
   if (a.length !== b.length) return false;
