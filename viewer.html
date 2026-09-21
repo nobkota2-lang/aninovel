@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v172_own_works';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v173_reader_saves';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5900,6 +5900,78 @@ function deleteReaderProfile(name){
   render();
   showToast('プロファイルを削除しました');
 }
+// ===== 読者の設定を名前を付けて保存・読み込み =====
+// 作品ごとに最大 20 件。bundle.saves[作品ID] = [{name,savedAt,data}] に置き、
+// 他の設定と一緒にサーバへ送るので、端末をまたいでも一覧が残る。
+var READER_SNAP_MAX=20;
+function _readerSnaps(pb){
+  if(!pb.bundle.saves)pb.bundle.saves={};
+  if(!pb.bundle.saves[_workParam])pb.bundle.saves[_workParam]=[];
+  return pb.bundle.saves[_workParam];
+}
+function saveReaderSnapshot(){
+  if(!_workParam)return;
+  var def=new Date().toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+  var name=prompt('この作品のいまの設定に名前を付けて保存します',def);
+  if(name===null)return;
+  name=String(name).trim()||def;
+  var pb=_getProfileBundle();
+  var list=_readerSnaps(pb);
+  var ent={name:name,savedAt:Date.now(),data:state.readerCustom?JSON.parse(JSON.stringify(state.readerCustom)):{}};
+  var at=-1;for(var i=0;i<list.length;i++){if(list[i].name===name){at=i;break;}}
+  if(at>=0){
+    if(!confirm('「'+name+'」は既にあります。上書きしますか？'))return;
+    list.splice(at,1);
+  }
+  list.unshift(ent);
+  if(list.length>READER_SNAP_MAX)list.length=READER_SNAP_MAX;
+  _persistProfiles(pb);
+  showToast('「'+name+'」として保存しました');
+  render();
+}
+function loadReaderSnapshot(idx){
+  var pb=_getProfileBundle();
+  var s=_readerSnaps(pb)[idx];
+  if(!s)return;
+  state.readerCustom=JSON.parse(JSON.stringify(s.data||{}));
+  saveReaderCustom(_workParam);        // 使用中の設定にも反映
+  state.readerSnapOpen=false;
+  render();
+  showToast('「'+s.name+'」を読み込みました');
+}
+function deleteReaderSnapshot(idx){
+  var pb=_getProfileBundle();
+  var list=_readerSnaps(pb);
+  var s=list[idx];
+  if(!s)return;
+  if(!confirm('「'+s.name+'」を削除しますか？'))return;
+  list.splice(idx,1);
+  _persistProfiles(pb);
+  render();
+}
+function _readerSnapListHTML(){
+  var pb=_getProfileBundle();
+  var list=_readerSnaps(pb);
+  var h='<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:12px;max-height:240px;overflow:auto">';
+  if(!list.length){
+    h+='<div style="font-size:13px;color:var(--text-muted);padding:6px">この作品の保存はまだありません。「💾 名前を付けて保存」で残せます。</div>';
+  }
+  list.forEach(function(s,i){
+    var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+    var n=Object.keys(s.data||{}).length;
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid var(--border)">'+
+       '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
+       '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
+       '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">読み込む</button>'+
+       '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="削除" style="color:#DC2626">🗑️</button></div>';
+  });
+  h+='</div>';
+  return h;
+}
+window.saveReaderSnapshot=saveReaderSnapshot;
+window.loadReaderSnapshot=loadReaderSnapshot;
+window.deleteReaderSnapshot=deleteReaderSnapshot;
+
 function resetToAuthorDefaults(){
   if(!_workParam)return;
   if(!confirm('この作品のカスタマイズを作者推奨の設定に戻しますか？\n（現在のプロファイル「'+state.readerProfileCurrent+'」のみ影響）'))return;
@@ -5935,6 +6007,11 @@ function renderReaderCustomModal(){
   h+='</select><button onclick="createReaderProfile()" class="btn-icon" title="新規プロファイル">➕</button>';
   if(_pc!=='デフォルト')h+='<button onclick="deleteReaderProfile(\''+_pc.replace(/\\/g,'\\\\').replace(/\'/g,'\\\'')+'\')" class="btn-icon" title="このプロファイルを削除" style="color:#DC2626">🗑️</button>';
   h+='</div></div>';
+  // この作品の設定を名前を付けて複数保存し、一覧から選んで読み込む。
+  h+='<div style="display:flex;gap:8px;margin-bottom:12px">'+
+     '<button onclick="saveReaderSnapshot()" class="btn btn-ghost" style="flex:1;justify-content:center">💾 名前を付けて保存</button>'+
+     '<button onclick="state.readerSnapOpen=!state.readerSnapOpen;render()" class="btn btn-ghost" style="flex:1;justify-content:center">📂 読み込み</button></div>';
+  if(state.readerSnapOpen)h+=_readerSnapListHTML();
   h+='<div style="text-align:center;margin-bottom:16px">'+rIcon(cid,64)+'<div style="margin-top:8px;font-weight:600">'+esc(c.name)+'</div></div>';
   h+='<div style="display:flex;flex-direction:column;gap:16px">';
   // Icon image
