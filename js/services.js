@@ -218,10 +218,38 @@
     // ========== 認証（Phase 1: モック） ==========
 
     /** 現在のユーザーを取得 */
+    /**
+     * いまの利用者。サーバのログイン状態(/api/auth/me)を正とする。
+     * サーバでログインしていれば、それを aninovel_user に写す(_server:true の印付き)。
+     * Home も viewer も aninovel_user を見ているので、ここを揃えれば既存のコードが動く。
+     * サーバでログアウトしたら写しだけを消す。写しでない古い試作の記録には触らない。
+     */
     getCurrentUser: function() {
-      var u = getLS(KEYS.user);
-      if (u) { _migrateUser(u); setLS(KEYS.user, u); }
-      return Promise.resolve(u || null);
+      var local = getLS(KEYS.user);
+      function keepLocal() {
+        if (local && !local._server) { _migrateUser(local); setLS(KEYS.user, local); return local; }
+        return local || null;
+      }
+      return fetch('/api/auth/me', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(me) {
+          if (me && me.loggedIn) {
+            var prev = (local && local._server && local.email === me.email) ? local : null;
+            var u = {
+              id: me.email, email: me.email, displayName: me.nickname,
+              roles: (me.roles || ['reader']).slice(),
+              activeRole: prev ? prev.activeRole : null,
+              loggedIn: true, _server: true
+            };
+            _migrateUser(u);
+            setLS(KEYS.user, u);
+            return u;
+          }
+          // サーバでは未ログイン。写しが残っていれば消す。
+          if (local && local._server) { try { localStorage.removeItem(KEYS.user); } catch (e) {} return null; }
+          return keepLocal();
+        })
+        .catch(function() { return keepLocal(); });
     },
 
     /** ログイン（Phase 1: メール検証のみ） */
@@ -466,8 +494,8 @@
       if (pub[workId]) { delete pub[workId]; setLS(KEYS.publishedWorks, pub); }
       // サーバー(KV)からも削除
       return fetch('/api/works/' + encodeURIComponent(workId), { method: 'DELETE' })
-        .then(function(r) { return { success: true, serverSynced: !!(r && r.ok), status: (r && r.status) || 0 }; })
-        .catch(function() { return { success: true, serverSynced: false, status: 0 }; });
+        .then(function(r) { return { success: true, serverSynced: !!(r && r.ok) }; })
+        .catch(function() { return { success: true, serverSynced: false }; });
     },
 
     /** 作品を公開停止／再開 */
@@ -521,11 +549,15 @@
     /** ログアウト */
     logout: function() {
       var user = getLS(KEYS.user);
-      if (user) {
-        user.loggedIn = false;
-        setLS(KEYS.user, user);
-      }
-      return Promise.resolve();
+      // サーバのセッションも終える
+      return fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+        .catch(function() {})
+        .then(function() {
+          if (user) {
+            if (user._server) { try { localStorage.removeItem(KEYS.user); } catch (e) {} }
+            else { user.loggedIn = false; setLS(KEYS.user, user); }
+          }
+        });
     },
 
     // ========== 読者カスタマイズ（プロファイル対応） ==========
@@ -769,14 +801,11 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ data: work.data, meta: catalogEntry })
           }).then(function(r) {
-            // status も返す。401/403 は「この端末に書き込み権限が無い」意味で、
-            // 通信の一時的な失敗とは区別して伝える必要がある。
             return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
-                     overwrote: !!existing, serverSynced: !!(r && r.ok),
-                     status: (r && r.status) || 0 };
+                     overwrote: !!existing, serverSynced: !!(r && r.ok) };
           }).catch(function() {
             return { success: true, publishedId: pubId, catalogEntry: catalogEntry,
-                     overwrote: !!existing, serverSynced: false, status: 0 };
+                     overwrote: !!existing, serverSynced: false };
           });
         });
     },
@@ -800,9 +829,9 @@
       return fetch('/api/works/' + encodeURIComponent(pubId), {
         method: 'DELETE'
       }).then(function(r) {
-        return { success: true, serverSynced: !!(r && r.ok), status: (r && r.status) || 0 };
+        return { success: true, serverSynced: !!(r && r.ok) };
       }).catch(function() {
-        return { success: true, serverSynced: false, status: 0 };
+        return { success: true, serverSynced: false };
       });
     },
 

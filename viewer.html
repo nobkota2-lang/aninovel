@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v170_author_path';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v171_reader_sync';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5778,6 +5778,52 @@ function _getProfileBundle(){
 function _persistProfiles(pb){
   pb.all[pb.key]=pb.bundle;
   localStorage.setItem('aninovel_reader_profiles',JSON.stringify(pb.all));
+  _readerProfilePush(pb.bundle);
+}
+// 読み方の設定をサーバに送る。色を連続で変えると毎回送ってしまうので、
+// 最後の変更から 1.2 秒待ってまとめて 1 回にする。
+// サーバでログインしている利用者(_server)だけが対象。
+var _rpPushTimer=null;
+function _readerProfilePush(bundle){
+  var u=null; try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
+  if(!(u&&u.loggedIn&&u._server))return;
+  clearTimeout(_rpPushTimer);
+  var copy=JSON.parse(JSON.stringify(bundle));
+  _rpPushTimer=setTimeout(function(){
+    fetch('/api/reader/profile',{method:'PUT',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:copy})})
+      .then(function(r){
+        if(r.ok){console.info('[ReaderProfile] サーバに保存しました');return;}
+        return r.json().then(function(j){
+          console.warn('[ReaderProfile] 保存に失敗',r.status,j&&j.error);
+          if(r.status===413&&typeof toast==='function')toast(j.error||'設定が大きすぎます');
+        });
+      }).catch(function(e){console.warn('[ReaderProfile] 通信に失敗',e.message);});
+  },1200);
+}
+// 開いたときにサーバの設定を読み込む。
+//   サーバにあればそれを正として手元を置き換える。
+//   サーバに無く手元にあれば、手元のものを送って初回の引き継ぎにする。
+function _readerProfileSync(workId){
+  if(!(window.AninovelServices&&AninovelServices.getCurrentUser))return;
+  AninovelServices.getCurrentUser().then(function(u){
+    if(!(u&&u.loggedIn&&u._server))return;
+    return fetch('/api/reader/profile',{cache:'no-store',credentials:'same-origin'})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(j){
+        var pb=_getProfileBundle();
+        if(j&&j.bundle&&j.bundle.profiles){
+          pb.all[pb.key]=j.bundle;
+          localStorage.setItem('aninovel_reader_profiles',JSON.stringify(pb.all));
+          console.info('[ReaderProfile] サーバから読み込みました');
+        }else{
+          var has=false;
+          Object.keys(pb.bundle.profiles||{}).forEach(function(k){if(Object.keys(pb.bundle.profiles[k]||{}).length)has=true;});
+          if(has)_readerProfilePush(pb.bundle);
+        }
+        if(workId){loadReaderCustom(workId);try{render();}catch(e){}}
+      });
+  }).catch(function(e){console.warn('[ReaderProfile] 同期に失敗',e&&e.message);});
 }
 function loadReaderCustom(workId){
   if(!workId){state.readerCustom=null;return;}
@@ -6894,7 +6940,7 @@ window.unpublishMyWork=unpublishMyWork;
 window.onload=function(){
     loadData();
     document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
-    if(_workParam){loadReaderCustom(_workParam);
+    if(_workParam){loadReaderCustom(_workParam);_readerProfileSync(_workParam);
         // my_ プレフィックスならマイ作品(localStorage)から読み込む
         if(_workParam.indexOf('my_')===0){
             try{
