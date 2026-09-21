@@ -63,56 +63,81 @@ dl.kv dd{margin:0;word-break:break-word}
 .bio{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);
   border-radius:8px;padding:10px 12px;margin-top:4px;font-size:.9rem}
 
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:44px}
+.pw-eye{position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px}
+.pw-eye:hover{color:var(--ink);background:rgba(127,127,127,.12)}
+.pw-eye:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>パスワード再設定</h1>
   <p class="lead">新しいパスワードを設定してください。</p>
-
   <div class="card" id="box">
     <label for="pw">新しいパスワード <span class="opt">10文字以上</span></label>
     <input id="pw" type="password" autocomplete="new-password">
     <p class="hint">数字だけ、推測されやすい語を含むものは使えません。</p>
-
-    <label for="pw2">確認のためもう一度</label>
-    <input id="pw2" type="password" autocomplete="new-password">
-
     <button class="btn" id="go">設定する</button>
     <div class="msg" id="msg"></div>
   </div>
-
   <div class="card" id="done" style="display:none">
     <p>パスワードを変更しました。</p>
-    <a class="btn" href="/author-login.html" style="display:block;text-align:center;text-decoration:none">ログインする</a>
+    <a class="btn" href="/login.html" style="display:block;text-align:center;text-decoration:none">ログインする</a>
   </div>
-
-  <p class="foot"><a href="/author-login.html">ログインへ戻る</a></p>
+  <p class="foot"><a href="/login.html">ログインへ戻る</a></p>
 </div>
+<script>
+/* パスワード欄に目玉マークを付ける。押すと表示・非表示を切り替える。
+   ページ内の input[type=password] を自動で探して付けるので、各欄に何か書く必要はない。 */
+(function(){
+  var OPEN='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var SHUT='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  function attach(inp){
+    if(inp.dataset.eye) return;
+    inp.dataset.eye='1';
+    var wrap=document.createElement('div');
+    wrap.className='pw-wrap';
+    inp.parentNode.insertBefore(wrap,inp);
+    wrap.appendChild(inp);
+    var b=document.createElement('button');
+    b.type='button';
+    b.className='pw-eye';
+    b.setAttribute('aria-label','パスワードを表示');
+    b.innerHTML=OPEN;
+    b.onclick=function(){
+      var show=inp.type==='password';
+      inp.type=show?'text':'password';
+      b.innerHTML=show?SHUT:OPEN;
+      b.setAttribute('aria-label',show?'パスワードを隠す':'パスワードを表示');
+      inp.focus();
+    };
+    wrap.appendChild(b);
+  }
+  function run(){ document.querySelectorAll('input[type=password]').forEach(attach); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run); else run();
+})();
 
+</script>
 <script>
 var $=function(id){return document.getElementById(id);};
-function show(kind,text){ var m=$('msg'); m.className='msg '+kind; m.textContent=text; }
-
+function show(el,kind,text){ el.className='msg '+kind; el.textContent=text; }
 var token=new URLSearchParams(location.search).get('token')||'';
-if(!token){
-  show('err','リンクが正しくありません。メールのリンクをもう一度お開きください。');
-  $('go').disabled=true;
-}
-
+if(!token){ show($('msg'),'err','リンクが正しくありません。メールのリンクをもう一度お開きください。'); $('go').disabled=true; }
 $('go').onclick=async function(){
-  var a=$('pw').value, b=$('pw2').value;
-  if(a.length<10){ show('err','パスワードは10文字以上にしてください。'); return; }
-  if(a!==b){ show('err','確認用のパスワードが一致しません。'); return; }
-  var btn=$('go'); btn.disabled=true; show('ok','設定しています…');
+  var a=$('pw').value;
+  if(a.length<10){ show($('msg'),'err','パスワードは10文字以上にしてください。'); return; }
+  var btn=$('go'); btn.disabled=true; show($('msg'),'ok','設定しています…');
   try{
-    var r=await fetch('/api/auth/reset',{method:'POST',
-      headers:{'Content-Type':'application/json'},
+    var r=await fetch('/api/auth/reset',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({token:token,password:a})});
     var j=await r.json();
     if(r.ok){ $('box').style.display='none'; $('done').style.display='block'; return; }
-    show('err',j.error||('エラー ('+r.status+')'));
-  }catch(e){ show('err','通信に失敗しました。'); }
+    show($('msg'),'err',j.error||('エラー ('+r.status+')'));
+  }catch(e){ show($('msg'),'err','通信に失敗しました。'); }
   btn.disabled=false;
 };
 </script>

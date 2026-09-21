@@ -40,17 +40,6 @@
   }
 
   // === トースト ===
-  // サーバー同期の結果を利用者に伝える文言を作る。
-  // ローカル保存は成立しているので操作自体は成功だが、
-  // サーバーに届いていないと読者には見えない。そこを黙らせない。
-  function syncNote(res, doneLabel) {
-    if (res && res.serverSynced) return doneLabel;
-    if (res && (res.status === 401 || res.status === 403)) {
-      return doneLabel + '（この端末ではサーバーに反映されません）';
-    }
-    return doneLabel + '（サーバー未同期）';
-  }
-
   function toast(msg) {
     var old = $('.toast');
     if (old) old.remove();
@@ -339,7 +328,18 @@
   }
 
   // === 認証モーダル ===
-  function showAuthModal(initialTab) {
+  // 登録・ログインはサーバ側の本番の画面へ移した。
+  // 以前のモーダルは Phase 1 の試作で、パスワードを平文のまま
+  // localStorage に置き、サーバには何も登録していなかった。
+  //   role: 'author' → 作者の申請 / それ以外 → 読者の登録
+  function showAuthModal(initialTab, role) {
+    if (initialTab === 'register') {
+      location.href = (role === 'author') ? '/author-apply.html' : '/register.html';
+    } else {
+      location.href = '/login.html?back=' + encodeURIComponent(location.pathname + location.search);
+    }
+  }
+  function _legacyShowAuthModal(initialTab) {
     var existing = $('#auth-modal');
     if (existing) existing.remove();
 
@@ -631,7 +631,8 @@
                                  : (ar === 'reader' ? '作者登録' : '読者登録');
         var addBtn = h('button', { className: 'btn btn-ghost btn-sm', title: addLabel, style: 'font-size:12px' }, '\uFF0B ' + addLabel);
         addBtn.onclick = function() {
-          showAuthModal('register');
+          showAuthModal('register', ar === 'reader' ? 'author' : 'reader');
+          return;
           setTimeout(function() {
             var sel = document.getElementById('reg-role');
             var af = document.getElementById('author-fields');
@@ -745,9 +746,7 @@
                 unpubBtn.onclick = function(e) {
                   e.stopPropagation();
                   if (!confirm('「' + wTitle + '」の投稿を取り下げますか？')) return;
-                  S.unpublishWork(wid).then(function(res) {
-                    toast(syncNote(res, '取り下げました')); refresh();
-                  }).catch(function(e) { toast((e && e.message) || '取り下げに失敗しました'); });
+                  S.unpublishWork(wid).then(function() { toast('取り下げました'); refresh(); });
                 };
                 row.insertBefore(unpubBtn, row.lastChild);
                 info.appendChild(h('span', { style: 'font-size:10px;color:#059669;font-weight:700' }, ' \u2714 投稿済'));
@@ -757,9 +756,7 @@
                   e.stopPropagation();
                   if (!w.data || !w.data.content || w.data.content.length === 0) { toast('コンテンツがない作品は投稿できません'); return; }
                   if (!confirm('「' + wTitle + '」を投稿しますか？\n読者が読んで評価できるようになります。')) return;
-                  S.publishWork(wid).then(function(res) {
-                    toast(syncNote(res, '投稿しました！')); refresh();
-                  }).catch(function(e) { toast((e && e.message) || '投稿に失敗しました'); });
+                  S.publishWork(wid).then(function() { toast('投稿しました！'); refresh(); });
                 };
                 row.insertBefore(pubBtn, row.lastChild);
               }
@@ -1003,7 +1000,7 @@ function updateWelcomeBanner() {
             delBtn.onclick = function() {
               if (!confirm('「' + w.title + '」をサーバーから完全に削除しますか？\nこの操作は取り消せません。')) return;
               S.adminDeleteWork(w.id).then(function(res) {
-                toast(syncNote(res, '削除しました'));
+                toast(res && res.serverSynced ? '削除しました' : '削除しました（サーバー未同期の可能性）');
                 renderWorksTab();
               }).catch(function(e) { toast(e.message || '削除に失敗しました'); });
             };
@@ -1084,7 +1081,8 @@ function updateWelcomeBanner() {
     // モードカード内「新規登録」「ログイン」ボタン
     $$('.mode-register-btn').forEach(function(btn) {
       btn.onclick = function() {
-        showAuthModal('register');
+        showAuthModal('register', btn.dataset.role || 'reader');
+        return;
         // 指定ロールをプリセット
         setTimeout(function() {
           var sel = document.getElementById('reg-role');
@@ -1111,7 +1109,8 @@ function updateWelcomeBanner() {
     // URL ハッシュ経由で登録モーダル直リンク
     if (location.hash === '#register-author') {
       setTimeout(function() {
-        showAuthModal('register');
+        showAuthModal('register', 'author');
+        return;
         var sel = document.getElementById('reg-role');
         var authorFields = document.getElementById('author-fields');
         if (sel) { sel.value = 'author'; if (authorFields) authorFields.style.display = ''; }

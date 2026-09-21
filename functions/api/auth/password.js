@@ -1,5 +1,5 @@
 /** パスワードの変更  POST /api/auth/password  { current, next } */
-import { kvOf, json, currentWriter, getUser, putUser,
+import { kvOf, json, currentUser, getUser, putUser,
          verifyPassword, hashPassword, passwordProblem } from '../../_authlib.js';
 
 export async function onRequestPost(context) {
@@ -7,7 +7,7 @@ export async function onRequestPost(context) {
   const kv = kvOf(env);
   if (!kv) return json({ error: 'KV 未バインド' }, 500);
 
-  const me = await currentWriter(request, env);
+  const me = await currentUser(request, env);
   if (!me) return json({ error: 'ログインしてください。' }, 401);
 
   let b;

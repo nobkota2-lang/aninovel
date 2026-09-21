@@ -142,7 +142,8 @@ function render(){
         (a.reason?'（'+esc(a.reason)+'）':'')+'</p>';
     return '<div class="card">'+
       '<div class="row" style="justify-content:space-between">'+
-        '<strong style="font-size:1.1rem">'+esc(a.nickname)+'</strong>'+tag+'</div>'+
+        '<strong style="font-size:1.1rem">'+esc(a.nickname)+'</strong>'+
+        '<span>'+(a.existingUser?'<span class="tag approved" style="margin-right:6px">既存の読者</span>':'')+tag+'</span></div>'+
       '<dl class="kv">'+
         '<dt>お名前</dt><dd>'+esc(a.name)+'</dd>'+
         '<dt>メール</dt><dd>'+esc(a.email)+'</dd>'+

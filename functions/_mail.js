@@ -89,7 +89,7 @@ export function mailToAuthorOnApprove(user, origin) {
 作者登録が承認されました。
 下のページから、ご登録のメールアドレスとパスワードでログインできます。
 
-  ${origin}/author-login.html
+  ${origin}/login.html
 
   ログインID : ${user.email}
 
@@ -135,6 +135,29 @@ export function mailReset(email, token, origin, hours) {
 
 心当たりがない場合は、このメールを破棄してください。
 パスワードは変更されません。
+
+——
+AniNovel
+${origin}
+`,
+  };
+}
+
+export function mailVerify(user, token, origin, hours) {
+  return {
+    subject: '[AniNovel] メールアドレスの確認',
+    text:
+`${user.nickname} 様
+
+AniNovel への読者登録をありがとうございます。
+下のリンクを開いて、メールアドレスの確認を完了してください。
+
+  ${origin}/verify.html?token=${token}
+
+このリンクは ${hours} 時間で使えなくなります。
+確認が済むと、ログインして読み方の設定を保存できるようになります。
+
+心当たりがない場合は、このメールを破棄してください。
 
 ——
 AniNovel

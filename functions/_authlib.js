@@ -119,8 +119,25 @@ function cookieValue(request, name) {
   return m ? m[1] : null;
 }
 
-/** ログイン中の作者を返す。未ログインなら null。 */
-export async function currentWriter(request, env) {
+/**
+ * アカウントの状態と役割
+ *   status : 'unverified'(メール未確認) | 'active'
+ *   roles  : ['reader'] か ['reader','author']
+ * 古い記録(status:'approved' で roles が無いもの)は作者として扱う。
+ */
+export function normalizeUser(u) {
+  if (!u) return u;
+  if (!Array.isArray(u.roles)) {
+    u.roles = (u.status === 'approved') ? ['reader', 'author'] : ['reader'];
+  }
+  if (u.status === 'approved') u.status = 'active';
+  return u;
+}
+export function isActive(u) { return !!u && normalizeUser(u).status === 'active'; }
+export function isAuthor(u) { return isActive(u) && u.roles.indexOf('author') !== -1; }
+
+/** ログイン中の利用者(読者も作者も)。未ログインなら null。 */
+export async function currentUser(request, env) {
   const kv = kvOf(env);
   if (!kv) return null;
   const token = cookieValue(request, 'an_sess');
@@ -131,8 +148,15 @@ export async function currentWriter(request, env) {
   try { s = JSON.parse(raw); } catch (e) { return null; }
   if (!s || !s.email) return null;
   const u = await getUser(kv, s.email);
-  if (!u || u.status !== 'approved') return null;
-  return { email: u.email, nickname: u.nickname, token };
+  if (!isActive(u)) return null;
+  return { email: u.email, nickname: u.nickname, roles: u.roles.slice(),
+           isAuthor: isAuthor(u), token };
+}
+
+/** ログイン中の作者だけを返す。読者や未ログインなら null。 */
+export async function currentWriter(request, env) {
+  const me = await currentUser(request, env);
+  return (me && me.isAuthor) ? me : null;
 }
 
 export async function destroySession(kv, token) {
@@ -144,7 +168,7 @@ export async function destroySession(kv, token) {
 export async function getUser(kv, email) {
   const raw = await kv.get('user:' + normEmail(email));
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch (e) { return null; }
+  try { return normalizeUser(JSON.parse(raw)); } catch (e) { return null; }
 }
 export async function putUser(kv, user) {
   user.email = normEmail(user.email);
@@ -174,3 +198,19 @@ export async function takeReset(kv, token) {
 }
 
 export const RESET_VALID_HOURS = RESET_HOURS;
+
+// ---- メール確認(読者登録) ----
+const VERIFY_HOURS = 48;
+export const VERIFY_VALID_HOURS = VERIFY_HOURS;
+export async function createVerify(kv, email) {
+  const token = randToken(32);
+  await kv.put('verify:' + token, JSON.stringify({ email: normEmail(email), at: Date.now() }),
+    { expirationTtl: VERIFY_HOURS * 60 * 60 });
+  return token;
+}
+export async function takeVerify(kv, token) {
+  const raw = await kv.get('verify:' + token);
+  if (!raw) return null;
+  await kv.delete('verify:' + token);
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}

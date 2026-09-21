@@ -5,7 +5,7 @@
  * 申請を KV に積み、オーナーへメールで知らせる。
  */
 import { kvOf, json, randToken, normEmail, validEmail,
-         passwordProblem, hashPassword, getUser } from '../_authlib.js';
+         passwordProblem, hashPassword, verifyPassword, getUser, isAuthor } from '../_authlib.js';
 import { sendMail, originOf, mailToOwnerOnApply } from '../_mail.js';
 
 export async function onRequestPost(context) {
@@ -30,10 +30,21 @@ export async function onRequestPost(context) {
   const pwNg = passwordProblem(password);
   if (pwNg) return json({ error: pwNg }, 400);
 
-  // すでに作者なら断る
+  // 既にアカウントがある場合
+  //   作者なら断る。
+  //   読者なら、同じアカウントに作者の権限を足す申請にする。
+  //   本人であることを、登録済みのパスワードで確かめる。
   const exists = await getUser(kv, email);
-  if (exists) {
-    return json({ error: 'このメールアドレスは既に登録されています。' }, 409);
+  let existingUser = false;
+  if (exists && exists.status === 'active') {
+    if (isAuthor(exists)) {
+      return json({ error: 'このメールアドレスは既に作者として登録されています。' }, 409);
+    }
+    const same = await verifyPassword(String(password || ''), exists.pw);
+    if (!same) {
+      return json({ error: '読者として登録済みのアドレスです。そのときのパスワードを入力してください。' }, 401);
+    }
+    existingUser = true;
   }
   // 審査待ちが残っていないか
   const dup = await kv.get('applyby:' + email);
@@ -41,10 +52,12 @@ export async function onRequestPost(context) {
     return json({ error: '既に申請を受け付けています。承認をお待ちください。' }, 409);
   }
 
-  const pw = await hashPassword(password);
+  // 既存の読者はパスワードを取り直さない(いまのものを使う)
+  const pw = existingUser ? null : await hashPassword(password);
   const id = randToken(12);
   const app = {
     id, name, email, nickname, bio,
+    existingUser,
     pw,                       // 承認時にそのまま user へ移す
     status: 'pending',
     createdAt: Date.now(),

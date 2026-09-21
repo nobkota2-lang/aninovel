@@ -75,18 +75,28 @@ export async function onRequestPost(context) {
 
   if (action === 'approve') {
     const already = await getUser(kv, app.email);
-    if (already) return json({ error: 'このメールアドレスは既に登録済みです。' }, 409);
-
-    const user = {
-      email: app.email,
-      name: app.name,
-      nickname: app.nickname,
-      bio: app.bio,
-      pw: app.pw,
-      status: 'approved',
-      approvedAt: Date.now(),
-      approvedBy: g.who.email,
-    };
+    let user;
+    if (already && already.status === 'active') {
+      // 既存の読者に作者の権限を足す。パスワードはそのまま。
+      if (already.roles.indexOf('author') !== -1) {
+        return json({ error: 'このメールアドレスは既に作者です。' }, 409);
+      }
+      user = already;
+      user.roles = user.roles.concat(['author']);
+      user.name = app.name || user.name;
+      user.nickname = app.nickname || user.nickname;
+      user.bio = app.bio || user.bio;
+    } else {
+      if (!app.pw) return json({ error: '申請にパスワードがありません。' }, 409);
+      user = {
+        email: app.email, name: app.name, nickname: app.nickname, bio: app.bio,
+        pw: app.pw, status: 'active', roles: ['reader', 'author'],
+        createdAt: Date.now(),
+      };
+    }
+    user.status = 'active';
+    user.approvedAt = Date.now();
+    user.approvedBy = g.who.email;
     await putUser(kv, user);
     app.status = 'approved';
     app.decidedAt = Date.now();
