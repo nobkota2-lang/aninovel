@@ -50,6 +50,13 @@ export function originOf(request, env) {
 
 // ---- 文面 ----
 
+// Worker は UTC で動くので、日時は必ず日本時間で書く。
+function jst(ms) {
+  try {
+    return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + ' (JST)';
+  } catch (e) { return new Date(ms).toISOString(); }
+}
+
 export function mailToOwnerOnApply(app, origin) {
   return {
     subject: `[AniNovel] 作者登録の申請がありました（${app.nickname}）`,
@@ -62,7 +69,7 @@ export function mailToOwnerOnApply(app, origin) {
   自己紹介   :
 ${(app.bio || '').replace(/^/gm, '    ')}
 
-  申請日時   : ${new Date(app.createdAt).toLocaleString('ja-JP')}
+  申請日時   : ${jst(app.createdAt)}
 
 承認・却下はこちらから。
   ${origin}/admin-authors.html

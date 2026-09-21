@@ -87,7 +87,7 @@ var $=function(id){return document.getElementById(id);};
 function show(kind,text){ var m=$('msg'); m.className='msg '+kind; m.textContent=text; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-function when(ms){ return ms ? new Date(ms).toLocaleString('ja-JP') : ''; }
+function when(ms){ return ms ? new Date(ms).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : ''; }
 
 var all=[];
 
@@ -95,6 +95,7 @@ async function load(){
   show('ok','読み込んでいます…');
   try{
     var r=await fetch('/api/admin/applications',{cache:'no-store'});
+    if(r.status===401){ needLogin(); return; }
     if(!r.ok){
       var e=await r.json().catch(function(){return {};});
       show('err',e.message||e.error||('エラー ('+r.status+')'));
@@ -104,7 +105,20 @@ async function load(){
     all=j.applications||[];
     $('msg').className='msg';
     render();
-  }catch(e){ show('err','通信に失敗しました。'); }
+  }catch(e){
+    // Access のログインへリダイレクトされると、宛先が CSP で止められ
+    // fetch が例外になる。この場合はログインが切れている。
+    needLogin();
+  }
+}
+
+function needLogin(){
+  $('list').innerHTML='<div class="card">'+
+    '<p style="margin:0 0 14px">オーナーとしてのログインが必要です。</p>'+
+    '<a class="btn sm" href="/api/admin/applications" style="text-decoration:none">ログインする</a>'+
+    '<p class="hint" style="margin-top:12px">ログイン後に一覧(JSON)が表示されたら、'+
+    'このページに戻って再読込みしてください。</p></div>';
+  $('msg').className='msg';
 }
 
 function render(){
