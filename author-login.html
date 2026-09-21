@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>作者ログイン — AniNovel</title>
+<link rel="stylesheet" href="/_style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>作者ログイン</h1>
+  <p class="lead">ご登録のメールアドレスとパスワードを入力してください。</p>
+
+  <div class="card" id="box">
+    <label for="email">メールアドレス</label>
+    <input id="email" type="email" autocomplete="username">
+
+    <label for="password">パスワード</label>
+    <input id="password" type="password" autocomplete="current-password">
+
+    <button class="btn" id="go">ログイン</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card" id="me" style="display:none">
+    <p id="meText"></p>
+    <div class="row" style="margin-top:14px">
+      <a class="btn sm" href="/">トップへ</a>
+      <button class="btn sm ghost" id="chpw">パスワードを変更</button>
+      <button class="btn sm ghost" id="out">ログアウト</button>
+    </div>
+  </div>
+
+  <div class="card" id="pwbox" style="display:none">
+    <label for="cur">現在のパスワード</label>
+    <input id="cur" type="password" autocomplete="current-password">
+    <label for="next">新しいパスワード <span class="opt">10文字以上</span></label>
+    <input id="next" type="password" autocomplete="new-password">
+    <button class="btn" id="pwgo">変更する</button>
+    <div class="msg" id="pwmsg"></div>
+  </div>
+
+  <p class="foot">
+    <a href="#" id="forgot">パスワードを忘れた方</a> ／
+    <a href="/author-apply.html">作者登録の申請</a>
+  </p>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function show(el,kind,text){ el.className='msg '+kind; el.textContent=text; }
+
+async function refresh(){
+  try{
+    var r=await fetch('/api/auth/me',{cache:'no-store'});
+    var j=await r.json();
+    if(j.loggedIn){
+      $('box').style.display='none';
+      $('me').style.display='block';
+      $('meText').textContent=j.nickname+' さんとしてログインしています（'+j.email+'）';
+    }else{
+      $('box').style.display='block';
+      $('me').style.display='none';
+      $('pwbox').style.display='none';
+    }
+  }catch(e){}
+}
+refresh();
+
+$('go').onclick=async function(){
+  var btn=$('go'); btn.disabled=true;
+  show($('msg'),'ok','確認しています…');
+  try{
+    var r=await fetch('/api/auth/login',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
+    var j=await r.json();
+    if(r.ok){ $('password').value=''; await refresh(); return; }
+    show($('msg'),'err',j.error||('エラー ('+r.status+')'));
+  }catch(e){ show($('msg'),'err','通信に失敗しました。'); }
+  btn.disabled=false;
+};
+
+$('out').onclick=async function(){
+  await fetch('/api/auth/logout',{method:'POST'});
+  location.reload();
+};
+
+$('chpw').onclick=function(){
+  var b=$('pwbox');
+  b.style.display = b.style.display==='none' ? 'block' : 'none';
+};
+
+$('pwgo').onclick=async function(){
+  var btn=$('pwgo'); btn.disabled=true;
+  try{
+    var r=await fetch('/api/auth/password',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({current:$('cur').value,next:$('next').value})});
+    var j=await r.json();
+    if(r.ok){ show($('pwmsg'),'ok','パスワードを変更しました。'); $('cur').value=''; $('next').value=''; }
+    else show($('pwmsg'),'err',j.error||('エラー ('+r.status+')'));
+  }catch(e){ show($('pwmsg'),'err','通信に失敗しました。'); }
+  btn.disabled=false;
+};
+
+$('forgot').onclick=async function(e){
+  e.preventDefault();
+  var em=$('email').value.trim() || prompt('ご登録のメールアドレスを入力してください');
+  if(!em) return;
+  show($('msg'),'ok','送信しています…');
+  try{
+    var r=await fetch('/api/auth/reset-request',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em})});
+    var j=await r.json();
+    show($('msg'),'ok',j.message||'ご案内をお送りしました。迷惑メールフォルダもご確認ください。');
+  }catch(e2){ show($('msg'),'err','通信に失敗しました。'); }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>作者登録の申請 — AniNovel</title>
+<link rel="stylesheet" href="/_style.css">
+<style>
+.done h2{font-size:1.2rem;margin:0 0 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>作者登録の申請</h1>
+  <p class="lead">AniNovel で作品を公開するには、作者登録が必要です。<br>
+    お申し込みの内容を確認のうえ、こちらからご連絡します。</p>
+
+  <div class="card" id="form">
+    <label for="name">お名前 <span class="opt">非公開</span></label>
+    <input id="name" maxlength="100" autocomplete="name">
+    <p class="hint">本名でお願いします。公開されることはありません。</p>
+
+    <label for="email">メールアドレス <span class="opt">非公開・ログインIDになります</span></label>
+    <input id="email" type="email" maxlength="200" autocomplete="email">
+    <p class="hint">承認のご連絡をこちらへお送りします。</p>
+
+    <label for="password">パスワード <span class="opt">10文字以上</span></label>
+    <input id="password" type="password" maxlength="200" autocomplete="new-password">
+    <p class="hint">数字だけ、推測されやすい語を含むものは使えません。</p>
+
+    <label for="nickname">ニックネーム <span class="opt">公開</span></label>
+    <input id="nickname" maxlength="50">
+    <p class="hint">作品に表示される名前です。</p>
+
+    <label for="bio">自己紹介 <span class="opt">公開・任意</span></label>
+    <textarea id="bio" maxlength="1000"></textarea>
+
+    <button class="btn" id="send">申請する</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card done" id="done">
+    <h2>申請を受け付けました</h2>
+    <p>内容を確認のうえ、ご登録のメールアドレスへご連絡します。</p>
+    <p class="hint">お返事が届かない場合は、<strong>迷惑メールフォルダ</strong>もご確認ください。
+      <code>noreply@aninovel.com</code> からお送りします。</p>
+  </div>
+
+  <p class="foot">登録済みの方は <a href="/author-login.html">ログイン</a></p>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+function show(kind,text){
+  var m=$('msg'); m.className='msg '+kind; m.textContent=text;
+}
+$('send').onclick=async function(){
+  var btn=$('send');
+  var body={
+    name:$('name').value.trim(),
+    email:$('email').value.trim(),
+    password:$('password').value,
+    nickname:$('nickname').value.trim(),
+    bio:$('bio').value.trim()
+  };
+  if(!body.name){ show('err','お名前を入力してください。'); return; }
+  if(!body.email){ show('err','メールアドレスを入力してください。'); return; }
+  if(!body.nickname){ show('err','ニックネームを入力してください。'); return; }
+  if((body.password||'').length<10){ show('err','パスワードは10文字以上にしてください。'); return; }
+
+  btn.disabled=true; show('ok','送信しています…');
+  try{
+    var r=await fetch('/api/apply',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var j=await r.json();
+    if(r.ok){
+      $('form').style.display='none';
+      $('done').style.display='block';
+      window.scrollTo(0,0);
+      return;
+    }
+    show('err',j.error||('エラー ('+r.status+')'));
+  }catch(e){
+    show('err','通信に失敗しました。時間をおいてお試しください。');
+  }
+  btn.disabled=false;
+};
+</script>
+</body>
+</html>
