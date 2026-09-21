@@ -4,7 +4,66 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>作者登録の申請 — AniNovel</title>
-<link rel="stylesheet" href="/author-style.css">
+<style>
+:root{
+  --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
+  --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52; --err:#b23a3a; --ok:#3a7d44;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+    --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+  --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.7;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding:32px 20px 64px}
+.wrap.wide{max-width:860px}
+h1{font-size:1.6rem;margin:0 0 6px;letter-spacing:.02em}
+.lead{color:var(--muted);font-size:.95rem;margin:0 0 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
+.card+.card{margin-top:16px}
+label{display:block;margin:18px 0 6px;font-weight:600;font-size:.9rem}
+label:first-child{margin-top:0}
+label .opt{font-weight:400;color:var(--muted);font-size:.82rem;margin-left:8px}
+input,textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
+  background:var(--bg);color:var(--ink);font:inherit;font-size:1rem}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+textarea{min-height:110px;resize:vertical}
+.hint{font-size:.82rem;color:var(--muted);margin-top:5px}
+.btn{margin-top:26px;width:100%;padding:13px;border:0;border-radius:9px;
+  background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:1rem;cursor:pointer}
+.btn:hover{background:var(--accent2)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.sm{width:auto;margin:0;padding:8px 16px;font-size:.88rem}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.btn.ghost:hover{background:rgba(139,94,52,.08)}
+.msg{margin-top:18px;padding:13px 15px;border-radius:9px;font-size:.92rem;display:none}
+.msg.err{display:block;background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);color:var(--err)}
+.msg.ok{display:block;background:rgba(58,125,68,.1);border:1px solid rgba(58,125,68,.3)}
+.foot{margin-top:26px;font-size:.88rem;color:var(--muted);text-align:center}
+.foot a{color:var(--accent);text-decoration:none}
+.foot a:hover{text-decoration:underline}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tag{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:700}
+.tag.pending{background:rgba(201,162,39,.18);color:#8a6d0b}
+.tag.approved{background:rgba(58,125,68,.15);color:#2f6637}
+.tag.rejected{background:rgba(178,58,58,.13);color:var(--err)}
+dl.kv{margin:14px 0 0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.92rem}
+dl.kv dt{color:var(--muted);white-space:nowrap}
+dl.kv dd{margin:0;word-break:break-word}
+.bio{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;padding:10px 12px;margin-top:4px;font-size:.9rem}
+
+</style>
 <style>
 .done h2{font-size:1.2rem;margin:0 0 10px}
 </style>
