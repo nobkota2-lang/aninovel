@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v173_reader_saves';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v174_reader_settings';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5782,46 +5782,78 @@ function _metaModalTranslated(){
 function renderMetaModal(){if(!state.metaEditOpen)return'';if(_isTranslatedView())return _metaModalTranslated();return'<div class="modal-overlay" onclick="if(event.target===this){state.metaEditOpen=false;render()}"><div class="modal-content" style="max-width:480px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-weight:700">📖 小説情報</h3><button onclick="state.metaEditOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="display:flex;flex-direction:column;gap:16px"><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タイトル</label><input type="text" value="'+esc(state.novel.title)+'" oninput="state.novel.title=this.value" style="width:100%"></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">著者名</label><input type="text" value="'+esc(state.novel.author)+'" oninput="state.novel.author=this.value" style="width:100%"></div>'+_srcLangSelect()+'<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">概要・あらすじ</label><textarea oninput="state.novel.description=this.value" rows="4" placeholder="作品の紹介文・あらすじを入力（一覧やSNSシェアに表示されます）" style="width:100%;resize:vertical;font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);color:var(--text-primary)">'+esc(state.novel.description||'')+'</textarea></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">表紙画像</label><div style="display:flex;gap:12px;align-items:flex-start"><div style="width:90px;height:126px;border-radius:8px;border:1px solid var(--border);overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#fff;background:'+esc(state.novel.coverColor||'#4F46E5')+'">'+(state.novel.coverImage?'<img src="'+esc(state.novel.coverImage)+'" style="width:100%;height:100%;object-fit:cover">':('<span style="padding:4px">'+esc(state.novel.title||'無題')+'</span>'))+'</div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><label class="btn btn-ghost" style="cursor:pointer">画像を選択<input type="file" accept="image/*" style="display:none" onchange="uploadCover(this.files[0])"></label>'+(state.novel.coverImage?'<button onclick="state.novel.coverImage=null;render()" class="btn" style="background:#FEE2E2;color:#DC2626">表紙を削除</button>':'')+'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text-muted)">表紙の色</span><input type="color" value="'+esc(state.novel.coverColor||'#4F46E5')+'" oninput="state.novel.coverColor=this.value;render()" style="width:40px;height:30px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"></div></div></div></div></div><div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">タグ（カンマ区切り）</label><input type="text" id="metaTagsInput" value="'+esc(_metaTagStr())+'" placeholder="冒険, 恋愛, ミステリー" oninput="_setNovelTags(this.value)" style="width:100%"></div><div style="margin-top:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer"><input type="checkbox" '+(_hasAozora()?'checked':'')+' onchange="_toggleAozora(this.checked)">📚 青空文庫シリーズに入れる</label><div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:26px">著作権保護期間が満了した名作を代行登録する場合にチェック。著者名は上の欄で実作者を指定してください。</div></div><div style="margin-top:24px"><button onclick="state.metaEditOpen=false;render()" class="btn btn-primary" style="width:100%;justify-content:center">完了</button></div></div></div>'}
 
 // === Reader Customize ===
-function _getProfileBundle(){
+// ===== 読者の設定（作品ごと） =====
+// 形: { v:2, works:{ <作品ID>:{ cur:{キャラID:{...}}, saves:[{name,savedAt,data}] } } }
+//   cur   … いま使っている設定。色を変えるたびに自動で更新される。
+//   saves … 名前を付けて保存した設定。作品ごとに最大 20 件。
+// 保存先はサーバを正とし、端末(localStorage)は控えにとどめる。
+// 端末は上限 5MB で、アイコン画像を含むと書き込めないことがあるため、
+// 書き込みに失敗しても止めずにサーバへ送る。
+var READER_SAVE_MAX=20;
+var _RB_KEY='aninovel_reader_settings_v2';
+var _rb=null;                 // いまの利用者の設定一式(メモリ上の正本)
+var _rbPushTimer=null;
+function _rbUser(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));return (u&&u.loggedIn)?u:null;}catch(e){return null;}}
+function _rbUserKey(){var u=_rbUser();return u?String(u.id||u.email):'_anon';}
+function _rbEmpty(){return {v:2,works:{}};}
+// 旧い形（プロファイル）から移す。使用中だったものを「いまの設定」に、
+// ほかのプロファイルは、その名前の保存として一覧に残す。
+function _rbMigrate(old){
+  if(!old||typeof old!=='object')return _rbEmpty();
+  if(old.v===2&&old.works)return old;
+  var nb=_rbEmpty(),now=Date.now();
+  var cur=old.current||'デフォルト',profs=old.profiles||{};
+  function w(id){if(!nb.works[id])nb.works[id]={cur:null,saves:[]};return nb.works[id];}
+  Object.keys(profs[cur]||{}).forEach(function(id){w(id).cur=profs[cur][id];});
+  Object.keys(profs).forEach(function(pn){
+    if(pn===cur)return;
+    Object.keys(profs[pn]||{}).forEach(function(id){w(id).saves.push({name:pn,savedAt:now,data:profs[pn][id]});});
+  });
+  var sv=old.saves||{};
+  Object.keys(sv).forEach(function(id){(sv[id]||[]).forEach(function(s){w(id).saves.push(s);});});
+  Object.keys(nb.works).forEach(function(id){var L=nb.works[id].saves;if(L.length>READER_SAVE_MAX)L.length=READER_SAVE_MAX;});
+  return nb;
+}
+function _rbLoad(){
+  if(_rb&&_rb._key===_rbUserKey())return _rb;
+  var key=_rbUserKey(),nb=null;
+  try{var all=JSON.parse(localStorage.getItem(_RB_KEY))||{};if(all[key])nb=all[key];}catch(e){}
+  if(!nb){try{var old=JSON.parse(localStorage.getItem('aninovel_reader_profiles'))||{};if(old[key])nb=_rbMigrate(old[key]);}catch(e){}}
+  _rb=nb&&nb.works?nb:_rbEmpty();
+  _rb._key=key;
+  return _rb;
+}
+function _rbWork(id){var rb=_rbLoad();if(!rb.works[id])rb.works[id]={cur:null,saves:[]};if(!rb.works[id].saves)rb.works[id].saves=[];return rb.works[id];}
+var _rbWarned=false;
+function _rbPersist(){
+  var rb=_rbLoad(),key=rb._key;
+  var copy=JSON.parse(JSON.stringify(rb));delete copy._key;
   try{
-    var user=JSON.parse(localStorage.getItem('aninovel_user'));
-    var all=JSON.parse(localStorage.getItem('aninovel_reader_profiles'))||{};
-    var key=(user&&user.loggedIn)?user.id:'_anon';
-    if(!all[key])all[key]={current:'デフォルト',profiles:{'デフォルト':{}}};
-    if(!all[key].profiles)all[key].profiles={'デフォルト':{}};
-    if(!all[key].profiles[all[key].current])all[key].profiles[all[key].current]={};
-    return {all:all,key:key,bundle:all[key]};
-  }catch(e){return {all:{},key:'_anon',bundle:{current:'デフォルト',profiles:{'デフォルト':{}}}};}
+    var all={};try{all=JSON.parse(localStorage.getItem(_RB_KEY))||{};}catch(e){}
+    all[key]=copy;
+    localStorage.setItem(_RB_KEY,JSON.stringify(all));
+  }catch(e){
+    if(!_rbWarned){console.warn('[ReaderSettings] 端末に書き込めませんでした(容量不足の可能性)。サーバには保存します。',e&&e.message);_rbWarned=true;}
+  }
+  _rbPush(copy);
 }
-function _persistProfiles(pb){
-  pb.all[pb.key]=pb.bundle;
-  localStorage.setItem('aninovel_reader_profiles',JSON.stringify(pb.all));
-  _readerProfilePush(pb.bundle);
-}
-// 読み方の設定をサーバに送る。色を連続で変えると毎回送ってしまうので、
-// 最後の変更から 1.2 秒待ってまとめて 1 回にする。
-// サーバでログインしている利用者(_server)だけが対象。
-var _rpPushTimer=null;
-function _readerProfilePush(bundle){
-  var u=null; try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
-  if(!(u&&u.loggedIn&&u._server))return;
-  clearTimeout(_rpPushTimer);
-  var copy=JSON.parse(JSON.stringify(bundle));
-  _rpPushTimer=setTimeout(function(){
+function _rbPush(copy){
+  var u=_rbUser();
+  if(!(u&&u._server))return;
+  clearTimeout(_rbPushTimer);
+  _rbPushTimer=setTimeout(function(){
     fetch('/api/reader/profile',{method:'PUT',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:copy})})
       .then(function(r){
-        if(r.ok){console.info('[ReaderProfile] サーバに保存しました');return;}
+        if(r.ok){console.info('[ReaderSettings] サーバに保存しました');return;}
         return r.json().then(function(j){
-          console.warn('[ReaderProfile] 保存に失敗',r.status,j&&j.error);
-          if(r.status===413&&typeof toast==='function')toast(j.error||'設定が大きすぎます');
+          console.warn('[ReaderSettings] 保存に失敗',r.status,j&&j.error);
+          if(typeof showToast==='function')showToast((j&&j.error)||('設定を保存できませんでした('+r.status+')'));
         });
-      }).catch(function(e){console.warn('[ReaderProfile] 通信に失敗',e.message);});
-  },1200);
+      }).catch(function(e){console.warn('[ReaderSettings] 通信に失敗',e.message);});
+  },800);
 }
-// 開いたときにサーバの設定を読み込む。
-//   サーバにあればそれを正として手元を置き換える。
-//   サーバに無く手元にあれば、手元のものを送って初回の引き継ぎにする。
+// 作品を開いたときにサーバの設定を読み込む。サーバに無く端末にあれば送る。
 function _readerProfileSync(workId){
   if(!(window.AninovelServices&&AninovelServices.getCurrentUser))return;
   AninovelServices.getCurrentUser().then(function(u){
@@ -5829,85 +5861,30 @@ function _readerProfileSync(workId){
     return fetch('/api/reader/profile',{cache:'no-store',credentials:'same-origin'})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(j){
-        var pb=_getProfileBundle();
-        if(j&&j.bundle&&j.bundle.profiles){
-          pb.all[pb.key]=j.bundle;
-          localStorage.setItem('aninovel_reader_profiles',JSON.stringify(pb.all));
-          console.info('[ReaderProfile] サーバから読み込みました');
+        var key=_rbUserKey();
+        if(j&&j.bundle){
+          _rb=_rbMigrate(j.bundle);_rb._key=key;
+          _rbPersist();
+          console.info('[ReaderSettings] サーバから読み込みました');
         }else{
-          var has=false;
-          Object.keys(pb.bundle.profiles||{}).forEach(function(k){if(Object.keys(pb.bundle.profiles[k]||{}).length)has=true;});
-          if(has)_readerProfilePush(pb.bundle);
+          _rb=null;var rb=_rbLoad();
+          if(Object.keys(rb.works).length)_rbPersist();
         }
         if(workId){loadReaderCustom(workId);try{render();}catch(e){}}
       });
-  }).catch(function(e){console.warn('[ReaderProfile] 同期に失敗',e&&e.message);});
+  }).catch(function(e){console.warn('[ReaderSettings] 同期に失敗',e&&e.message);});
 }
 function loadReaderCustom(workId){
   if(!workId){state.readerCustom=null;return;}
-  var pb=_getProfileBundle();
-  var p=pb.bundle.profiles[pb.bundle.current]||{};
-  state.readerCustom=p[workId]||null;
-  state.readerProfileCurrent=pb.bundle.current;
-  state.readerProfileList=Object.keys(pb.bundle.profiles);
+  var w=_rbWork(workId);
+  state.readerCustom=w.cur?JSON.parse(JSON.stringify(w.cur)):null;
 }
 function saveReaderCustom(workId){
   if(!workId)return;
-  var pb=_getProfileBundle();
-  if(!pb.bundle.profiles[pb.bundle.current])pb.bundle.profiles[pb.bundle.current]={};
-  if(state.readerCustom&&Object.keys(state.readerCustom).length){
-    // 深いコピーを保存（参照分離で次回読込時の衝突回避）
-    pb.bundle.profiles[pb.bundle.current][workId]=JSON.parse(JSON.stringify(state.readerCustom));
-  }else{
-    delete pb.bundle.profiles[pb.bundle.current][workId];
-  }
-  _persistProfiles(pb);
-  // state を最新のプロファイル情報で更新
-  state.readerProfileCurrent=pb.bundle.current;
-  state.readerProfileList=Object.keys(pb.bundle.profiles);
-  // 読者カスタム変更後に全キャラ口パクGIFを事前生成
+  var w=_rbWork(workId);
+  w.cur=(state.readerCustom&&Object.keys(state.readerCustom).length)?JSON.parse(JSON.stringify(state.readerCustom)):null;
+  _rbPersist();
   _schedulePregen();
-}
-function switchReaderProfile(name){
-  var pb=_getProfileBundle();
-  if(!pb.bundle.profiles[name])pb.bundle.profiles[name]={};
-  pb.bundle.current=name;
-  _persistProfiles(pb);
-  loadReaderCustom(_workParam);
-  render();
-  showToast(state.lang==='en'?('Switched to profile "'+name+'"'):('プロファイル「'+name+'」に切替えました'));
-}
-function createReaderProfile(){
-  var name=prompt('新しいプロファイル名を入力');
-  if(!name||!name.trim())return;
-  var pb=_getProfileBundle();
-  if(pb.bundle.profiles[name]){showToast('同名のプロファイルがあります');return;}
-  pb.bundle.profiles[name]={};
-  pb.bundle.current=name;
-  _persistProfiles(pb);
-  loadReaderCustom(_workParam);
-  render();
-  showToast(state.lang==='en'?('Created profile "'+name+'"'):('プロファイル「'+name+'」を作成しました'));
-}
-function deleteReaderProfile(name){
-  if(name==='デフォルト'){showToast('デフォルトは削除できません');return;}
-  if(!confirm(state.lang==='en'?('Delete profile "'+name+'"?'):('プロファイル「'+name+'」を削除しますか？')))return;
-  var pb=_getProfileBundle();
-  delete pb.bundle.profiles[name];
-  if(pb.bundle.current===name)pb.bundle.current='デフォルト';
-  _persistProfiles(pb);
-  loadReaderCustom(_workParam);
-  render();
-  showToast('プロファイルを削除しました');
-}
-// ===== 読者の設定を名前を付けて保存・読み込み =====
-// 作品ごとに最大 20 件。bundle.saves[作品ID] = [{name,savedAt,data}] に置き、
-// 他の設定と一緒にサーバへ送るので、端末をまたいでも一覧が残る。
-var READER_SNAP_MAX=20;
-function _readerSnaps(pb){
-  if(!pb.bundle.saves)pb.bundle.saves={};
-  if(!pb.bundle.saves[_workParam])pb.bundle.saves[_workParam]=[];
-  return pb.bundle.saves[_workParam];
 }
 function saveReaderSnapshot(){
   if(!_workParam)return;
@@ -5915,56 +5892,56 @@ function saveReaderSnapshot(){
   var name=prompt('この作品のいまの設定に名前を付けて保存します',def);
   if(name===null)return;
   name=String(name).trim()||def;
-  var pb=_getProfileBundle();
-  var list=_readerSnaps(pb);
-  var ent={name:name,savedAt:Date.now(),data:state.readerCustom?JSON.parse(JSON.stringify(state.readerCustom)):{}};
-  var at=-1;for(var i=0;i<list.length;i++){if(list[i].name===name){at=i;break;}}
-  if(at>=0){
-    if(!confirm('「'+name+'」は既にあります。上書きしますか？'))return;
-    list.splice(at,1);
+  var w=_rbWork(_workParam),L=w.saves;
+  for(var i=0;i<L.length;i++){
+    if(L[i].name===name){
+      if(!confirm('「'+name+'」は既にあります。上書きしますか？'))return;
+      L.splice(i,1);break;
+    }
   }
-  list.unshift(ent);
-  if(list.length>READER_SNAP_MAX)list.length=READER_SNAP_MAX;
-  _persistProfiles(pb);
-  showToast('「'+name+'」として保存しました');
+  L.unshift({name:name,savedAt:Date.now(),data:state.readerCustom?JSON.parse(JSON.stringify(state.readerCustom)):{}});
+  if(L.length>READER_SAVE_MAX)L.length=READER_SAVE_MAX;
+  _rbPersist();
   render();
+  showToast('「'+name+'」を保存しました');
 }
 function loadReaderSnapshot(idx){
-  var pb=_getProfileBundle();
-  var s=_readerSnaps(pb)[idx];
+  var s=_rbWork(_workParam).saves[idx];
   if(!s)return;
   state.readerCustom=JSON.parse(JSON.stringify(s.data||{}));
-  saveReaderCustom(_workParam);        // 使用中の設定にも反映
-  state.readerSnapOpen=false;
+  saveReaderCustom(_workParam);
   render();
   showToast('「'+s.name+'」を読み込みました');
 }
 function deleteReaderSnapshot(idx){
-  var pb=_getProfileBundle();
-  var list=_readerSnaps(pb);
-  var s=list[idx];
+  var L=_rbWork(_workParam).saves,s=L[idx];
   if(!s)return;
   if(!confirm('「'+s.name+'」を削除しますか？'))return;
-  list.splice(idx,1);
-  _persistProfiles(pb);
+  L.splice(idx,1);
+  _rbPersist();
   render();
 }
-function _readerSnapListHTML(){
-  var pb=_getProfileBundle();
-  var list=_readerSnaps(pb);
-  var h='<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:12px;max-height:240px;overflow:auto">';
-  if(!list.length){
-    h+='<div style="font-size:13px;color:var(--text-muted);padding:6px">この作品の保存はまだありません。「💾 名前を付けて保存」で残せます。</div>';
+function _readerSavesHTML(){
+  var L=_rbWork(_workParam).saves;
+  var h='<div style="background:var(--bg-secondary);padding:10px 12px;border-radius:8px;margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'+
+    '<div style="font-size:13px;font-weight:600">この作品の保存した設定</div>'+
+    '<button onclick="saveReaderSnapshot()" class="btn btn-ghost" style="padding:5px 10px;font-size:12px">💾 いまの設定を保存</button></div>';
+  if(!L.length){
+    h+='<div style="font-size:12px;color:var(--text-muted)">まだありません。色やアイコンを変えたら「いまの設定を保存」で残せます。保存した設定はここから選んで読み込めます。</div>';
+  }else{
+    h+='<div style="max-height:200px;overflow:auto">';
+    L.forEach(function(s,i){
+      var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+      var n=Object.keys(s.data||{}).length;
+      h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--border)">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
+        '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
+        '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">読み込む</button>'+
+        '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="削除" style="color:#DC2626">🗑️</button></div>';
+    });
+    h+='</div>';
   }
-  list.forEach(function(s,i){
-    var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
-    var n=Object.keys(s.data||{}).length;
-    h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid var(--border)">'+
-       '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
-       '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
-       '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">読み込む</button>'+
-       '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="削除" style="color:#DC2626">🗑️</button></div>';
-  });
   h+='</div>';
   return h;
 }
@@ -5972,17 +5949,38 @@ window.saveReaderSnapshot=saveReaderSnapshot;
 window.loadReaderSnapshot=loadReaderSnapshot;
 window.deleteReaderSnapshot=deleteReaderSnapshot;
 
+
+
+// 読み方の設定をサーバに送る。色を連続で変えると毎回送ってしまうので、
+// 最後の変更から 1.2 秒待ってまとめて 1 回にする。
+// サーバでログインしている利用者(_server)だけが対象。
+
+// 開いたときにサーバの設定を読み込む。
+//   サーバにあればそれを正として手元を置き換える。
+//   サーバに無く手元にあれば、手元のものを送って初回の引き継ぎにする。
+
+
+
+
+
+
+// ===== 読者の設定を名前を付けて保存・読み込み =====
+// 作品ごとに最大 20 件。bundle.saves[作品ID] = [{name,savedAt,data}] に置き、
+// 他の設定と一緒にサーバへ送るので、端末をまたいでも一覧が残る。
+
+
+
+
+
+
 function resetToAuthorDefaults(){
   if(!_workParam)return;
-  if(!confirm('この作品のカスタマイズを作者推奨の設定に戻しますか？\n（現在のプロファイル「'+state.readerProfileCurrent+'」のみ影響）'))return;
+  if(!confirm('この作品の色やアイコンを、作者の設定に戻しますか？\n（保存した設定は消えません）'))return;
   state.readerCustom=null;
   saveReaderCustom(_workParam);
   render();
-  showToast('作者推奨の設定に戻しました');
+  showToast('作者の設定に戻しました');
 }
-window.switchReaderProfile=switchReaderProfile;
-window.createReaderProfile=createReaderProfile;
-window.deleteReaderProfile=deleteReaderProfile;
 window.resetToAuthorDefaults=resetToAuthorDefaults;
 function openReaderCustomize(charId){
   if(!_isLoggedIn()){showToast('キャラカスタマイズを使うにはログインが必要です');return;}
@@ -5999,19 +5997,8 @@ function renderReaderCustomModal(){
   var rc=state.readerCustom[cid]||{};
   var presets=CP[c.gender]||CP.male;
   var h='<div class="modal-overlay" onclick="if(event.target===this){state.readerCustomOpen=false;render()}"><div class="modal-content" style="max-width:480px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3 style="font-size:18px;font-weight:700">🎨 キャラカスタマイズ</h3><button onclick="state.readerCustomOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
-  // プロファイル選択
-  var _pl=state.readerProfileList||['デフォルト'];
-  var _pc=state.readerProfileCurrent||'デフォルト';
-  h+='<div style="background:var(--bg-secondary);padding:10px 12px;border-radius:8px;margin-bottom:12px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">使用中のプロファイル</div><div style="display:flex;gap:6px;align-items:center"><select onchange="switchReaderProfile(this.value)" style="flex:1;padding:6px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--panel-bg);color:var(--text-primary)">';
-  _pl.forEach(function(n){h+='<option value="'+esc(n)+'"'+(n===_pc?' selected':'')+'>'+esc(n)+'</option>';});
-  h+='</select><button onclick="createReaderProfile()" class="btn-icon" title="新規プロファイル">➕</button>';
-  if(_pc!=='デフォルト')h+='<button onclick="deleteReaderProfile(\''+_pc.replace(/\\/g,'\\\\').replace(/\'/g,'\\\'')+'\')" class="btn-icon" title="このプロファイルを削除" style="color:#DC2626">🗑️</button>';
-  h+='</div></div>';
-  // この作品の設定を名前を付けて複数保存し、一覧から選んで読み込む。
-  h+='<div style="display:flex;gap:8px;margin-bottom:12px">'+
-     '<button onclick="saveReaderSnapshot()" class="btn btn-ghost" style="flex:1;justify-content:center">💾 名前を付けて保存</button>'+
-     '<button onclick="state.readerSnapOpen=!state.readerSnapOpen;render()" class="btn btn-ghost" style="flex:1;justify-content:center">📂 読み込み</button></div>';
-  if(state.readerSnapOpen)h+=_readerSnapListHTML();
+  // この作品の保存した設定(常に表示)
+  h+=_readerSavesHTML();
   h+='<div style="text-align:center;margin-bottom:16px">'+rIcon(cid,64)+'<div style="margin-top:8px;font-weight:600">'+esc(c.name)+'</div></div>';
   h+='<div style="display:flex;flex-direction:column;gap:16px">';
   // Icon image
@@ -6041,7 +6028,7 @@ function renderReaderCustomModal(){
   h+='<button onclick="(function(){var utt=new SpeechSynthesisUtterance(\''+esc(c.name)+'。テスト音声です。\');utt.lang=\'ja-JP\';var vn=(state.readerCustom&&state.readerCustom[state.readerCustomCharId]&&state.readerCustom[state.readerCustomCharId].ttsVoice)||null;if(vn){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===vn});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button>';
   h+='</div>';
   // Reset button
-  h+='<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px">このキャラだけ作者推奨に戻す</button><button onclick="resetToAuthorDefaults();state.readerCustomOpen=false" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px;color:#DC2626">全キャラ作者推奨に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
+  h+='<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px">このキャラだけ作者推奨に戻す</button><button onclick="resetToAuthorDefaults();state.readerCustomOpen=false" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px;color:#DC2626">作者の設定に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
   h+='</div></div></div>';
   if(state.imageGalleryOpen)h+=renderGallery();
   return h;
@@ -6227,7 +6214,9 @@ var I18N_DICT={'中性':'Neutral','保存完了':'Saved','内容を保存しま�
   '日本':'Japanese','欧米':'Western','アフリカ系':'Black','インド':'Indian','ラテン':'Latin','中東':'Middle Eastern','ミクロネシア':'Micronesian','その他':'Other',
   // --- しおり / プロファイル ---
   '📚 しおり一覧':'📚 Bookmarks','しおりがありません':'No bookmarks yet','しおりを追加しました':'Bookmark added',
-  '新規プロファイル':'New profile','使用中のプロファイル':'Active profile','このプロファイルを削除':'Delete this profile',
+  '新規プロファイル':'New profile',
+  'この作品の保存した設定':'Saved settings for this work','💾 いまの設定を保存':'💾 Save current settings',
+  '読み込む':'Load','作者の設定に戻す':'Reset to author settings','使用中のプロファイル':'Active profile','このプロファイルを削除':'Delete this profile',
   '── 作者推奨（デフォルト）':'── Author recommended (default)','── 性別デフォルト（自動選択）':'── Gender default (auto)',
   'このキャラだけ作者推奨に戻す':'Reset this character to default','全キャラ作者推奨に戻す':'Reset all to default',
   '🖥=ローカル ☁=クラウド':'🖥=Local ☁=Cloud',

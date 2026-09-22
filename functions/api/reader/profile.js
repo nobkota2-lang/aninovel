@@ -40,8 +40,11 @@ export async function onRequestPut(context) {
   let b;
   try { b = JSON.parse(raw); } catch (e) { return json({ error: '形式が不正です' }, 400); }
   const bundle = b && b.bundle;
-  if (!bundle || typeof bundle !== 'object' || typeof bundle.profiles !== 'object') {
-    return json({ error: 'bundle.profiles が必要です' }, 400);
+  // 新しい形 { v:2, works:{...} } と、旧い形 { profiles:{...} } の両方を受け付ける。
+  const okNew = bundle && typeof bundle === 'object' && typeof bundle.works === 'object';
+  const okOld = bundle && typeof bundle === 'object' && typeof bundle.profiles === 'object';
+  if (!okNew && !okOld) {
+    return json({ error: 'bundle.works が必要です' }, 400);
   }
   await kv.put('rprof:' + me.email, JSON.stringify(bundle));
   return json({ ok: true, bytes: raw.length });
