@@ -1,5 +1,5 @@
 /* ====================================================
- * AniNovel Server Save (v1.16.0)
+ * AniNovel Server Save (v1.18.0)
  * 
  * v1.13 大改修:
  * - 独自ギャラリーモーダル復活、ただし DOM 直接構築（innerHTML 使わず）
@@ -168,86 +168,37 @@
       if((oc==='saveData()'||oc.indexOf('saveData')!==-1||t==='💾 保存'||t==='保存') && t.indexOf('サーバー')===-1 && t.indexOf('公開')===-1) return btn;
     } return null;
   }
+  // viewer.html がすでに「📤 公開保存 / 📢 上書き公開」を出しているので、
+  // ここで同じボタンをもう1つ足さない。作品の版履歴(📜)だけを添える。
   function setupAuthorButtons(){
     if(!isAuthorMode()) return;
-    if(document.querySelector('[data-srv-publish]')) return;
+    if(document.querySelector('[data-srv-hist]')) return;
     var sb=findNativeSaveButton(); if(!sb||!sb.parentNode) return;
-    var pb=document.createElement('button'); pb.setAttribute('data-srv-publish','1'); pb.textContent=_t('📤 公開保存','📤 Publish');
-    pb.className=sb.className||'btn';
-    pb.style.cssText='background:#6366f1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px;border:none;cursor:pointer;font-weight:600;margin-left:4px';
-    pb.onclick=function(e){ e.preventDefault(); saveToServer(false); return false; };
     var hb=document.createElement('button'); hb.setAttribute('data-srv-hist','1'); hb.textContent='📜';
     hb.className=sb.className||'btn';
+    hb.title=_t('この作品の保存履歴（前の版に戻せます）','Version history for this work');
     hb.style.cssText='background:#fff;color:#6366f1;padding:6px 10px;font-size:12px;border-radius:6px;border:1px solid #6366f1;cursor:pointer;margin-left:4px';
     hb.onclick=function(e){ e.preventDefault(); showWorkHistory(); return false; };
-    sb.parentNode.insertBefore(pb, sb.nextSibling); sb.parentNode.insertBefore(hb, pb.nextSibling);
+    sb.parentNode.insertBefore(hb, sb.nextSibling);
   }
   
   // ========================================
-  // 読者クラウド保存
+  // 読者クラウド保存 … v1.17.0 で撤去
+  //   読者の設定(吹き出しの色・アイコン・音声)の保存と読み込みは
+  //   viewer.html の「🎨 読み方の設定」に一本化した。
+  //   ここにあった ☁設定保存 / ☁読込 / 📜設定の履歴 の3ボタンは
+  //   同じことを別の保存先(/api/users/:id/settings)で行う二重実装で、
+  //   ツールバーに並んで利用者を混乱させていたため削除する。
+  //   起動時の自動読込(autoLoadOnStart)も、保存しておいた
+  //   localStorage をまるごと書き戻す作りで、ログイン情報
+  //   (aninovel_user)まで古い内容に戻してしまうため削除する。
   // ========================================
-  function collectReaderSettings(){
-    var st=window.state||{};
-    var s={ _appVersion:'aninovel-reader-1.0', _savedAt:new Date().toISOString(), _workId:getCurrentWorkId(),
-      state:{ readerCustom:st.readerCustom, readerCustomCharId:st.readerCustomCharId, readerProfileCurrent:st.readerProfileCurrent, readerProfileList:st.readerProfileList, darkMode:st.darkMode, displaySettings:st.displaySettings, bookmarks:st.bookmarks },
-      localStorage:{} };
-    ['aninovel_user','aninovel_reader_profiles','aninovel_data','aninovel_analytics_consent_v1'].forEach(function(k){ var v=localStorage.getItem(k); if(v!==null) s.localStorage[k]=v; });
-    return s;
-  }
-  function applyReaderSettings(s){
-    if(s.localStorage) Object.keys(s.localStorage).forEach(function(k){ var v=s.localStorage[k]; if(typeof v==='string') try{ localStorage.setItem(k,v); }catch(e){} });
-    if(s.state && window.state) ['readerCustom','readerCustomCharId','readerProfileCurrent','readerProfileList','darkMode','displaySettings','bookmarks'].forEach(function(k){ if(s.state[k]!==undefined) window.state[k]=s.state[k]; });
-    try { if(typeof window.render==='function'){ window.render(); return true; } } catch(e){}
+  function _removedReaderCloud(){
+    alert(_t('読者の設定は、ビューアの「🎨 読み方の設定」から保存・読み込みしてください。',
+             'Reader settings moved to "🎨 Reading style" in the viewer.'));
     return false;
   }
-  async function saveReaderSettingsCloud(silent){
-    var uid=getCurrentUserId(); if(!uid){ if(!silent) alert(_t('ログイン要','Sign-in required')); return false; }
-    var s=collectReaderSettings(); var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
-    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:s,note:note||'読者設定'})});
-      var d=await r.json(); if(r.ok && d.ok){ if(!silent) alert(_t('☁ 保存完了','☁ Saved')); else showToast(_t('☁ 保存完了','☁ Saved'),'#0ea5e9'); return true; } return false;
-    } catch(e){ return false; }
-  }
-  async function loadReaderSettingsCloud(){
-    var uid=getCurrentUserId(); if(!uid){ alert(_t('ログイン要','Sign-in required')); return false; }
-    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings'); if(r.status===404){ alert(_t('クラウドに設定なし','No settings in cloud')); return false; }
-      var s=await r.json(); applyReaderSettings(s); showToast(_t('☁ 設定読込','☁ Load settings'),'#0ea5e9'); return true;
-    } catch(e){ return false; }
-  }
-  async function showReaderHistory(){
-    var uid=getCurrentUserId(); if(!uid){ alert(_t('ログイン要','Sign-in required')); return; }
-    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings?versions=1'); var d=await r.json();
-      showHistoryModal(_t('📜 読者設定の履歴','📜 Reader settings history'), (d.versions||[]).slice().reverse(), async function(v){
-        if(!confirm(_t('v'+v+'に復元?','Restore v'+v+'?'))) return;
-        var r2=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings?version='+v);
-        var dd=await r2.json(); if(!dd.data){alert(_t('失敗','Failed')); return;}
-        applyReaderSettings(dd.data); showToast('✅ 復元','#0ea5e9');
-      });
-    } catch(e){}
-  }
-  async function autoLoadOnStart(){
-    if(window._srvAutoLoaded) return; window._srvAutoLoaded=true;
-    if(isAuthorMode()) return; var uid=getCurrentUserId(); if(!uid) return;
-    try { var r=await fetch('/api/users/'+encodeURIComponent(uid)+'/settings');
-      if(r.status===404) return; var s=await r.json(); applyReaderSettings(s); showToast(_t('☁ クラウドから読込','☁ Load from cloud'),'#0ea5e9');
-    } catch(e){}
-  }
-  
-  function setupReaderButtons(){
-    if(isAuthorMode()) return;
-    if(document.getElementById('srvReaderInline')) return;
-    var tb=document.querySelector('.toolbar'); if(!tb) return;
-    var uid=getCurrentUserId(); if(!uid) return;
-    var c=document.createElement('div'); c.id='srvReaderInline';
-    c.style.cssText='display:inline-flex;gap:4px;align-items:center;margin-left:8px;flex-wrap:wrap';
-    function mk(t,ti,cb){ var b=document.createElement('button'); b.textContent=t; b.title=ti; b.className='btn';
-      b.style.cssText='background:#fff;color:#0ea5e9;border:1px solid #0ea5e9;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600';
-      b.onclick=cb; return b; }
-    c.appendChild(mk('☁ 設定保存','クラウドに保存',function(){ saveReaderSettingsCloud(false); }));
-    c.appendChild(mk(_t('☁ 読込','☁ Load'),'クラウドから',loadReaderSettingsCloud));
-    c.appendChild(mk('📜','設定の履歴',showReaderHistory));
-    tb.appendChild(c);
-  }
-  
+
   // ========================================
   // ★★ 独自ギャラリーモーダル（DOM 直接構築版）★★
   // ========================================
@@ -537,62 +488,27 @@
     });
   }
   
-  function hookResetButton(){
-    document.querySelectorAll('button').forEach(function(btn){
-      if(btn.dataset.srvResetHooked) return;
-      var oc=btn.getAttribute('onclick')||'';
-      var t=(btn.textContent||'').trim();
-      if(oc.indexOf('resetToAuthorDefaults')!==-1 || t==='作者推奨に戻す' || (t.indexOf('推奨')!==-1 && t.indexOf('戻')!==-1)){
-        btn.dataset.srvResetHooked='1';
-        btn.removeAttribute('onclick');
-        var newBtn = btn.cloneNode(true);
-        newBtn.dataset.srvResetHooked='1';
-        btn.parentNode.replaceChild(newBtn, btn);
-        newBtn.addEventListener('click', function(e){
-          e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-          forceResetReaderCustom();
-          return false;
-        }, true);
-      }
-    });
-  }
-  function forceResetReaderCustom(){
-    var workId=window._workParam||getCurrentWorkId();
-    if(!confirm(_t('読者カスタマイズを完全にクリアし、作者推奨の設定に戻しますか？','Completely clear reader customization and reset to author defaults?'))) return;
-    try {
-      if(window.state){ window.state.readerCustom=null; window.state.readerCustomOpen=false; }
-      try { var profiles=JSON.parse(localStorage.getItem('aninovel_reader_profiles')||'{}'); if(profiles[workId]){
-        Object.keys(profiles[workId]).forEach(function(pn){
-          if(profiles[workId][pn] && profiles[workId][pn].readerCustom) profiles[workId][pn].readerCustom=null;
-          if(profiles[workId][pn] && typeof profiles[workId][pn]==='object') delete profiles[workId][pn].readerCustom;
-        }); localStorage.setItem('aninovel_reader_profiles', JSON.stringify(profiles)); } } catch(e){}
-      try { var d=JSON.parse(localStorage.getItem('aninovel_data')||'{}'); if(d && d.readerCustom){ delete d.readerCustom; localStorage.setItem('aninovel_data', JSON.stringify(d)); } } catch(e){}
-      if(typeof window.saveReaderCustom==='function'){ try { window.saveReaderCustom(workId); } catch(e){} }
-      if(typeof window.render==='function') window.render();
-      showToast(_t('✅ 作者推奨に戻しました','✅ Reset to author defaults'));
-    } catch(e){ alert('❌ '+e.message); }
-  }
-  
-  function hideCharacterListButtonInReader(){
-    if(isAuthorMode()) return;
-    document.querySelectorAll('button').forEach(function(btn){
-      if(btn.dataset.srvHiddenChar) return;
-      var t=(btn.textContent||'').trim();
-      var title=btn.getAttribute('title')||'';
-      if(t==='👥' || t.indexOf('👥')!==-1 || title.indexOf('登場人物')!==-1){
-        btn.dataset.srvHiddenChar='1';
-        btn.dataset.srvOrigDisplay=btn.style.display||'';
-        btn.style.display='none';
-      }
-    });
-  }
+  // hookResetButton / forceResetReaderCustom … v1.17.0 で撤去。
+  //   「…推奨…戻す」という文字を含むボタンを片端から乗っ取って、
+  //   作品まるごとのリセットに差し替えていた。そのため
+  //   「このキャラだけ…に戻す」を押しても全キャラが消えていた。
+  //   リセットは viewer.html 側の処理にまかせる。
+  function forceResetReaderCustom(){ return _removedReaderCloud(); }
+
+  // hideCharacterListButtonInReader / restoreCharacterListButton … v1.18.0 で撤去。
+  //   ボタンの文字(👥)や title を手当たり次第に探して隠す作りだったため、
+  //   作者モードの登場人物ボタンまで巻き添えで消えることがあった。
+  //   だれに 👥 を見せるかは viewer.html が役割で判断する
+  //   (作者本人の作品とオーナーだけ)。
+  function hideCharacterListButtonInReader(){}
   function restoreCharacterListButton(){
+    // 旧版に隠されたままのボタンがあれば元に戻す
     document.querySelectorAll('[data-srv-hidden-char="1"]').forEach(function(btn){
       btn.style.display=btn.dataset.srvOrigDisplay||'';
       delete btn.dataset.srvHiddenChar;
     });
   }
-  
+
   function removeOldFloating(){
     ['srvSaveContainer','srvReaderContainer','srvAuthorFloating','srvCustGallery'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
   }
@@ -605,12 +521,12 @@
       setupAuthorButtons();
     } else {
       ['data-srv-publish','data-srv-hist'].forEach(function(a){ document.querySelectorAll('['+a+']').forEach(function(el){ el.remove(); }); });
-      setupReaderButtons();
-      hideCharacterListButtonInReader();
+      restoreCharacterListButton();
     }
     setupGalleryButtons();
     setupCopyrightWarning();
-    hookResetButton();
+    // 念のため、古い版が残した読者用ボタンがあれば消す
+    var _old=document.getElementById('srvReaderInline'); if(_old) _old.remove();
   }
   var sT=null;
   function debouncedSetup(){ if(sT) return; sT=setTimeout(function(){ sT=null; setupAll(); }, 100); }
@@ -622,20 +538,19 @@
     if(!document.body){ setTimeout(init, 100); return; }
     setupAll(); startObserver();
     setInterval(setupAll, 2000);
-    setTimeout(autoLoadOnStart, 1500);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
   
   window.AniNovelServerSave={
     save:function(){ return saveToServer(false); }, showHistory:showWorkHistory,
-    saveCloud:function(){ return saveReaderSettingsCloud(false); }, loadCloud:loadReaderSettingsCloud, showCloudHistory:showReaderHistory,
+    saveCloud:_removedReaderCloud, loadCloud:_removedReaderCloud, showCloudHistory:_removedReaderCloud,
     forceReset:forceResetReaderCustom,
     openGallery:openReaderGallery,
     getWorkId:getCurrentWorkId, getUserId:getCurrentUserId, isAuthor:isAuthorMode,
     forceRender:function(){ if(window.render){ try{ window.render(); console.log('rendered'); }catch(e){ console.log(e); } } }
   };
-  log('Loaded v1.16.0');
+  log('Loaded v1.18.0 (reader cloud buttons + DOM hijacks removed)');
 })();
 
 // deploy: 20260530195429

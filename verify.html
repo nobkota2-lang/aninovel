@@ -124,7 +124,12 @@ function show(el,kind,text){ el.className='msg '+kind; el.textContent=text; }
       headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})});
     var j=await r.json();
     $('state').textContent = r.ok ? (j.message||'確認が完了しました。') : (j.error||('エラー ('+r.status+')'));
-    if(r.ok) $('go').style.display='block';
+    if(r.ok){
+      $('go').style.display='block';
+      // 確認できたら、そのままログイン画面へ進む（ボタンは押せなかったとき用に残す）
+      $('state').textContent=(j.message||'確認が完了しました。')+' ログイン画面へ移動します…';
+      setTimeout(function(){ location.replace('/login.html'); }, 1200);
+    }
   }catch(e){ $('state').textContent='通信に失敗しました。時間をおいてお試しください。'; }
 })();
 </script>

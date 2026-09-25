@@ -146,17 +146,27 @@ dl.kv dd{margin:0;word-break:break-word}
 <script>
 var $=function(id){return document.getElementById(id);};
 function show(el,kind,text){ el.className='msg '+kind; el.textContent=text; }
-async function refresh(){
+// 戻り先。?back= があればそこ、無ければトップ。
+function dest(){
+  var back=new URLSearchParams(location.search).get('back');
+  return (back && /^\/[^\/]/.test(back)) ? back : '/';
+}
+// justLoggedIn = いまボタンを押してログインが通ったところ。
+//   その場合は確認画面をはさまず、そのまま読みたいページ(なければトップ)へ進む。
+//   すでにログイン済みの人が自分で /login.html を開いたときだけ、
+//   アカウントの画面(パスワード変更・ログアウト)を見せる。
+async function refresh(justLoggedIn){
   try{
     var r=await fetch('/api/auth/me',{cache:'no-store'});
     var j=await r.json();
     if(j.loggedIn){
+      var back=new URLSearchParams(location.search).get('back');
+      if(justLoggedIn || (back && /^\/[^\/]/.test(back))){ location.replace(dest()); return; }
       $('box').style.display='none'; $('me').style.display='block';
+      document.querySelector('h1').textContent='アカウント';
+      document.querySelector('.lead').textContent='ログイン中です。パスワードの変更やログアウトができます。';
       $('meText').textContent=j.nickname+' さんとしてログインしています';
       $('meRole').textContent=j.email+' ／ '+(j.isAuthor?'作者・読者':'読者');
-      // ログイン前に開いていたページがあれば戻る
-      var back=new URLSearchParams(location.search).get('back');
-      if(back && /^\/[^\/]/.test(back)) location.href=back;
     }else{
       $('box').style.display='block'; $('me').style.display='none'; $('pwbox').style.display='none';
     }
@@ -170,7 +180,7 @@ $('go').onclick=async function(){
     var r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
     var j=await r.json();
-    if(r.ok){ $('password').value=''; await refresh(); btn.disabled=false; return; }
+    if(r.ok){ $('password').value=''; show($('msg'),'ok','ログインしました。移動します…'); await refresh(true); btn.disabled=false; return; }
     show($('msg'),'err',j.error||('エラー ('+r.status+')'));
   }catch(e){ show($('msg'),'err','通信に失敗しました。'); }
   btn.disabled=false;
