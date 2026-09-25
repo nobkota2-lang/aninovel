@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v175_toolbar_saves';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v176_reader_settings_one_button';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -5854,6 +5854,32 @@ function _rbPush(copy){
       }).catch(function(e){console.warn('[ReaderSettings] 通信に失敗',e.message);});
   },800);
 }
+// 手元とサーバを突き合わせる。
+//   保存した設定 … 両方を残す(同じ名前と時刻のものだけ 1 つにまとめる)。新しい順、上限 20 件。
+//   いま使っている設定 … 手元を優先する(いま画面で使っているものだから)。
+function _rbMerge(localRb,serverRb){
+  var out=_rbEmpty();
+  var ids={};
+  Object.keys((localRb&&localRb.works)||{}).forEach(function(k){ids[k]=1;});
+  Object.keys((serverRb&&serverRb.works)||{}).forEach(function(k){ids[k]=1;});
+  Object.keys(ids).forEach(function(id){
+    var lw=(localRb&&localRb.works&&localRb.works[id])||{},sw=(serverRb&&serverRb.works&&serverRb.works[id])||{};
+    var seen={},L=[];
+    (lw.saves||[]).concat(sw.saves||[]).forEach(function(s){
+      if(!s||!s.name)return;
+      var k=s.name+'|'+(s.savedAt||0);
+      if(seen[k])return;seen[k]=1;L.push(s);
+    });
+    L.sort(function(a,b){return (b.savedAt||0)-(a.savedAt||0);});
+    if(L.length>READER_SAVE_MAX)L.length=READER_SAVE_MAX;
+    out.works[id]={
+      cur:(lw.cur!==undefined&&lw.cur!==null)?lw.cur:(sw.cur||null),
+      saves:L,
+      lastSaved:(lw.lastSaved!==undefined)?lw.lastSaved:sw.lastSaved
+    };
+  });
+  return out;
+}
 // 作品を開いたときにサーバの設定を読み込む。サーバに無く端末にあれば送る。
 function _readerProfileSync(workId){
   if(!(window.AninovelServices&&AninovelServices.getCurrentUser))return;
@@ -5864,9 +5890,12 @@ function _readerProfileSync(workId){
       .then(function(j){
         var key=_rbUserKey();
         if(j&&j.bundle){
-          _rb=_rbMigrate(j.bundle);_rb._key=key;
+          // サーバの内容で置き換えると、送信に失敗していた手元の保存が消える。
+          // 保存一覧は両方を残し、いま使っている設定は手元を優先する。
+          var local=_rbLoad();
+          _rb=_rbMerge(local,_rbMigrate(j.bundle));_rb._key=key;
           _rbPersist();
-          console.info('[ReaderSettings] サーバから読み込みました');
+          console.info('[ReaderSettings] サーバと突き合わせました');
         }else{
           _rb=null;var rb=_rbLoad();
           if(Object.keys(rb.works).length)_rbPersist();
@@ -5936,65 +5965,82 @@ function deleteReaderSnapshot(idx){
   _rbPersist();
   render();
 }
-// 上部のボタン。読者モードでログイン中のときだけ出す。
-//   💾 … 全キャラ分をまとめて名前を付け、サーバへ保存
-//   📂 … 保存した中から選んで読み込む
-// キャラごとの変更はこのブラウザにだけ残る。
+// 上部のボタンは 1 つだけ。読者モードでログイン中のときだけ出す。
+//   「🎨 読み方の設定」… 押すと下のパネルが開き、保存・読み込み・元に戻すが
+//   すべてそこに並ぶ。作者モードの 💾(作品の保存) や 📂(取り込み) と
+//   紛らわしいので、読者向けの絵文字ボタンは置かない。
 function _readerSaveButtonsHTML(){
   if(state.isAuthorMode)return '';
   var u=_rbUser();
   if(!(u&&u._server))return '';
   var dirty=_rbDirty();
-  return '<span class="tb-fold">'+
-    '<button onclick="saveReaderSnapshot()" class="btn-icon" title="'+(dirty?'未保存の変更があります。':'')+'この作品の設定を名前を付けてサーバに保存">💾'+(dirty?'<span style="color:#F59E0B">●</span>':'')+'</button>'+
-    '<button onclick="state.readerLoadOpen=true;render()" class="btn-icon" title="保存した設定を選んで読み込む">📂</button></span>';
+  return '<span class="tb-fold"><button onclick="openReaderSettings()" class="btn btn-ghost" '+
+    'style="padding:6px 12px;font-size:12px;border-radius:6px;white-space:nowrap" '+
+    'title="この作品を自分好みの色・アイコン・音声で読むための設定。保存すると他の端末でも同じ見た目になります">'+
+    '🎨 読み方の設定'+(dirty?'<span style="color:#F59E0B;margin-left:5px">●未保存</span>':'')+
+    '</button></span>';
 }
+function openReaderSettings(){state.readerLoadOpen=true;render();}
+function closeReaderSettings(){state.readerLoadOpen=false;render();}
+window.openReaderSettings=openReaderSettings;
+window.closeReaderSettings=closeReaderSettings;
+// 読み方の設定パネル。保存・一覧・読み込み・元に戻す をここに集約する。
 function _readerLoadModalHTML(){
   if(!state.readerLoadOpen)return '';
-  var L=_rbWork(_workParam).saves;
-  var h='<div class="modal-overlay" onclick="if(event.target===this){state.readerLoadOpen=false;render()}">'+
-    '<div class="modal" style="max-width:460px">'+
-    '<div class="modal-header"><h3 style="margin:0;font-size:16px">保存した設定を読み込む</h3>'+
-    '<button onclick="state.readerLoadOpen=false;render()" class="btn-icon">✕</button></div>'+
-    '<div class="modal-body">';
+  var w=_rbWork(_workParam),L=w.saves;
+  var nch=state.readerCustom?Object.keys(state.readerCustom).length:0;
+  var dirty=_rbDirty();
+  var h='<div class="modal-overlay" onclick="if(event.target===this)closeReaderSettings()">'+
+    '<div class="modal-content" style="max-width:520px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+    '<h3 style="font-size:18px;font-weight:700">🎨 読み方の設定</h3>'+
+    '<button onclick="closeReaderSettings()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+
+  // なにができるのかを、はじめての人にも分かる言葉で。
+  h+='<p style="font-size:12px;line-height:1.7;color:var(--text-secondary);background:var(--bg-secondary);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">'+
+     '本文の<strong>キャラクターのアイコンを押す</strong>と、そのキャラの吹き出しの色・アイコン画像・読み上げ音声を変えられます。<br>'+
+     '変えただけでは<strong>この端末に残るだけ</strong>です。下の「今の設定を保存」を押すと、'+
+     'アカウントに保存され、ほかの端末やパソコンでも同じ見た目で読めます。</p>';
+
+  // いまの状態
+  var badge = dirty
+    ? '<span style="color:#B45309;font-weight:600">● まだ保存していない変更があります</span>'
+    : (nch? '<span style="color:#047857;font-weight:600">✓ 保存済みです</span>'
+          : '<span style="color:var(--text-muted)">まだ何も変えていません</span>');
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
+     '<div style="font-size:13px">'+badge+'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+
+     (nch? nch+'人のキャラクターを自分好みに変えています' : '作者がつくったままの見た目で読んでいます')+'</div></div>'+
+     '<button onclick="saveReaderSnapshot()" class="btn btn-primary" style="padding:8px 16px;font-size:13px;white-space:nowrap">今の設定を保存</button>'+
+     '</div>';
+
+  // 保存した設定
+  h+='<div style="border-top:1px solid var(--border);padding-top:12px">'+
+     '<div style="font-size:13px;font-weight:600;margin-bottom:6px">保存した設定</div>';
   if(!L.length){
-    h+='<p style="font-size:13px;color:var(--text-muted);margin:0">保存した設定はまだありません。<br>キャラクターの色やアイコンを整えてから、上の 💾 でまとめて保存できます。</p>';
+    h+='<p style="font-size:12px;color:var(--text-muted);margin:0 0 4px 0;line-height:1.6">'+
+       'まだありません。色やアイコンを整えてから「今の設定を保存」を押すと、名前を付けてここに残せます（最大'+READER_SAVE_MAX+'件）。</p>';
   }else{
+    h+='<p style="font-size:11px;color:var(--text-muted);margin:0 0 8px 0">使いたい設定の「この設定にする」を押すと、いまの見た目が入れ替わります。</p>';
+    h+='<div style="max-height:240px;overflow:auto">';
     L.forEach(function(s,i){
       var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
       var n=Object.keys(s.data||{}).length;
-      h+='<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)">'+
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)">'+
         '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
         '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
-        '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:6px 14px;font-size:13px">読み込む</button>'+
-        '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="削除" style="color:#DC2626">🗑️</button></div>';
-    });
-  }
-  h+='</div></div></div>';
-  return h;
-}
-function _readerSavesHTML(){
-  var L=_rbWork(_workParam).saves;
-  var h='<div style="background:var(--bg-secondary);padding:10px 12px;border-radius:8px;margin-bottom:12px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'+
-    '<div style="font-size:13px;font-weight:600">この作品の保存した設定</div>'+
-    '<button onclick="saveReaderSnapshot()" class="btn btn-ghost" style="padding:5px 10px;font-size:12px">💾 いまの設定を保存</button></div>';
-  if(!L.length){
-    h+='<div style="font-size:12px;color:var(--text-muted)">まだありません。色やアイコンを変えたら「いまの設定を保存」で残せます。保存した設定はここから選んで読み込めます。</div>';
-  }else{
-    h+='<div style="max-height:200px;overflow:auto">';
-    L.forEach(function(s,i){
-      var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
-      var n=Object.keys(s.data||{}).length;
-      h+='<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--border)">'+
-        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
-        '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
-        '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:4px 10px;font-size:12px">読み込む</button>'+
-        '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="削除" style="color:#DC2626">🗑️</button></div>';
+        '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:6px 12px;font-size:12px;white-space:nowrap">この設定にする</button>'+
+        '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="この保存を削除" style="color:#DC2626">🗑️</button></div>';
     });
     h+='</div>';
   }
   h+='</div>';
+
+  // 元に戻す
+  h+='<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
+     '<button onclick="resetToAuthorDefaults()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:170px;color:#DC2626">↩ 全キャラを作者の設定に戻す</button>'+
+     '<button onclick="closeReaderSettings()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">閉じる</button></div>';
+
+  h+='</div></div>';
   return h;
 }
 window.saveReaderSnapshot=saveReaderSnapshot;
@@ -6027,7 +6073,7 @@ window.deleteReaderSnapshot=deleteReaderSnapshot;
 
 function resetToAuthorDefaults(){
   if(!_workParam)return;
-  if(!confirm('この作品の色やアイコンを、作者の設定に戻しますか？\n（保存した設定は消えません）'))return;
+  if(!confirm('この作品の【全キャラクター】の色・アイコン・音声を、作者がつくったままの状態に戻します。\nよろしいですか？\n（「保存した設定」の一覧は消えません）'))return;
   state.readerCustom=null;
   saveReaderCustom(_workParam);
   render();
@@ -6079,7 +6125,10 @@ function renderReaderCustomModal(){
   h+='<button onclick="(function(){var utt=new SpeechSynthesisUtterance(\''+esc(c.name)+'。テスト音声です。\');utt.lang=\'ja-JP\';var vn=(state.readerCustom&&state.readerCustom[state.readerCustomCharId]&&state.readerCustom[state.readerCustomCharId].ttsVoice)||null;if(vn){var vs=speechSynthesis.getVoices();var fv=vs.find(function(x){return x.name===vn});if(fv)utt.voice=fv;}speechSynthesis.cancel();speechSynthesis.speak(utt);})()" class="btn btn-ghost" style="font-size:12px">▶ テスト再生</button>';
   h+='</div>';
   // Reset button
-  h+='<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px">このキャラだけ作者推奨に戻す</button><button onclick="resetToAuthorDefaults();state.readerCustomOpen=false" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:140px;color:#DC2626">作者の設定に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
+  // 「全部戻す」はここには置かない(このキャラだけのつもりで全部消してしまうため)。
+  // 全キャラをまとめて戻すのは「🎨 読み方の設定」パネルの中にある。
+  h+='<p style="font-size:11px;color:var(--text-muted);line-height:1.6;margin:16px 0 0 0">変更は'+esc(c.name)+'だけに効きます。この端末に残るので、上の「🎨 読み方の設定」で保存すると他の端末でも同じ見た目になります。</p>';
+  h+='<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:170px">↩ このキャラだけ元に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
   h+='</div></div></div>';
   if(state.imageGalleryOpen)h+=renderGallery();
   return h;
@@ -6266,6 +6315,13 @@ var I18N_DICT={'中性':'Neutral','保存完了':'Saved','内容を保存しま�
   // --- しおり / プロファイル ---
   '📚 しおり一覧':'📚 Bookmarks','しおりがありません':'No bookmarks yet','しおりを追加しました':'Bookmark added',
   '新規プロファイル':'New profile',
+  // --- 読み方の設定 ---
+  '🎨 読み方の設定':'🎨 Reading style','●未保存':'●Unsaved',
+  'まだ保存していない変更があります':'You have unsaved changes','保存済みです':'Saved','まだ何も変えていません':'Nothing changed yet',
+  '作者がつくったままの見た目で読んでいます':'Reading with the author\u2019s original look',
+  '今の設定を保存':'Save current settings','保存した設定':'Saved settings','この設定にする':'Use this','この保存を削除':'Delete this save',
+  '↩ 全キャラを作者の設定に戻す':'↩ Reset all characters','↩ このキャラだけ元に戻す':'↩ Reset this character only',
+  '閉じる':'Close',
   'この作品の保存した設定':'Saved settings for this work','💾 いまの設定を保存':'💾 Save current settings',
   '読み込む':'Load','作者の設定に戻す':'Reset to author settings','使用中のプロファイル':'Active profile','このプロファイルを削除':'Delete this profile',
   '── 作者推奨（デフォルト）':'── Author recommended (default)','── 性別デフォルト（自動選択）':'── Gender default (auto)',
@@ -6653,7 +6709,7 @@ function bindHandlers(){
 
 }
 // Keyboard + Touch
-document.addEventListener('keydown',function(e){if(state.currentScreen!=='reader')return;if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;var _kV=(state.displaySettings&&state.displaySettings.orientation==='vertical');/* 縦書きは右から左へ読むので、←が「次」、→が「前」になる。PageDown/PageUp は書式によらず次/前のまま。*/if(e.key==='PageDown'){e.preventDefault();jP(state.currentPage+1)}else if(e.key==='PageUp'){e.preventDefault();jP(state.currentPage-1)}else if(e.key==='ArrowRight'){e.preventDefault();jP(state.currentPage+(_kV?-1:1))}else if(e.key==='ArrowLeft'){e.preventDefault();jP(state.currentPage+(_kV?1:-1))}else if(e.key==='Home'){e.preventDefault();jP(0)}else if(e.key==='End'){e.preventDefault();jP(getTP()-1)}else if(e.key==='f'&&(e.ctrlKey||e.metaKey)){e.preventDefault();state.searchOpen=!state.searchOpen;render()}else if(e.key==='Escape'){if(state.editModalOpen)closeEditModal();else{if(state.searchOpen){state.searchOpen=false;state.searchQuery='';state.searchResults=[];state.searchCurrentIdx=-1}if(state.fullscreen)state.fullscreen=false;if(state.sidebarOpen)state.sidebarOpen=false;else if(state.settingsOpen)state.settingsOpen=false;else if(state.tocOpen)state.tocOpen=false;else if(state.bookmarkListOpen)state.bookmarkListOpen=false}render()}});
+document.addEventListener('keydown',function(e){if(state.currentScreen!=='reader')return;if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;var _kV=(state.displaySettings&&state.displaySettings.orientation==='vertical');/* 縦書きは右から左へ読むので、←が「次」、→が「前」になる。PageDown/PageUp は書式によらず次/前のまま。*/if(e.key==='PageDown'){e.preventDefault();jP(state.currentPage+1)}else if(e.key==='PageUp'){e.preventDefault();jP(state.currentPage-1)}else if(e.key==='ArrowRight'){e.preventDefault();jP(state.currentPage+(_kV?-1:1))}else if(e.key==='ArrowLeft'){e.preventDefault();jP(state.currentPage+(_kV?1:-1))}else if(e.key==='Home'){e.preventDefault();jP(0)}else if(e.key==='End'){e.preventDefault();jP(getTP()-1)}else if(e.key==='f'&&(e.ctrlKey||e.metaKey)){e.preventDefault();state.searchOpen=!state.searchOpen;render()}else if(e.key==='Escape'){if(state.editModalOpen)closeEditModal();else if(state.readerCustomOpen){state.readerCustomOpen=false;render();return}else if(state.readerLoadOpen){state.readerLoadOpen=false;render();return}else{if(state.searchOpen){state.searchOpen=false;state.searchQuery='';state.searchResults=[];state.searchCurrentIdx=-1}if(state.fullscreen)state.fullscreen=false;if(state.sidebarOpen)state.sidebarOpen=false;else if(state.settingsOpen)state.settingsOpen=false;else if(state.tocOpen)state.tocOpen=false;else if(state.bookmarkListOpen)state.bookmarkListOpen=false}render()}});
 // ===== D&D EVENT SYSTEM (desktop + mobile) =====
 // Attached to #app element after each render
 var _dType=null,_dPayload=null,_tClone=null,_tMoved=false;
