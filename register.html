@@ -99,10 +99,11 @@ dl.kv dd{margin:0;word-break:break-word}
   </div>
 
   <div class="card" id="done" style="display:none">
-    <h2 style="font-size:1.2rem;margin:0 0 10px">確認メールをお送りしました</h2>
-    <p>メールに記載のリンクを開くと、登録が完了します。</p>
-    <p class="hint">届かない場合は<strong>迷惑メールフォルダ</strong>もご確認ください。
-      <code>noreply@aninovel.com</code> からお送りします。</p>
+    <h2 style="font-size:1.2rem;margin:0 0 10px" id="doneTitle">確認メールをお送りしました</h2>
+    <p id="doneBody">メールに記載のリンクを開くと、登録が完了します。</p>
+    <p class="hint" id="doneHint">届かない場合は<strong>迷惑メールフォルダ</strong>もご確認ください。
+      <code>noreply@aninovel.com</code> からお送りします。<br>
+      数分待っても届かないときは、もう一度この画面から登録し直すと再送されます。</p>
   </div>
 
   <p class="foot">登録済みの方は <a href="/login.html">ログイン</a> ／
@@ -154,7 +155,18 @@ $('send').onclick=async function(){
     var r=await fetch('/api/auth/register',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
     var j=await r.json();
-    if(r.ok){ $('form').style.display='none'; $('done').style.display='block'; window.scrollTo(0,0); return; }
+    if(r.ok){
+      $('form').style.display='none'; $('done').style.display='block'; window.scrollTo(0,0);
+      // サーバがメールを送れなかった場合は、そう言う。
+      // 「送りました」と出しておいて実は送れていない、という状態を作らない。
+      if(j.mailed===false){
+        $('doneTitle').textContent='登録を受け付けましたが、メールを送れませんでした';
+        $('doneBody').textContent='アカウントは作られていますが、確認メールが送信できていないため、まだログインできません。';
+        $('doneHint').innerHTML='サイトの管理者にご連絡ください。'+
+          '（管理者の方へ: Resend の設定 <code>RESEND_API_KEY</code> をご確認ください）';
+      }
+      return;
+    }
     show($('msg'),'err',j.error||('エラー ('+r.status+')'));
   }catch(e){ show($('msg'),'err','通信に失敗しました。時間をおいてお試しください。'); }
   btn.disabled=false;

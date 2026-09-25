@@ -12,24 +12,12 @@
  * メールが届かない環境でもオーナーが手当てできるように、
  * パスワードの設定と有効化(status=active)をこの画面から行えるようにしている。
  */
-import { verifyAccess } from '../../_access.js';
+import { requireOwner } from '../../_owner.js';
 import { kvOf, json, normEmail, validEmail, passwordProblem,
          hashPassword, getUser, putUser } from '../../_authlib.js';
 
 const ROLES = ['reader', 'author', 'owner'];
 const STATUS = ['active', 'unverified', 'disabled'];
-
-async function requireOwner(context) {
-  const { request, env } = context;
-  let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
-  if (!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD)) {
-    return { deny: json({ error: 'access_disabled', message: 'Access が未設定です。' }, 503) };
-  }
-  if (!who) return { deny: json({ error: 'unauthorized' }, 401) };
-  if (!who.isOwner) return { deny: json({ error: 'forbidden', message: 'オーナーだけが操作できます。' }, 403) };
-  return { who };
-}
 
 /** 外に出してよい項目だけ（パスワードのハッシュは決して返さない） */
 function safe(u) {

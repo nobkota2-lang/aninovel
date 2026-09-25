@@ -4,6 +4,8 @@
 // 劣化検出強化 + llama-3.1-8b-instruct フォールバック + 名前ローマ字化（緩い検証）
 // デバッグ: ?debug=1 で AI レスポンスを返す
 
+import { requireWriter } from '../_owner.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -28,7 +30,8 @@ const MAX_CHARS_PER_CHUNK = 120;
 
 export async function onRequestOptions() { return new Response(null, { headers: CORS }); }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
   const debug = new URL(request.url).searchParams.get('debug') === '1';
   const dbg = []; // デバッグログ
   try {
@@ -47,9 +50,11 @@ export async function onRequestPost({ request, env }) {
 
       // 書き込み
       if (body.chunk.write) {
-        if (body.writeKey !== 'aninovel-owner-2026') {
-          return json({ error: 'forbidden' }, 403);
-        }
+        // 以前はソースに直書きの合言葉(writeKey)で通していた。
+        // リポジトリが公開なので誰でも読めて、誰でも全作品の訳を
+        // 上書きできる状態だった。作者かオーナーのログインを必須にする。
+        const w = await requireWriter(context);
+        if (w.deny) return w.deny;
         const payload = JSON.stringify({
           items: body.chunk.items || {},        // { blockId: 英訳 }
           chars: body.chunk.chars || {},        // { charId: 英名 }
@@ -113,9 +118,8 @@ export async function onRequestPost({ request, env }) {
 
     // ===== オーナー英訳の直接書き込み(AIを使わない・quota消費なし) =====
     if (body.providedTranslations && typeof body.providedTranslations === 'object') {
-      if (body.writeKey !== 'aninovel-owner-2026') {
-        return json({ error:'forbidden', message:'invalid writeKey' }, 403);
-      }
+      const w = await requireWriter(context);
+      if (w.deny) return w.deny;
       const pv = body.providedTranslations;
       const itemsOut = items.map(i => ({ id: i.id, text: (pv[i.id] != null ? String(pv[i.id]) : i.text) }));
       const charsOut = [];

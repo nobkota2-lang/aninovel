@@ -7,21 +7,9 @@
  *   POST { id, action, reason }
  *         action = 'approve' | 'reject'
  */
-import { verifyAccess } from '../../_access.js';
+import { requireOwner } from '../../_owner.js';
 import { kvOf, json, putUser, getUser } from '../../_authlib.js';
 import { sendMail, originOf, mailToAuthorOnApprove, mailToAuthorOnReject } from '../../_mail.js';
-
-async function requireOwner(context) {
-  const { request, env } = context;
-  let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
-  if (!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD)) {
-    return { deny: json({ error: 'access_disabled', message: 'Access が未設定です。' }, 503) };
-  }
-  if (!who) return { deny: json({ error: 'unauthorized' }, 401) };
-  if (!who.isOwner) return { deny: json({ error: 'forbidden', message: 'オーナーだけが操作できます。' }, 403) };
-  return { who };
-}
 
 export async function onRequestGet(context) {
   const g = await requireOwner(context);

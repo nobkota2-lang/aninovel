@@ -5,12 +5,12 @@
  * Access のログインが済むとここに到達するので、そのまま管理画面へ戻す。
  * こうしないと、ログイン後に JSON の画面で止まってしまう。
  */
-import { verifyAccess } from '../../_access.js';
+import { whoAmI, hasRole } from '../../_owner.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
   let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
+  try { who = await whoAmI(request, env); } catch (e) { who = null; }
 
   const url = new URL(request.url);
   const to = url.searchParams.get('to');
@@ -21,7 +21,7 @@ export async function onRequestGet(context) {
   if (!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD)) {
     return new Response('Access が未設定です。', { status: 503 });
   }
-  if (!who) return new Response('ログインが必要です。', { status: 401 });
+  if (!who || !hasRole(who, 'owner')) return new Response('ログインが必要です。', { status: 401 });
 
   return new Response(null, { status: 302, headers: { Location: dest, 'Cache-Control': 'no-store' } });
 }

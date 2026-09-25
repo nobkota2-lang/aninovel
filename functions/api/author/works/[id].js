@@ -63,7 +63,7 @@ async function readVersionList(kv, id) {
 
 // GET /api/works/:id
 
-import { verifyAccess } from '../../../_access.js';
+import { whoAmI, hasRole } from '../../../_owner.js';
 
 /**
  * 作者用の書き込み口  /api/author/works/:id
@@ -81,13 +81,18 @@ import { verifyAccess } from '../../../_access.js';
  */
 async function checkOwner(context, kv, id) {
   const { request, env } = context;
+  // 「オーナーか」は利用者の記録(roles)だけで決める。
+  // Access の使い捨て番号でも、サイトのログインでも、同じ結論になる。
   let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
+  try { who = await whoAmI(request, env); } catch (e) { who = null; }
   const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
   if (accessOn && !who) {
     return { deny: json({ error: 'unauthorized', message: '保存にはログインが必要です。' }, 401) };
   }
   if (!who) return { who: null, ownerEmail: null };
+  if (!hasRole(who, 'author') && !hasRole(who, 'owner')) {
+    return { deny: json({ error: 'forbidden', message: '作者かオーナーのアカウントが必要です。' }, 403) };
+  }
   let ownerEmail = null;
   try {
     const prev = await kv.get('work:' + id);
@@ -96,7 +101,7 @@ async function checkOwner(context, kv, id) {
       if (pj && pj.ownerEmail) ownerEmail = String(pj.ownerEmail).toLowerCase();
     }
   } catch (e) {}
-  if (ownerEmail && ownerEmail !== who.email && !who.isOwner) {
+  if (ownerEmail && ownerEmail !== who.email && !hasRole(who, 'owner')) {
     return { deny: json({ error: 'forbidden', message: 'この作品を編集する権限がありません。' }, 403) };
   }
   return { who: who, ownerEmail: ownerEmail };
@@ -109,14 +114,14 @@ async function checkOwner(context, kv, id) {
 export async function onRequestGet(context) {
   const { request, env } = context;
   let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
+  try { who = await whoAmI(request, env); } catch (e) { who = null; }
   const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
   return json({
     ok: true,
     accessEnabled: accessOn,
     hasToken: !!request.headers.get('Cf-Access-Jwt-Assertion'),
     email: who ? who.email : null,
-    isOwner: who ? who.isOwner : false,
+    isOwner: who ? hasRole(who, 'owner') : false,
     workId: context.params.id,
   });
 }

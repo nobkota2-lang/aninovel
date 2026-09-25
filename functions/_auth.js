@@ -9,11 +9,14 @@
  *     → Workers & Pages → aninovel → Settings → Environment variables
  *     → Production に  ANINOVEL_WRITE_TOKEN = <長いランダム文字列>  を「暗号化」で追加
  *
- * ★安全装置★
- *   ANINOVEL_WRITE_TOKEN が未設定のときは、従来どおり全ての書き込みを通す。
- *   つまりこのコードを配置しただけでは何も壊れない。
- *   環境変数を設定した時点で有効になり、削除すれば即座に元の挙動へ戻る。
+ * ★既定は「拒否」★
+ *   以前は ANINOVEL_WRITE_TOKEN が未設定なら全ての書き込みを通していた。
+ *   段階導入のための作りだったが、環境変数を消した瞬間に誰でも書ける
+ *   状態になる向きなので、未設定なら拒否するよう反転した。
+ *   トークンが無くても、作者かオーナーとしてログインしていれば通る。
  */
+
+import { whoAmI } from './_owner.js';
 
 function json(obj, status) {
   return new Response(JSON.stringify(obj), {
@@ -35,29 +38,36 @@ function safeEqual(a, b) {
  * 書き込み権限を確認する。
  * @returns {Response|null} 拒否する場合は Response、通す場合は null
  */
-export function requireWrite(context) {
+export async function requireWrite(context) {
   const need = context.env && context.env.ANINOVEL_WRITE_TOKEN;
 
-  // 未設定 = 認証オフ。段階導入のための安全装置。
-  if (!need) return null;
-
+  // 1) 端末に入れた書き込みトークン
   const h = context.request.headers.get('Authorization') || '';
   const m = /^Bearer\s+(.+)$/i.exec(h.trim());
   const got = m ? m[1].trim() : '';
+  if (need && got && safeEqual(got, need)) return null;
 
+  // 2) 作者かオーナーとしてのログイン
+  try {
+    const who = await whoAmI(context.request, context.env);
+    if (who && Array.isArray(who.roles) &&
+        (who.roles.indexOf('author') !== -1 || who.roles.indexOf('owner') !== -1)) return null;
+  } catch (e) {}
+
+  // どちらでもない。トークンが未設定でも通さない（既定は拒否）。
+  if (!need && !got) {
+    return json({
+      error: 'unauthorized',
+      message: '書き込みには作者かオーナーのログインが必要です。'
+    }, 401);
+  }
   if (!got) {
     return json({
       error: 'unauthorized',
       message: '書き込みには認証が必要です。作者・オーナー以外は変更できません。'
     }, 401);
   }
-  if (!safeEqual(got, need)) {
-    return json({
-      error: 'forbidden',
-      message: '書き込み権限がありません。'
-    }, 403);
-  }
-  return null;
+  return json({ error: 'forbidden', message: '書き込み権限がありません。' }, 403);
 }
 
 /** 認証が有効になっているか (診断用) */

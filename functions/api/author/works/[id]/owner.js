@@ -11,7 +11,7 @@
  *
  * このパスも Access の api/author/* に含まれるので保護される。
  */
-import { verifyAccess } from '../../../../_access.js';
+import { requireOwner } from '../../../../_owner.js';
 
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 
@@ -24,23 +24,6 @@ function json(obj, status = 200) {
 
 function getKV(env) {
   return env.WORKS || env.WORKS_KV || null;
-}
-
-async function requireOwner(context) {
-  const { request, env } = context;
-  let who = null;
-  try { who = await verifyAccess(request, env); } catch (e) { who = null; }
-  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
-  if (!accessOn) {
-    return { deny: json({ error: 'access_disabled', message: 'Access が未設定です。' }, 503) };
-  }
-  if (!who) {
-    return { deny: json({ error: 'unauthorized', message: 'ログインが必要です。' }, 401) };
-  }
-  if (!who.isOwner) {
-    return { deny: json({ error: 'forbidden', message: '作者の指定はオーナーだけができます。' }, 403) };
-  }
-  return { who };
 }
 
 export async function onRequestGet(context) {

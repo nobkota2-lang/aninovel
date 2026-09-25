@@ -124,7 +124,7 @@ export async function onRequestGet(context) {
 
 // PUT /api/audio/{pubId} — 音声を一括アップロード
 export async function onRequestPut(context) {
-  const denied = requireWrite(context);      // 音声の上書きも作者・オーナーのみ
+  const denied = await requireWrite(context);   // 音声の上書きも作者・オーナーのみ
   if (denied) return denied;
   const parts = context.params.path || [];
   const bucket = context.env.AUDIO_R2;

@@ -136,6 +136,11 @@ dl.kv dd{margin:0;word-break:break-word}
       <option value="unverified">メール未確認（ログインできない）</option>
       <option value="disabled">停止</option>
     </select>
+    <div id="ustatusWarn" style="display:none;margin-top:8px;padding:10px 12px;border-radius:8px;
+      background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);font-size:.88rem;line-height:1.7">
+      いまの状態では<strong>ログインできません</strong>。メールを待たずに使えるようにできます。
+      <button class="btn sm" id="uactivate" style="margin-top:8px;display:block">今すぐ使えるようにする</button>
+    </div>
 
     <label for="upw" style="margin-top:20px">パスワード <span class="opt">10文字以上・変えないときは空のまま</span></label>
     <input id="upw" type="password" autocomplete="new-password">
@@ -213,7 +218,9 @@ async function adminFetch(url, opts){
     return { ok:false, status:r.status, error:'サーバが想定外の応答を返しました ('+r.status+')' };
   }
   var j = await r.json().catch(function(){ return {}; });
-  return { ok:r.ok, status:r.status, data:j, error:(r.ok?null:(j.message||j.error||('エラー ('+r.status+')'))) };
+  if(!r.ok) console.warn('[admin]', url, r.status, j);   // 原因を追えるように生の応答を残す
+  return { ok:r.ok, status:r.status, data:j,
+           error:(r.ok?null:((j.message||j.error||'エラー')+'（'+r.status+'）')) };
 }
 /* ログインが切れていたときの共通の出しかた */
 function authLost(msgEl){
@@ -349,6 +356,9 @@ function roleLabel(roles){
 }
 function statusLabel(s){ return {active:'使える',unverified:'メール未確認',disabled:'停止'}[s]||s; }
 
+function syncStatusWarn(){
+  $('ustatusWarn').style.display = ($('ustatus').value==='active') ? 'none' : 'block';
+}
 function fillUser(u){
   $('unick').value=u.nickname||'';
   $('urAuthor').checked=(u.roles||[]).indexOf('author')>=0;
@@ -356,7 +366,11 @@ function fillUser(u){
   $('ustatus').value=u.status||'unverified';
   $('unow').textContent=u.email+' … '+roleLabel(u.roles)+' ／ '+statusLabel(u.status)+
     (u.hasPassword?' ／ パスワードあり':' ／ パスワード未設定');
+  syncStatusWarn();
 }
+
+$('ustatus').onchange=syncStatusWarn;
+$('uactivate').onclick=function(){ $('ustatus').value='active'; syncStatusWarn(); $('usave').click(); };
 
 $('uget').onclick=async function(){
   var em=$('uemail').value.trim();
@@ -367,6 +381,7 @@ $('uget').onclick=async function(){
   if(res.status===404 && res.data){ $('umsg').className='msg';
     $('unow').textContent='このアドレスの登録はまだありません。ニックネームとパスワードを入れて「保存する」と、新しく作れます。';
     $('unick').value=''; $('urAuthor').checked=false; $('urOwner').checked=false; $('ustatus').value='active';
+    syncStatusWarn();
     return; }
   if(!res.ok){ ushow('err',res.error); return; }
   $('umsg').className='msg'; fillUser(res.data.user);
@@ -378,9 +393,19 @@ $('usave').onclick=async function(){
   var roles=['reader'];
   if($('urAuthor').checked) roles.push('author');
   if($('urOwner').checked) roles.push('owner');
-  var body={email:em, nickname:$('unick').value.trim(), roles:roles, status:$('ustatus').value};
+  var nick=$('unick').value.trim();
   var pw=$('upw').value;
+  var known=($('unow').textContent.indexOf(em)>=0);   // 直前に「調べる」で見つかっている
+  if(!known && !nick){ ushow('err','新しく作るときは、ニックネームを入れてください。'); return; }
+  if(!known && !pw){ ushow('err','新しく作るときは、パスワード（10文字以上）を入れてください。'); return; }
+  if(pw){
+    if(pw.length<10){ ushow('err','パスワードは10文字以上にしてください。'); return; }
+    if(/^[0-9]+$/.test(pw)){ ushow('err','数字だけのパスワードは使えません。'); return; }
+    if(/password|12345678|aninovel|qwertyui/i.test(pw)){ ushow('err','推測されやすい語（password / 12345678 / aninovel / qwertyui）を含むパスワードは使えません。'); return; }
+  }
+  var body={email:em, nickname:nick, roles:roles, status:$('ustatus').value};
   if(pw) body.password=pw;
+  if(body.status!=='active' && !confirm('状態が「'+statusLabel(body.status)+'」のままです。\nこのままではログインできません。続けますか？')) return;
   if(!confirm(em+' を保存します。\n権限: '+roleLabel(roles)+'\n状態: '+statusLabel(body.status)+
               (pw?'\nパスワードを入れ直します':'')+'\nよろしいですか？')) return;
   var res=await adminFetch('/api/admin/users',{method:'PUT',
@@ -389,6 +414,7 @@ $('usave').onclick=async function(){
   if(!res.ok){ ushow('err',res.error); return; }
   var j=res.data;
   $('upw').value='';
+  $('uemail').value=j.user.email;
   ushow('ok',(j.created?'新しく作りました。':'保存しました。')+' これで '+em+' としてログインできます。');
   fillUser(j.user);
   if($('utable').innerHTML) loadUsers();
