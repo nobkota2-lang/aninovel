@@ -34,9 +34,9 @@ h1{font-size:1.6rem;margin:0 0 6px;letter-spacing:.02em}
 label{display:block;margin:18px 0 6px;font-weight:600;font-size:.9rem}
 label:first-child{margin-top:0}
 label .opt{font-weight:400;color:var(--muted);font-size:.82rem;margin-left:8px}
-input,textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
+input,textarea,select{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
   background:var(--bg);color:var(--ink);font:inherit;font-size:1rem}
-input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
 textarea{min-height:110px;resize:vertical}
 .hint{font-size:.82rem;color:var(--muted);margin-top:5px}
 .btn{margin-top:26px;width:100%;padding:13px;border:0;border-radius:9px;
@@ -80,6 +80,30 @@ dl.kv dd{margin:0;word-break:break-word}
 
   <div id="list"></div>
   <div class="msg" id="msg"></div>
+
+  <h1 style="margin-top:42px">作品の作者を決める</h1>
+  <p class="lead">その作品を「自分の作品」として編集・公開できる人を1人だけ指定します。<br>
+    ここで指定された人だけが、その作品で作者モードに入れます。</p>
+  <div class="card">
+    <label for="wid">作品</label>
+    <select id="wid"><option value="">読み込んでいます…</option></select>
+    <p class="hint">一覧に無い作品は、下の欄に作品IDを直接入力してください。</p>
+    <input id="widManual" placeholder="pub_owner_bizwoman のように直接入力（任意）" style="margin-top:6px">
+    <div class="row" style="margin-top:14px">
+      <button class="btn sm ghost" id="whoGet">いまの作者を見る</button>
+    </div>
+    <div id="whoNow" class="hint" style="margin-top:10px"></div>
+
+    <label for="wmail" style="margin-top:20px">この作品の作者にするメールアドレス</label>
+    <input id="wmail" type="email" placeholder="kota2@f4.dion.ne.jp" autocomplete="off">
+    <p class="hint">読者・作者として登録済みのメールアドレスを、そのまま入れてください。
+      空のまま「作者を外す」を押すと、誰の作品でもない状態に戻ります。</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn sm" id="wset">この人を作者にする</button>
+      <button class="btn sm ghost" id="wclear">作者を外す</button>
+    </div>
+    <div class="msg" id="wmsg"></div>
+  </div>
 </div>
 
 <script>
@@ -184,6 +208,63 @@ document.addEventListener('click',async function(ev){
 $('reload').onclick=load;
 $('onlyPending').onchange=render;
 load();
+
+/* ===== 作品の作者を決める ===== */
+function wshow(kind,text){ var m=$('wmsg'); m.className='msg '+kind; m.textContent=text; }
+function widNow(){ return ($('widManual').value.trim() || $('wid').value || ''); }
+
+// 作品の一覧をカタログから引いて選べるようにする
+(async function loadWorks(){
+  try{
+    var r=await fetch('/api/catalog',{cache:'no-store'});
+    var j=await r.json();
+    var list=(j.works||j.items||j||[]);
+    if(!Array.isArray(list)) list=[];
+    if(!list.length){ $('wid').innerHTML='<option value="">（一覧を取得できませんでした。下の欄にIDを入力）</option>'; return; }
+    $('wid').innerHTML='<option value="">— 選んでください —</option>'+list.map(function(w){
+      var id=w.id||w.workId||''; var t=w.title||'(無題)'; var a=w.author?('／'+w.author):'';
+      return '<option value="'+esc(id)+'">'+esc(t)+esc(a)+'　['+esc(id)+']</option>';
+    }).join('');
+  }catch(e){ $('wid').innerHTML='<option value="">（一覧を取得できませんでした。下の欄にIDを入力）</option>'; }
+})();
+
+$('whoGet').onclick=async function(){
+  var id=widNow(); if(!id){ wshow('err','作品を選ぶか、作品IDを入力してください。'); return; }
+  $('whoNow').textContent='';
+  try{
+    var r=await fetch('/api/author/works/'+encodeURIComponent(id)+'/owner',{cache:'no-store'});
+    var j=await r.json();
+    if(!r.ok){ wshow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
+    $('wmsg').className='msg';
+    $('whoNow').textContent='「'+(j.title||id)+'」のいまの作者: '+(j.ownerEmail||'（未設定）');
+    if(j.ownerEmail) $('wmail').value=j.ownerEmail;
+  }catch(e){ wshow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+};
+
+async function wput(email){
+  var id=widNow(); if(!id){ wshow('err','作品を選ぶか、作品IDを入力してください。'); return; }
+  try{
+    var r=await fetch('/api/author/works/'+encodeURIComponent(id)+'/owner',{method:'PUT',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerEmail:email})});
+    var j=await r.json();
+    if(!r.ok){ wshow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
+    wshow('ok',email
+      ? ('「'+id+'」の作者を '+j.after+' にしました。（前: '+(j.before||'未設定')+'）')
+      : ('「'+id+'」の作者を外しました。（前: '+(j.before||'未設定')+'）'));
+    $('whoNow').textContent='いまの作者: '+(j.after||'（未設定）');
+  }catch(e){ wshow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+}
+
+$('wset').onclick=function(){
+  var em=$('wmail').value.trim();
+  if(!em){ wshow('err','メールアドレスを入力してください。'); return; }
+  if(!confirm('「'+widNow()+'」の作者を '+em+' にします。よろしいですか？')) return;
+  wput(em);
+};
+$('wclear').onclick=function(){
+  if(!confirm('「'+widNow()+'」の作者を外します。よろしいですか？')) return;
+  $('wmail').value=''; wput(null);
+};
 </script>
 </body>
 </html>
