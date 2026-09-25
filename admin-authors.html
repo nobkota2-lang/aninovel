@@ -166,23 +166,12 @@ var all=[];
 
 async function load(){
   show('ok','読み込んでいます…');
-  try{
-    var r=await fetch('/api/admin/applications',{cache:'no-store'});
-    if(r.status===401){ needLogin(); return; }
-    if(!r.ok){
-      var e=await r.json().catch(function(){return {};});
-      show('err',e.message||e.error||('エラー ('+r.status+')'));
-      return;
-    }
-    var j=await r.json();
-    all=j.applications||[];
-    $('msg').className='msg';
-    render();
-  }catch(e){
-    // Access のログインへリダイレクトされると、宛先が CSP で止められ
-    // fetch が例外になる。この場合はログインが切れている。
-    needLogin();
-  }
+  var res=await adminFetch('/api/admin/applications');
+  if(res.authRequired){ needLogin(); $('msg').className='msg'; return; }
+  if(!res.ok){ show('err',res.error); return; }
+  all=(res.data||{}).applications||[];
+  $('msg').className='msg';
+  render();
 }
 
 function needLogin(){
@@ -193,6 +182,38 @@ function needLogin(){
     'そのアドレスに使い捨ての番号が届きます。パスワードは使いません。<br>'+
     '番号を入れると、この画面に戻ってきます。</p></div>';
   $('msg').className='msg';
+}
+
+/* 管理用の通信をひとつにまとめる。
+   Access のログインが切れていると、宛先(cloudflareaccess.com)が
+   ブラウザに止められて fetch が例外になる。これを「通信に失敗」で
+   終わらせず、ログインの案内に変える。 */
+async function adminFetch(url, opts){
+  var r;
+  try{
+    r = await fetch(url, Object.assign({cache:'no-store'}, opts||{}));
+  }catch(e){
+    return { authRequired:true };            // Access のログインへ飛ばされた
+  }
+  if(r.status===401 || r.status===403) return { authRequired:true, status:r.status };
+  var ct = r.headers.get('content-type')||'';
+  if(ct.indexOf('json')<0){
+    // Access のログイン画面や 404 の HTML が返ってきた場合
+    var t = await r.text().catch(function(){return '';});
+    if(/cloudflareaccess|Sign in/i.test(t)) return { authRequired:true };
+    return { ok:false, status:r.status, error:(r.status===404
+      ? 'この機能はまだ配信されていません（デプロイが必要です）。'
+      : 'サーバが想定外の応答を返しました ('+r.status+')') };
+  }
+  var j = await r.json().catch(function(){ return {}; });
+  return { ok:r.ok, status:r.status, data:j, error:(r.ok?null:(j.message||j.error||('エラー ('+r.status+')'))) };
+}
+/* ログインが切れていたときの共通の出しかた */
+function authLost(msgEl){
+  if(msgEl){ msgEl.className='msg err';
+    msgEl.textContent='オーナーとしてのログインが切れています。下の「ログインする」から入り直してください。'; }
+  needLogin();
+  try{ $('list').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
 }
 
 function render(){
@@ -239,20 +260,17 @@ document.addEventListener('click',async function(ev){
     if(!confirm('承認しますか。申請者へログインのご案内が届きます。')) return;
   }
   b.disabled=true;
-  try{
-    var r=await fetch('/api/admin/applications',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:id,action:act,reason:reason})});
-    var j=await r.json();
-    if(r.ok){
-      show('ok',(act==='approve'?'承認しました。':'却下しました。')+
-        (j.mailed?'メールを送信しました。':'（メールは送信されていません）'));
-      await load();
-    }else{
-      show('err',j.message||j.error||('エラー ('+r.status+')'));
-      b.disabled=false;
-    }
-  }catch(e){ show('err','通信に失敗しました。'); b.disabled=false; }
+  var res=await adminFetch('/api/admin/applications',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id,action:act,reason:reason})});
+  if(res.authRequired){ authLost($('msg')); b.disabled=false; return; }
+  if(res.ok){
+    show('ok',(act==='approve'?'承認しました。':'却下しました。')+
+      ((res.data||{}).mailed?'メールを送信しました。':'（メールは送信されていません）'));
+    await load();
+  }else{
+    show('err',res.error); b.disabled=false;
+  }
 });
 
 $('reload').onclick=load;
@@ -281,28 +299,26 @@ function widNow(){ return ($('widManual').value.trim() || $('wid').value || '');
 $('whoGet').onclick=async function(){
   var id=widNow(); if(!id){ wshow('err','作品を選ぶか、作品IDを入力してください。'); return; }
   $('whoNow').textContent='';
-  try{
-    var r=await fetch('/api/author/works/'+encodeURIComponent(id)+'/owner',{cache:'no-store'});
-    var j=await r.json();
-    if(!r.ok){ wshow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
-    $('wmsg').className='msg';
-    $('whoNow').textContent='「'+(j.title||id)+'」のいまの作者: '+(j.ownerEmail||'（未設定）');
-    if(j.ownerEmail) $('wmail').value=j.ownerEmail;
-  }catch(e){ wshow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+  var res=await adminFetch('/api/author/works/'+encodeURIComponent(id)+'/owner');
+  if(res.authRequired){ authLost($('wmsg')); return; }
+  if(!res.ok){ wshow('err',res.error); return; }
+  var j=res.data;
+  $('wmsg').className='msg';
+  $('whoNow').textContent='「'+(j.title||id)+'」のいまの作者: '+(j.ownerEmail||'（未設定）');
+  if(j.ownerEmail) $('wmail').value=j.ownerEmail;
 };
 
 async function wput(email){
   var id=widNow(); if(!id){ wshow('err','作品を選ぶか、作品IDを入力してください。'); return; }
-  try{
-    var r=await fetch('/api/author/works/'+encodeURIComponent(id)+'/owner',{method:'PUT',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerEmail:email})});
-    var j=await r.json();
-    if(!r.ok){ wshow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
-    wshow('ok',email
-      ? ('「'+id+'」の作者を '+j.after+' にしました。（前: '+(j.before||'未設定')+'）')
-      : ('「'+id+'」の作者を外しました。（前: '+(j.before||'未設定')+'）'));
-    $('whoNow').textContent='いまの作者: '+(j.after||'（未設定）');
-  }catch(e){ wshow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+  var res=await adminFetch('/api/author/works/'+encodeURIComponent(id)+'/owner',{method:'PUT',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({ownerEmail:email})});
+  if(res.authRequired){ authLost($('wmsg')); return; }
+  if(!res.ok){ wshow('err',res.error); return; }
+  var j=res.data;
+  wshow('ok',email
+    ? ('「'+id+'」の作者を '+j.after+' にしました。（前: '+(j.before||'未設定')+'）')
+    : ('「'+id+'」の作者を外しました。（前: '+(j.before||'未設定')+'）'));
+  $('whoNow').textContent='いまの作者: '+(j.after||'（未設定）');
 }
 
 $('wset').onclick=function(){
@@ -339,16 +355,14 @@ $('uget').onclick=async function(){
   var em=$('uemail').value.trim();
   if(!em){ ushow('err','メールアドレスを入力してください。'); return; }
   $('unow').textContent='';
-  try{
-    var r=await fetch('/api/admin/users?email='+encodeURIComponent(em),{cache:'no-store'});
-    var j=await r.json();
-    if(r.status===404){ $('umsg').className='msg';
-      $('unow').textContent='このアドレスの登録はまだありません。ニックネームとパスワードを入れて「保存する」と、新しく作れます。';
-      $('unick').value=''; $('urAuthor').checked=false; $('urOwner').checked=false; $('ustatus').value='active';
-      return; }
-    if(!r.ok){ ushow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
-    $('umsg').className='msg'; fillUser(j.user);
-  }catch(e){ ushow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+  var res=await adminFetch('/api/admin/users?email='+encodeURIComponent(em));
+  if(res.authRequired){ authLost($('umsg')); return; }
+  if(res.status===404 && res.data){ $('umsg').className='msg';
+    $('unow').textContent='このアドレスの登録はまだありません。ニックネームとパスワードを入れて「保存する」と、新しく作れます。';
+    $('unick').value=''; $('urAuthor').checked=false; $('urOwner').checked=false; $('ustatus').value='active';
+    return; }
+  if(!res.ok){ ushow('err',res.error); return; }
+  $('umsg').className='msg'; fillUser(res.data.user);
 };
 
 $('usave').onclick=async function(){
@@ -362,25 +376,24 @@ $('usave').onclick=async function(){
   if(pw) body.password=pw;
   if(!confirm(em+' を保存します。\n権限: '+roleLabel(roles)+'\n状態: '+statusLabel(body.status)+
               (pw?'\nパスワードを入れ直します':'')+'\nよろしいですか？')) return;
-  try{
-    var r=await fetch('/api/admin/users',{method:'PUT',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var j=await r.json();
-    if(!r.ok){ ushow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
-    $('upw').value='';
-    ushow('ok',(j.created?'新しく作りました。':'保存しました。')+' これで '+em+' としてログインできます。');
-    fillUser(j.user);
-    if($('utable').innerHTML) loadUsers();
-  }catch(e){ ushow('err','通信に失敗しました。'); }
+  var res=await adminFetch('/api/admin/users',{method:'PUT',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(res.authRequired){ authLost($('umsg')); return; }
+  if(!res.ok){ ushow('err',res.error); return; }
+  var j=res.data;
+  $('upw').value='';
+  ushow('ok',(j.created?'新しく作りました。':'保存しました。')+' これで '+em+' としてログインできます。');
+  fillUser(j.user);
+  if($('utable').innerHTML) loadUsers();
 };
 
 async function loadUsers(){
   $('utable').innerHTML='<p class="hint" style="margin:0">読み込んでいます…</p>';
+  var res=await adminFetch('/api/admin/users');
+  if(res.authRequired){ $('utable').innerHTML=''; authLost($('umsg')); return; }
+  if(!res.ok){ $('utable').innerHTML='<p class="hint" style="margin:0">'+esc(res.error)+'</p>'; return; }
   try{
-    var r=await fetch('/api/admin/users',{cache:'no-store'});
-    var j=await r.json();
-    if(!r.ok){ $('utable').innerHTML='<p class="hint" style="margin:0">'+esc(j.message||j.error||('エラー ('+r.status+')'))+'</p>'; return; }
-    var us=j.users||[];
+    var us=(res.data||{}).users||[];
     if(!us.length){ $('utable').innerHTML='<p class="hint" style="margin:0">まだ誰も登録されていません。</p>'; return; }
     $('utable').innerHTML=us.map(function(u){
       return '<div class="row" style="justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)">'+
@@ -390,7 +403,7 @@ async function loadUsers(){
         '<div class="hint">'+esc(statusLabel(u.status))+(u.hasPassword?'':' ／ PW未設定')+'</div></div>'+
         '<button class="btn sm ghost" data-uedit="'+esc(u.email)+'">選ぶ</button></div>';
     }).join('');
-  }catch(e){ $('utable').innerHTML='<p class="hint" style="margin:0">通信に失敗しました。</p>'; }
+  }catch(e){ $('utable').innerHTML='<p class="hint" style="margin:0">一覧を表示できませんでした: '+esc(e.message||e)+'</p>'; }
 }
 $('ulist').onclick=loadUsers;
 document.addEventListener('click',function(ev){
