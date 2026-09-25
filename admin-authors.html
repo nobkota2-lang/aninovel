@@ -201,9 +201,16 @@ async function adminFetch(url, opts){
     // Access のログイン画面や 404 の HTML が返ってきた場合
     var t = await r.text().catch(function(){return '';});
     if(/cloudflareaccess|Sign in/i.test(t)) return { authRequired:true };
-    return { ok:false, status:r.status, error:(r.status===404
-      ? 'この機能はまだ配信されていません（デプロイが必要です）。'
-      : 'サーバが想定外の応答を返しました ('+r.status+')') };
+    // Cloudflare Pages は、対応する Function が無いパスに対して
+    //   GET  → 404(HTMLの「ページが見つかりません」)
+    //   PUT  → 405(中身なし)
+    // を返す。どちらも「この機能がまだ配信されていない」という意味。
+    if(r.status===404 || r.status===405){
+      return { ok:false, status:r.status, notDeployed:true,
+        error:'この機能がサーバにまだありません（'+r.status+'）。'+
+              'functions/ 以下の新しいファイルが push に含まれているかご確認ください。' };
+    }
+    return { ok:false, status:r.status, error:'サーバが想定外の応答を返しました ('+r.status+')' };
   }
   var j = await r.json().catch(function(){ return {}; });
   return { ok:r.ok, status:r.status, data:j, error:(r.ok?null:(j.message||j.error||('エラー ('+r.status+')'))) };
