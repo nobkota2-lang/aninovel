@@ -104,6 +104,55 @@ dl.kv dd{margin:0;word-break:break-word}
     </div>
     <div class="msg" id="wmsg"></div>
   </div>
+
+  <h1 style="margin-top:42px">利用者と権限</h1>
+  <p class="lead">アカウントを作る・権限を変える・パスワードを入れ直す。<br>
+    メールが届かないときも、ここから直接なおせます。</p>
+  <div class="card">
+    <label for="uemail">メールアドレス</label>
+    <div class="row" style="gap:8px;flex-wrap:nowrap">
+      <input id="uemail" type="email" placeholder="nob.kota2@gmail.com" autocomplete="off">
+      <button class="btn sm ghost" id="uget" style="white-space:nowrap">調べる</button>
+    </div>
+    <div id="unow" class="hint" style="margin-top:10px"></div>
+
+    <label for="unick" style="margin-top:20px">ニックネーム <span class="opt">新しく作るときは必須</span></label>
+    <input id="unick" autocomplete="off">
+
+    <label style="margin-top:20px">できること</label>
+    <div class="row" style="gap:18px">
+      <label class="row" style="gap:6px;margin:0;font-weight:400">
+        <input type="checkbox" checked disabled style="width:auto"> 読者（全員）</label>
+      <label class="row" style="gap:6px;margin:0;font-weight:400">
+        <input type="checkbox" id="urAuthor" style="width:auto"> 作者</label>
+      <label class="row" style="gap:6px;margin:0;font-weight:400">
+        <input type="checkbox" id="urOwner" style="width:auto"> オーナー</label>
+    </div>
+    <p class="hint">作者＝自分の作品を書いて公開できる。オーナー＝すべての作品を上書き公開できる。</p>
+
+    <label for="ustatus" style="margin-top:20px">状態</label>
+    <select id="ustatus">
+      <option value="active">使える（active）</option>
+      <option value="unverified">メール未確認（ログインできない）</option>
+      <option value="disabled">停止</option>
+    </select>
+
+    <label for="upw" style="margin-top:20px">パスワード <span class="opt">10文字以上・変えないときは空のまま</span></label>
+    <input id="upw" type="password" autocomplete="new-password">
+
+    <div class="row" style="margin-top:20px">
+      <button class="btn sm" id="usave">保存する</button>
+    </div>
+    <div class="msg" id="umsg"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="justify-content:space-between">
+      <strong>登録されている人</strong>
+      <button class="btn sm ghost" id="ulist">一覧を読み込む</button>
+    </div>
+    <div id="utable" style="margin-top:12px"></div>
+  </div>
 </div>
 
 <script>
@@ -139,9 +188,10 @@ async function load(){
 function needLogin(){
   $('list').innerHTML='<div class="card">'+
     '<p style="margin:0 0 14px">オーナーとしてのログインが必要です。</p>'+
-    '<a class="btn sm" href="/api/admin/applications" style="text-decoration:none">ログインする</a>'+
-    '<p class="hint" style="margin-top:12px">ログイン後に一覧(JSON)が表示されたら、'+
-    'このページに戻って再読込みしてください。</p></div>';
+    '<a class="btn sm" href="/api/admin/login?to=/admin-authors.html" style="text-decoration:none">ログインする</a>'+
+    '<p class="hint" style="margin-top:12px">メールアドレス（オーナー）を入れると、'+
+    'そのアドレスに使い捨ての番号が届きます。パスワードは使いません。<br>'+
+    '番号を入れると、この画面に戻ってきます。</p></div>';
   $('msg').className='msg';
 }
 
@@ -265,6 +315,91 @@ $('wclear').onclick=function(){
   if(!confirm('「'+widNow()+'」の作者を外します。よろしいですか？')) return;
   $('wmail').value=''; wput(null);
 };
+
+/* ===== 利用者と権限 ===== */
+function ushow(kind,text){ var m=$('umsg'); m.className='msg '+kind; m.textContent=text; }
+function roleLabel(roles){
+  roles=roles||[];
+  var a=[]; if(roles.indexOf('owner')>=0)a.push('オーナー');
+  if(roles.indexOf('author')>=0)a.push('作者'); a.push('読者');
+  return a.join('・');
+}
+function statusLabel(s){ return {active:'使える',unverified:'メール未確認',disabled:'停止'}[s]||s; }
+
+function fillUser(u){
+  $('unick').value=u.nickname||'';
+  $('urAuthor').checked=(u.roles||[]).indexOf('author')>=0;
+  $('urOwner').checked=(u.roles||[]).indexOf('owner')>=0;
+  $('ustatus').value=u.status||'unverified';
+  $('unow').textContent=u.email+' … '+roleLabel(u.roles)+' ／ '+statusLabel(u.status)+
+    (u.hasPassword?' ／ パスワードあり':' ／ パスワード未設定');
+}
+
+$('uget').onclick=async function(){
+  var em=$('uemail').value.trim();
+  if(!em){ ushow('err','メールアドレスを入力してください。'); return; }
+  $('unow').textContent='';
+  try{
+    var r=await fetch('/api/admin/users?email='+encodeURIComponent(em),{cache:'no-store'});
+    var j=await r.json();
+    if(r.status===404){ $('umsg').className='msg';
+      $('unow').textContent='このアドレスの登録はまだありません。ニックネームとパスワードを入れて「保存する」と、新しく作れます。';
+      $('unick').value=''; $('urAuthor').checked=false; $('urOwner').checked=false; $('ustatus').value='active';
+      return; }
+    if(!r.ok){ ushow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
+    $('umsg').className='msg'; fillUser(j.user);
+  }catch(e){ ushow('err','通信に失敗しました。オーナーとしてログインしているか確認してください。'); }
+};
+
+$('usave').onclick=async function(){
+  var em=$('uemail').value.trim();
+  if(!em){ ushow('err','メールアドレスを入力してください。'); return; }
+  var roles=['reader'];
+  if($('urAuthor').checked) roles.push('author');
+  if($('urOwner').checked) roles.push('owner');
+  var body={email:em, nickname:$('unick').value.trim(), roles:roles, status:$('ustatus').value};
+  var pw=$('upw').value;
+  if(pw) body.password=pw;
+  if(!confirm(em+' を保存します。\n権限: '+roleLabel(roles)+'\n状態: '+statusLabel(body.status)+
+              (pw?'\nパスワードを入れ直します':'')+'\nよろしいですか？')) return;
+  try{
+    var r=await fetch('/api/admin/users',{method:'PUT',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var j=await r.json();
+    if(!r.ok){ ushow('err',j.message||j.error||('エラー ('+r.status+')')); return; }
+    $('upw').value='';
+    ushow('ok',(j.created?'新しく作りました。':'保存しました。')+' これで '+em+' としてログインできます。');
+    fillUser(j.user);
+    if($('utable').innerHTML) loadUsers();
+  }catch(e){ ushow('err','通信に失敗しました。'); }
+};
+
+async function loadUsers(){
+  $('utable').innerHTML='<p class="hint" style="margin:0">読み込んでいます…</p>';
+  try{
+    var r=await fetch('/api/admin/users',{cache:'no-store'});
+    var j=await r.json();
+    if(!r.ok){ $('utable').innerHTML='<p class="hint" style="margin:0">'+esc(j.message||j.error||('エラー ('+r.status+')'))+'</p>'; return; }
+    var us=j.users||[];
+    if(!us.length){ $('utable').innerHTML='<p class="hint" style="margin:0">まだ誰も登録されていません。</p>'; return; }
+    $('utable').innerHTML=us.map(function(u){
+      return '<div class="row" style="justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)">'+
+        '<div style="min-width:0"><div>'+esc(u.nickname||'(名前なし)')+'</div>'+
+        '<div class="hint">'+esc(u.email)+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:.86rem">'+esc(roleLabel(u.roles))+'</div>'+
+        '<div class="hint">'+esc(statusLabel(u.status))+(u.hasPassword?'':' ／ PW未設定')+'</div></div>'+
+        '<button class="btn sm ghost" data-uedit="'+esc(u.email)+'">選ぶ</button></div>';
+    }).join('');
+  }catch(e){ $('utable').innerHTML='<p class="hint" style="margin:0">通信に失敗しました。</p>'; }
+}
+$('ulist').onclick=loadUsers;
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-uedit]');
+  if(!b) return;
+  $('uemail').value=b.getAttribute('data-uedit');
+  $('uget').click();
+  $('uemail').scrollIntoView({behavior:'smooth',block:'center'});
+});
 </script>
 </body>
 </html>

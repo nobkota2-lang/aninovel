@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v179_chars_btn_narrator_bg';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v181_server_identity_only';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -932,8 +932,8 @@ function showAuthorMore(btn){
 // 作者が他人の作品を読むときに読者の設定が使えなかった。
 function _canAuthorThisWork(){
   try{
-    var u=JSON.parse(localStorage.getItem('aninovel_user'));
-    if(!u||!u.loggedIn)return false;
+    var u=_srvUser();
+    if(!u)return false;
     var roles=u.roles||[u.role||'reader'];
     if(roles.indexOf('owner')>=0)return true;
     if(roles.indexOf('author')<0)return false;
@@ -942,7 +942,7 @@ function _canAuthorThisWork(){
     return !!owner&&owner===String(u.email||'').toLowerCase();
   }catch(e){return false;}
 }
-function _isOwner(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));if(!u||!u.loggedIn)return false;var roles=u.roles||[u.role||'reader'];return roles.indexOf('owner')>=0;}catch(e){return false;}}
+function _isOwner(){try{var u=_srvUser();if(!u)return false;var roles=u.roles||[u.role||'reader'];return roles.indexOf('owner')>=0;}catch(e){return false;}}
 function showExportMenu(btn){
   var old=document.getElementById('export-popup');if(old){old.remove();return;}
   var r=btn.getBoundingClientRect();
@@ -4896,7 +4896,11 @@ function saveEditModal(){if(!state.editingItem)return;if(_isTranslatedView()){co
 function toggleDarkMode(){state.darkMode=!state.darkMode;document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');render()}
 function dblClickChar(charId){var ch=state.characters.find(function(c){return c.id===charId});if(ch)openEditModal('character',ch)}
 
-function _isLoggedIn(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));return u&&u.loggedIn}catch(e){return false}}
+// 利用者として認めるのは、サーバのログイン(/api/auth/me)の写しだけ。
+// 以前はブラウザ内で作った記録でもログイン扱いにしていたため、
+// localStorage を書き換えるだけで作者やオーナーになれてしまっていた。
+function _srvUser(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));return (u&&u.loggedIn&&u._server)?u:null;}catch(e){return null;}}
+function _isLoggedIn(){return !!_srvUser();}
 function rIcon(cid,sz){
   // 話者未設定は他人のアイコンを流用せず、灰色の「—」で示す。
   // 以前は該当キャラが無いと**一覧の最後の人物**で代用していたため、
@@ -5808,7 +5812,7 @@ var READER_SAVE_MAX=20;
 var _RB_KEY='aninovel_reader_settings_v2';
 var _rb=null;                 // いまの利用者の設定一式(メモリ上の正本)
 var _rbPushTimer=null;
-function _rbUser(){try{var u=JSON.parse(localStorage.getItem('aninovel_user'));return (u&&u.loggedIn)?u:null;}catch(e){return null;}}
+function _rbUser(){return (typeof _srvUser==='function')?_srvUser():null;}
 function _rbUserKey(){var u=_rbUser();return u?String(u.id||u.email):'_anon';}
 function _rbEmpty(){return {v:2,works:{}};}
 // 旧い形（プロファイル）から移す。使用中だったものを「いまの設定」に、
@@ -6983,8 +6987,8 @@ function goHome(){
 }
 function toggleAuthorMode(){
     if(_portalMode){
-        var u=null;try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
-        if(!u||!u.loggedIn){alert(_trFull('作者モードを使うにはログインが必要です。ポータルから「新規登録（作者）」または「ログイン」してください。'));return;}
+        var u=_srvUser();
+        if(!u){alert(_trFull('作者モードを使うにはログインが必要です。ログイン画面へ進みます。'));location.href='/login.html?back='+encodeURIComponent(location.pathname+location.search);return;}
         var roles=u.roles||[u.role||'reader'];
         if(roles.indexOf('author')<0&&roles.indexOf('owner')<0){alert(_trFull('作者モードは作者またはオーナー登録済みのアカウントのみ利用できます。'));return;}
         if(!state.isAuthorMode&&!_canAuthorThisWork()){alert(_trFull('この作品はあなたの作品ではないため、作者モードでは開けません。'));return;}
@@ -7156,7 +7160,7 @@ window.onload=function(){
         // my_ プレフィックスならマイ作品(localStorage)から読み込む
         if(_workParam.indexOf('my_')===0){
             try{
-                var u=JSON.parse(localStorage.getItem('aninovel_user'));
+                var u=_srvUser();
                 var all=JSON.parse(localStorage.getItem('aninovel_my_works')||'{}');
                 var list=(u&&all[u.id])||[];
                 var mine=list.find(function(w){return w.id===_workParam});

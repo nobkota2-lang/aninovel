@@ -22,8 +22,10 @@
     publishedWorks: 'aninovel_published_works'
   };
 
-  // === オーナー ===
-  var OWNER_EMAIL = 'nob.kota2@gmail.com';
+  // オーナーかどうかは、サーバから返る roles だけで決める。
+  // 以前はここにオーナーのメールアドレスを書いて、そのアドレスなら
+  // 無条件に owner を付けていた。ブラウザ側の判定なので、誰でも
+  // localStorage を書き換えればオーナーになれてしまっていた。
 
   // === ユーティリティ ===
   function getLS(key) {
@@ -36,35 +38,35 @@
     return 'tok_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
   }
 
-  // === ユーザーディレクトリ・ロール管理 ===
-  function _dir() { return getLS(KEYS.usersDir) || {}; }
-  function _saveDir(d) { setLS(KEYS.usersDir, d); }
-  function _isOwnerEmail(email) { return (email || '').toLowerCase() === OWNER_EMAIL.toLowerCase(); }
+  // === ロールの整え ===
+  // 利用者の記録はサーバ(/api/auth/me)の写しだけ。
+  // ブラウザ内の利用者名簿(aninovel_users_dir)への書き込みは廃止した。
+  function _dir() { return getLS(KEYS.usersDir) || {}; }   // 古い記録の読み出しのみ
   function _migrateUser(u) {
     if (!u) return u;
     if (!Array.isArray(u.roles)) u.roles = u.role ? [u.role] : ['reader'];
-    if (_isOwnerEmail(u.email) && u.roles.indexOf('owner') === -1) u.roles.unshift('owner');
     if (!u.activeRole || u.roles.indexOf(u.activeRole) === -1) {
       u.activeRole = u.roles.indexOf('owner') >= 0 ? 'owner' : u.roles[0];
     }
     u.role = u.activeRole; // 後方互換
     return u;
   }
-  function _upsertDir(user) {
-    var d = _dir();
-    var key = user.email.toLowerCase();
-    var prev = d[key] || {};
-    d[key] = Object.assign({}, prev, {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      roles: user.roles,
-      authorProfile: user.authorProfile || prev.authorProfile || null,
-      suspended: prev.suspended || false,
-      createdAt: prev.createdAt || user.createdAt || new Date().toISOString()
-    });
-    _saveDir(d);
-  }
+
+  // 古い試作の名残を片づける。ログインはサーバだけになったので、
+  // ブラウザに残った利用者名簿・確認トークン・再設定トークンは使わない。
+  // サーバの写しでない古いログイン記録も、そのまま残すと
+  // 「ログインしているつもり」になるので消す。
+  (function _dropLegacyLogin(){
+    try {
+      var u = getLS(KEYS.user);
+      if (u && !u._server) localStorage.removeItem(KEYS.user);
+      // 確認トークン・再設定トークンはもう使わないので捨てる。
+      // 利用者名簿(aninovel_users_dir)は、オーナーの作品一覧で
+      // 作者名を出すのに読むだけなので残す(書き込みはしない)。
+      ['aninovel_pending_users','aninovel_pw_reset_tokens']
+        .forEach(function(k){ try { localStorage.removeItem(k); } catch (e) {} });
+    } catch (e) {}
+  })();
 
   // === カタログキャッシュ ===
   var _catalogCache = null;
@@ -226,9 +228,11 @@
      */
     getCurrentUser: function() {
       var local = getLS(KEYS.user);
-      function keepLocal() {
-        if (local && !local._server) { _migrateUser(local); setLS(KEYS.user, local); return local; }
-        return local || null;
+      // 通信できなかったときだけ、サーバの写しをそのまま使う。
+      // 写しでない記録(古い試作のログイン)は、もう利用者として扱わない。
+      function keepMirror() {
+        if (local && local._server) { _migrateUser(local); return local; }
+        return null;
       }
       return fetch('/api/auth/me', { cache: 'no-store', credentials: 'same-origin' })
         .then(function(r) { return r.ok ? r.json() : null; })
@@ -245,203 +249,48 @@
             setLS(KEYS.user, u);
             return u;
           }
-          // サーバでは未ログイン。写しが残っていれば消す。
-          if (local && local._server) { try { localStorage.removeItem(KEYS.user); } catch (e) {} return null; }
-          return keepLocal();
+          // サーバでは未ログイン。ブラウザ側の記録は理由を問わず消す。
+          try { localStorage.removeItem(KEYS.user); } catch (e) {}
+          return null;
         })
-        .catch(function() { return keepLocal(); });
+        .catch(function() { return keepMirror(); });
     },
 
-    /** ログイン（Phase 1: メール検証のみ） */
-    login: function(email, password) {
-      if (!email || email.indexOf('@') === -1) {
-        return Promise.reject(new Error('有効なメールアドレスを入力してください'));
-      }
-      if (!password || password.length < 4) {
-        return Promise.reject(new Error('パスワードは4文字以上必要です'));
-      }
-      var d = _dir();
-      var key = email.toLowerCase();
-      var rec = d[key];
-      // オーナー初回ログイン: 自動的にディレクトリに作成
-      if (!rec && _isOwnerEmail(email)) {
-        rec = {
-          id: 'user_' + Date.now(),
-          email: email,
-          displayName: 'オーナー',
-          roles: ['owner', 'author', 'reader'],
-          authorProfile: null,
-          suspended: false,
-          createdAt: new Date().toISOString()
-        };
-        d[key] = rec; _saveDir(d);
-      }
-      if (!rec) {
-        // 未登録メールは読者として自動作成（既存挙動を踏襲）
-        rec = {
-          id: 'user_' + Date.now(),
-          email: email,
-          displayName: email.split('@')[0],
-          roles: ['reader'],
-          authorProfile: null,
-          suspended: false,
-          createdAt: new Date().toISOString()
-        };
-        d[key] = rec; _saveDir(d);
-      }
-      if (rec.suspended) return Promise.reject(new Error('このアカウントは停止中です'));
-      var user = {
-        id: rec.id, email: rec.email, displayName: rec.displayName,
-        roles: rec.roles.slice(), loggedIn: true, verified: true,
-        authorProfile: rec.authorProfile, createdAt: rec.createdAt
-      };
-      _migrateUser(user);
-      setLS(KEYS.user, user);
-      return Promise.resolve(user);
+    // ---- 旧 localStorage ログインは廃止 ----
+    // ログイン・登録・パスワード再設定はサーバ(/api/auth/*)に一本化した。
+    // 呼び出し元が残っていても落ちないよう、名前だけ残して案内を返す。
+    _movedTo: function(where, what) {
+      return Promise.reject(new Error(what + 'は ' + where + ' で行います。'));
     },
+    login: function() { return this._movedTo('/login.html', 'ログイン'); },
+    register: function() { return this._movedTo('/register.html（作者は /author-apply.html）', '登録'); },
+    confirmRegistration: function() { return this._movedTo('メールのリンク', 'メールアドレスの確認'); },
 
-    /** アクティブロールを切替 */
+    /** 使う立場(読者/作者/オーナー)の切り替え。権限そのものはサーバが決める。 */
     switchActiveRole: function(role) {
       var u = getLS(KEYS.user);
       if (!u || !u.loggedIn) return Promise.reject(new Error('ログインが必要です'));
       _migrateUser(u);
-      if (u.roles.indexOf(role) === -1) return Promise.reject(new Error('このロールは未登録です: ' + role));
+      if (u.roles.indexOf(role) === -1) return Promise.reject(new Error('この立場は与えられていません: ' + role));
       u.activeRole = role; u.role = role;
       setLS(KEYS.user, u);
       return Promise.resolve(u);
     },
 
-    /** ユーザー仮登録（メール確認トークン発行） */
-    register: function(data) {
-      if (!data.email || data.email.indexOf('@') === -1) {
-        return Promise.reject(new Error('有効なメールアドレスを入力してください'));
-      }
-      if (!data.password || data.password.length < 6) {
-        return Promise.reject(new Error('パスワードは6文字以上必要です'));
-      }
-      if (!data.displayName || data.displayName.trim() === '') {
-        return Promise.reject(new Error('表示名を入力してください'));
-      }
-      if (data.role === 'author') {
-        if (!data.realName || data.realName.trim() === '') {
-          return Promise.reject(new Error('氏名を入力してください'));
-        }
-        if (!data.address || data.address.trim() === '') {
-          return Promise.reject(new Error('住所を入力してください'));
-        }
-        if (!data.phone || data.phone.trim() === '') {
-          return Promise.reject(new Error('電話番号を入力してください'));
-        }
-      }
-
-      // 同一メールで既に別ロール登録がある場合は、マージ用の情報を pending に付与
-      var d = _dir();
-      var existing = d[data.email.toLowerCase()];
-      var token = genToken();
-      var pending = getLS(KEYS.pendingUsers) || {};
-      pending[token] = {
-        email: data.email,
-        password: data.password,
-        displayName: data.displayName,
-        role: data.role || 'reader',
-        realName: data.realName || '',
-        address: data.address || '',
-        phone: data.phone || '',
-        mergeToExisting: !!existing,
-        createdAt: new Date().toISOString()
-      };
-      setLS(KEYS.pendingUsers, pending);
-
-      // Phase 1: 実際のメール送信はできないので、トークンを返してUI側でシミュレート
-      return Promise.resolve({
-        success: true,
-        status: 'pending',
-        token: token,
-        message: '仮登録完了。メールに記載の確認URLにアクセスしてください。'
-      });
-    },
-
-    /** メール確認（トークンで本登録） */
-    confirmRegistration: function(token) {
-      var pending = getLS(KEYS.pendingUsers) || {};
-      var data = pending[token];
-      if (!data) {
-        return Promise.reject(new Error('無効または期限切れの確認トークンです'));
-      }
-
-      var d = _dir();
-      var key = data.email.toLowerCase();
-      var rec = d[key];
-      var authorProfile = null;
-      if (data.role === 'author') {
-        authorProfile = { realName: data.realName, address: data.address, phone: data.phone };
-        setLS(KEYS.authorProfile, authorProfile);
-      }
-      if (rec) {
-        // 既存ユーザーにロールを追加
-        if (rec.roles.indexOf(data.role) === -1) rec.roles.push(data.role);
-        if (authorProfile) rec.authorProfile = authorProfile;
-        rec.displayName = data.displayName || rec.displayName;
-      } else {
-        rec = {
-          id: 'user_' + Date.now(),
-          email: data.email,
-          displayName: data.displayName,
-          roles: [data.role],
-          authorProfile: authorProfile,
-          suspended: false,
-          createdAt: data.createdAt
-        };
-      }
-      if (_isOwnerEmail(data.email) && rec.roles.indexOf('owner') === -1) rec.roles.unshift('owner');
-      d[key] = rec; _saveDir(d);
-
-      var user = {
-        id: rec.id, email: rec.email, displayName: rec.displayName,
-        roles: rec.roles.slice(), loggedIn: true, verified: true,
-        authorProfile: rec.authorProfile, createdAt: rec.createdAt,
-        activeRole: data.role
-      };
-      _migrateUser(user);
-      user.activeRole = data.role; user.role = data.role;
-      setLS(KEYS.user, user);
-      delete pending[token];
-      setLS(KEYS.pendingUsers, pending);
-
-      return Promise.resolve(user);
-    },
-
     // ========== オーナー管理機能 ==========
 
+    // オーナーかどうかは、サーバのログイン(_server)で得た roles だけで判断する。
     _requireOwner: function() {
       var u = getLS(KEYS.user);
-      if (!u || !u.loggedIn) throw new Error('ログインが必要です');
+      if (!u || !u.loggedIn || !u._server) throw new Error('ログインが必要です');
       _migrateUser(u);
       if (u.roles.indexOf('owner') === -1) throw new Error('オーナー権限が必要です');
       return u;
     },
 
-    /** 全ユーザー一覧（オーナー限定） */
-    adminListUsers: function(filter) {
-      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
-      var d = _dir();
-      var list = Object.keys(d).map(function(k) { return d[k]; });
-      if (filter === 'author') list = list.filter(function(u) { return u.roles.indexOf('author') >= 0; });
-      else if (filter === 'reader') list = list.filter(function(u) { return u.roles.indexOf('reader') >= 0; });
-      return Promise.resolve(list);
-    },
-
-    /** ユーザーをサスペンド／復活 */
-    adminSetSuspended: function(email, suspended) {
-      try { this._requireOwner(); } catch(e) { return Promise.reject(e); }
-      if (_isOwnerEmail(email)) return Promise.reject(new Error('オーナーアカウントは停止できません'));
-      var d = _dir();
-      var key = (email || '').toLowerCase();
-      if (!d[key]) return Promise.reject(new Error('ユーザーが見つかりません'));
-      d[key].suspended = !!suspended;
-      _saveDir(d);
-      return Promise.resolve({ success: true });
-    },
+    /** 利用者の一覧と停止は、Cloudflare Access で守られた管理画面に移した */
+    adminListUsers: function() { return this._movedTo('/admin-authors.html の「利用者と権限」', '利用者の一覧'); },
+    adminSetSuspended: function() { return this._movedTo('/admin-authors.html の「利用者と権限」', 'アカウントの停止・復活'); },
 
     /** 全作品一覧（オーナー限定：全作者のマイ作品） */
     adminListAllWorks: function() {
@@ -513,38 +362,8 @@
       return Promise.resolve(!!susp[workId]);
     },
 
-    /** パスワード再設定リクエスト */
-    requestPasswordReset: function(email) {
-      if (!email || email.indexOf('@') === -1) {
-        return Promise.reject(new Error('有効なメールアドレスを入力してください'));
-      }
-      var token = genToken();
-      var tokens = getLS(KEYS.pwResetTokens) || {};
-      tokens[token] = { email: email, createdAt: new Date().toISOString() };
-      setLS(KEYS.pwResetTokens, tokens);
-
-      return Promise.resolve({
-        success: true,
-        token: token,
-        message: 'パスワード再設定用のメールを送信しました。'
-      });
-    },
-
-    /** パスワード再設定実行 */
-    resetPassword: function(token, newPassword) {
-      if (!newPassword || newPassword.length < 6) {
-        return Promise.reject(new Error('パスワードは6文字以上必要です'));
-      }
-      var tokens = getLS(KEYS.pwResetTokens) || {};
-      var data = tokens[token];
-      if (!data) {
-        return Promise.reject(new Error('無効または期限切れのトークンです'));
-      }
-      // Phase 1: パスワードはlocalStorageには保存しない（モック）
-      delete tokens[token];
-      setLS(KEYS.pwResetTokens, tokens);
-      return Promise.resolve({ success: true, message: 'パスワードを再設定しました。新しいパスワードでログインしてください。' });
-    },
+    requestPasswordReset: function() { return this._movedTo('/login.html の「パスワードを忘れた方」', 'パスワードの再設定'); },
+    resetPassword: function() { return this._movedTo('メールに届くリンク', 'パスワードの再設定'); },
 
     /** ログアウト */
     logout: function() {
