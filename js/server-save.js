@@ -90,7 +90,7 @@
           console.info('[Publish] 原文が変わったので訳を更新:',Object.keys(_need).filter(function(k){return _need[k];}).join(', '));
         } else { console.info('[Publish] 原文に変更なし → 手書きの訳を維持しました'); }
       }catch(_te){console.warn('[Publish] カードmeta翻訳スキップ:',_te);} body.meta=m; }
-      var r=await fetch('/api/author/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      var r=await fetch('/api/writer/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
       if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
       else if(r.status===401){
@@ -98,7 +98,7 @@
         // 進めないので、別タブで開いてもらう。
         if(!silent && confirm(_t('ログインの有効期限が切れました。ログイン画面を開きますか。\nログイン後、もう一度保存してください。',
           'Your login has expired. Open the login page?\nSave again after signing in.'))){
-          window.open('/api/author/works/'+encodeURIComponent(w), '_blank');
+          window.open('/api/writer/works/'+encodeURIComponent(w), '_blank');
         }
         return false;
       }
@@ -120,7 +120,7 @@
   async function restoreWorkVersion(w, ver){
     if(!confirm(_t('v'+ver+'に復元?','Restore v'+ver+'?'))) return;
     try { var r=await fetch('/api/works/'+encodeURIComponent(w)+'?version='+ver); var d=await r.json(); if(!d.data){alert(_t('失敗','Failed'));return;}
-      var pr=await fetch('/api/author/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,note:'v'+ver+'復元'})});
+      var pr=await fetch('/api/writer/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,note:'v'+ver+'復元'})});
       var p=await pr.json(); if(pr.ok && p.ok){ alert(_t('✅ 復元完了','✅ Restored')); location.reload(); } } catch(e){ alert('err:'+e.message); }
   }
   

@@ -85,11 +85,13 @@ async function checkOwner(context, kv, id) {
   // Access の使い捨て番号でも、サイトのログインでも、同じ結論になる。
   let who = null;
   try { who = await whoAmI(request, env); } catch (e) { who = null; }
-  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
-  if (accessOn && !who) {
+  // 誰か分からなければ書かせない。
+  // 以前は Access の環境変数が未設定のとき素通ししていた。
+  // この処理は /api/writer/* からも呼ばれ、そちらは Access の外にあるため、
+  // 素通りさせると誰でも作品を書き換えられてしまう。
+  if (!who) {
     return { deny: json({ error: 'unauthorized', message: '保存にはログインが必要です。' }, 401) };
   }
-  if (!who) return { who: null, ownerEmail: null };
   if (!hasRole(who, 'author') && !hasRole(who, 'owner')) {
     return { deny: json({ error: 'forbidden', message: '作者かオーナーのアカウントが必要です。' }, 403) };
   }
