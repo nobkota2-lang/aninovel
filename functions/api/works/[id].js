@@ -18,6 +18,9 @@
  *   DELETE /api/works/pub_xxxxx              … 削除
  */
 
+import { sameSite, denyHotlink } from '../../_origin.js';
+import { currentUser } from '../../_authlib.js';
+
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 const CATALOG_KEY = '__catalog__';
@@ -50,6 +53,25 @@ async function readCatalog(kv) {
 }
 
 // バージョン履歴を読む
+/** 版の履歴を見てよい人か。よければ null、だめなら断りの応答を返す。 */
+async function maySeeVersions(context, kv, id) {
+  let u = null;
+  try { u = await currentUser(context.request, context.env); } catch (e) { u = null; }
+  if (!u) return json({ error: 'unauthorized', message: '版の履歴を見るにはログインが必要です。' }, 401);
+  const roles = u.roles || [];
+  if (roles.indexOf('owner') !== -1) return null;
+  let ownerEmail = null;
+  try {
+    const cur = await kv.get('work:' + id);
+    if (cur) {
+      const pj = JSON.parse(cur);
+      if (pj && pj.ownerEmail) ownerEmail = String(pj.ownerEmail).toLowerCase();
+    }
+  } catch (e) {}
+  if (ownerEmail && ownerEmail === String(u.email || '').toLowerCase()) return null;
+  return json({ error: 'forbidden', message: 'この作品の版の履歴は作者とオーナーだけが見られます。' }, 403);
+}
+
 async function readVersionList(kv, id) {
   try {
     const cur = await kv.get('versions:' + id);
@@ -63,6 +85,9 @@ async function readVersionList(kv, id) {
 
 // GET /api/works/:id
 export async function onRequestGet(context) {
+  // 他所のページから当サイトの本文を読ませる形の複製を断る。
+  if (!sameSite(context.request)) return denyHotlink('この作品');
+
   const id = context.params.id;
   if (!id || !ID_RE.test(id)) {
     return json({ error: 'invalid work id: ' + String(id) + ' (allowed: starts with a letter, then [A-Za-z0-9_-], max 100 chars)' }, 400);
@@ -73,6 +98,13 @@ export async function onRequestGet(context) {
   }
 
   const url = new URL(context.request.url);
+
+  // 版の履歴は、その作品の作者とオーナーだけが見られる。
+  // 以前は誰でも取れたため、下書きや削った文章まで外から読めていた。
+  if (url.searchParams.get('versions') || url.searchParams.get('version')) {
+    const gate = await maySeeVersions(context, kv, id);
+    if (gate) return gate;
+  }
 
   // ?versions=1 → バージョン履歴一覧
   if (url.searchParams.get('versions')) {
@@ -101,6 +133,7 @@ export async function onRequestGet(context) {
   if (stored === null) {
     return json({ error: 'not found' }, 404);
   }
+
   return new Response(stored, {
     status: 200,
     headers: {

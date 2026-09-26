@@ -14,6 +14,8 @@
  *   GET /api/catalog  …  { version:'server', works:[ <カタログエントリ> ] }
  */
 
+import { sameSite, denyHotlink } from '../_origin.js';
+
 const CATALOG_KEY = '__catalog__';
 
 // バインディング名を両対応 (WORKS 優先、なければ WORKS_KV) — [id].js と一致
@@ -33,6 +35,9 @@ function json(obj, status) {
 
 // GET /api/catalog — 投稿作品の一覧
 export async function onRequestGet(context) {
+  // 作品の一覧は、海賊版サイトが中身を集めるときの目次になる。
+  // 他所のページからの読み込みは断る。
+  if (!sameSite(context.request)) return denyHotlink('作品の一覧');
   const kv = getKV(context.env);
   if (!kv) {
     return json({ version: 'server', works: [], error: 'KV (WORKS / WORKS_KV) 未バインド' });

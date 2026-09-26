@@ -25,6 +25,7 @@
 //   summer-adventure  … 同梱作品(スラッグ形式・ハイフンを含む)
 // R2のキーは pubId + '/' + itemId なので、'/' を含まないことだけが要件。
 import { requireWrite } from '../../_auth.js';
+import { signWork, verifyWork, SIGN_TTL_MS } from '../../_sign.js';
 
 const ID_RE = /^(?:pub_[A-Za-z0-9_]{1,80}|[A-Za-z][A-Za-z0-9_-]{0,99})$/;
 const ITEM_RE = /^[A-Za-z0-9_\-]{1,120}$/;
@@ -101,20 +102,36 @@ export async function onRequestGet(context) {
       }
       cursor = listed.truncated ? listed.cursor : null;
     } while (cursor);
-    return json({ workId: pubId, items: items });
+    // 署名を同梱する。ビューアはこれを音声URLに付けて取りに来る。
+    // 取得のための往復を増やさないよう、マニフェストに載せる。
+    const sign = await signWork(context.env, pubId, SIGN_TTL_MS);
+    return json({ workId: pubId, items: items, sign: sign, ttl: SIGN_TTL_MS });
   }
+
+  // GET /api/audio/{pubId}?sign=1 — 署名だけ取り直す(期限切れ前の更新用)
+  // ※ parts.length === 1 の分岐より前に置くと一覧が取れなくなるため、ここには来ない。
 
   // GET /api/audio/{pubId}/{itemId} — 音声ファイル
   if (parts.length === 2) {
     const itemId = parts[1];
     if (!ITEM_RE.test(itemId)) return json({ error: 'invalid item id' }, 400);
+    // 期限付きの署名を確かめる。AUDIO_SIGN_KEY 未設定なら素通し(従来どおり)。
+    const u = new URL(context.request.url);
+    const ok = await verifyWork(context.env, pubId, u.searchParams.get('e'), u.searchParams.get('s'));
+    if (!ok) {
+      return json({
+        error: 'signature_invalid',
+        message: 'この音声URLは期限切れです。ページを開き直してください。',
+      }, 403);
+    }
     const obj = await bucket.get(pubId + '/' + itemId);
     if (!obj) return json({ error: 'not found' }, 404);
     return new Response(obj.body, {
       status: 200,
       headers: {
         'Content-Type': (obj.httpMetadata && obj.httpMetadata.contentType) || 'audio/wav',
-        'Cache-Control': 'public, max-age=3600',
+        // 署名の寿命より長く持たせない(期限切れURLが中継され続けないように)
+        'Cache-Control': 'private, max-age=900',
       },
     });
   }

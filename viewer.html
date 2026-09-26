@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v181_server_identity_only';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v182_signed_audio';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -2582,6 +2582,7 @@ function _buildAudioSources(){
   var serverP=(wid&&wid.indexOf('pub_')===0)
     ?fetch('/api/audio/'+encodeURIComponent(wid)).then(function(r){return r.ok?r.json():{items:{}};}).catch(function(){return {items:{}};})
     :Promise.resolve({items:{}});
+  serverP=serverP.then(function(m){ _audioSignSet(m&&m.sign); return m; });
   return Promise.all([serverP].concat(relIds.map(function(w){return _idbKeysByWork(w).catch(function(){return [];});}))).then(function(results){
     var serverManifest=results[0]||{items:{}};
     var lists=results.slice(1);
@@ -2633,6 +2634,30 @@ function _resolveAudioUrlAsync(itemId){
   }
   return Promise.resolve(_resolveAudioUrl(itemId));
 }
+// ===== 音声URLの署名 =====
+// サーバは音声の一覧と一緒に、30分だけ有効な署名を返す。
+// URLに付けて送ると本体が取れる。盗まれても期限で切れる。
+// 読み続けて期限が近づいたら、裏で取り直しておく。
+var _audioSign=null, _audioSignTimer=null;
+function _audioSignSet(sign){
+  _audioSign=(sign&&sign.s&&sign.e)?sign:null;
+  clearTimeout(_audioSignTimer);
+  if(!_audioSign)return;
+  var left=_audioSign.e-Date.now()-5*60*1000;   // 期限の5分前に更新
+  _audioSignTimer=setTimeout(_audioSignRenew, Math.max(30*1000,left));
+}
+function _audioSignRenew(){
+  var wid=_currentWorkId();
+  if(!wid||wid.indexOf('pub_')!==0)return;
+  fetch('/api/audio/'+encodeURIComponent(wid),{cache:'no-store'})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(m){ if(m&&m.sign){_audioSignSet(m.sign);console.info('[audio] 署名を取り直しました');} })
+    .catch(function(){ clearTimeout(_audioSignTimer); _audioSignTimer=setTimeout(_audioSignRenew,60*1000); });
+}
+function _audioSignQS(){
+  if(!_audioSign)return '';
+  return '?e='+encodeURIComponent(_audioSign.e)+'&s='+encodeURIComponent(_audioSign.s);
+}
 function _resolveAudioUrl(itemId){
   var src=(typeof _getAudioSrc==='function')?_getAudioSrc(itemId):_audioSources[itemId];
   if(!src)return null;
@@ -2640,7 +2665,7 @@ function _resolveAudioUrl(itemId){
     return {url:_audioBaseUrl()+encodeURIComponent(itemId)+'.wav',revoke:false};
   }
   if(src.type==='server'){
-    return {url:'/api/audio/'+encodeURIComponent(src.workId)+'/'+encodeURIComponent(itemId),revoke:false};
+    return {url:'/api/audio/'+encodeURIComponent(src.workId)+'/'+encodeURIComponent(itemId)+_audioSignQS(),revoke:false};
   }
   if(src.type==='idb'&&src.blob){
     var u=URL.createObjectURL(src.blob);return {url:u,revoke:true};
