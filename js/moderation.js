@@ -28,8 +28,40 @@
     {id:'spam',label:'スパム・宣伝',desc:'広告、勧誘、無関係なリンクの大量投稿'},
     {id:'illegal',label:'違法行為',desc:'犯罪を肯定、薬物使用、詐欺、その他法令違反'},
     {id:'minor',label:'未成年者に有害',desc:'未成年者の保護に支障'},
+    {id:'selfharm',label:'自傷・自殺の誘引',desc:'自傷や自殺の方法を具体的に示す、またはそれを勧める内容'},
     {id:'other',label:'その他',desc:'上記に該当しないが問題があると考えるもの'}
   ];
+
+  /* 画面の理由と、サーバー(/api/objections)の理由の対応。
+     サーバー側は種類を絞ってあるので、近いものへ寄せる。 */
+  var SERVER_REASON={
+    copyright:'copyright', sexual:'obscene', violence:'violence', hate:'hate',
+    harassment:'other', privacy:'privacy', spam:'other', illegal:'illegal',
+    minor:'minor', selfharm:'selfharm', other:'other'
+  };
+
+  /* 運営者へ差し止めの請求として届ける。
+     これまでは Slack / メールへ流すだけで、運営者の手元に積み上がらなかった。
+     いまは作品ごとに集計され、管理画面の「読者からの差し止め請求」に並ぶ。 */
+  async function sendObjection(workId, reasonId, comment){
+    try{
+      var res=await fetch('/api/objections',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body:JSON.stringify({
+          workId: workId,
+          reasonId: SERVER_REASON[reasonId] || 'other',
+          comment: comment || ''
+        })
+      });
+      var j=null; try{ j=await res.json(); }catch(e){}
+      if(!res.ok) return {ok:false, message:(j&&j.message)||('送信に失敗しました（'+res.status+'）')};
+      return {ok:true, message:(j&&j.message)||'受け付けました。', already:!!(j&&j.alreadySent)};
+    }catch(e){
+      return {ok:false, message:'通信に失敗しました。時間をおいてもう一度お試しください。'};
+    }
+  }
 
   function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -84,7 +116,7 @@
       +'</div></div>'
       +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">詳細 (任意、最大1000文字)</label><textarea id="anrep-detail" rows="4" maxlength="1000" placeholder="該当箇所、具体的な侵害内容など" style="width:100%;padding:8px;border:1px solid #E2DCD4;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px"></textarea></div>'
       +'<div style="margin-bottom:14px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#666"><input type="checkbox" id="anrep-pledge"> 上記が真実であることを宣誓します</label></div>'
-      +'<div style="display:flex;gap:8px;justify-content:flex-end"><button id="anrep-cancel" style="padding:10px 20px;border:1px solid #E2DCD4;background:#fff;border-radius:6px;cursor:pointer">キャンセル</button><button id="anrep-submit" style="padding:10px 24px;background:#C0392B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">通報する</button></div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end"><button id="anrep-cancel" style="padding:10px 20px;border:1px solid #E2DCD4;background:#fff;border-radius:6px;cursor:pointer">キャンセル</button><button id="anrep-submit" style="padding:10px 24px;background:#C0392B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">運営者に知らせる</button></div>'
       +'<div id="anrep-msg" style="margin-top:10px;font-size:12px;color:#C0392B;display:none"></div>';
     ov.appendChild(bx);
     document.body.appendChild(ov);
@@ -97,7 +129,7 @@
       var detail=document.getElementById('anrep-detail').value.trim();
       var pledge=document.getElementById('anrep-pledge').checked;
       var msg=document.getElementById('anrep-msg');msg.style.display='block';
-      if(!reasonEl){msg.textContent='通報理由を選択してください';return;}
+      if(!reasonEl){msg.textContent='理由を選んでください';return;}
       if(!pledge){msg.textContent='宣誓のチェックが必要です';return;}
       var rep={
         id:uid(),
@@ -115,8 +147,26 @@
         canary:(window.AninovelAntiPiracy&&window.AninovelAntiPiracy.getCanary&&window.AninovelAntiPiracy.getCanary())||null
       };
       enqueue(rep);
-      bx.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:12px">✓</div><h3 style="color:#10B981;font-weight:700;margin-bottom:8px">通報を受け付けました</h3><p style="color:#666;font-size:13px;line-height:1.7">運営にて確認の上、<br><a href="/legal/dmca.html" style="color:#C0392B">著作権侵害通報窓口</a>に定める手続に従い対応します。<br><br>受付ID: <code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+rep.id+'</code></p><div style="margin-top:20px"><button id="anrep-done" style="padding:10px 24px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">閉じる</button></div></div>';
-      document.getElementById('anrep-done').onclick=close;
+      msg.textContent='送信しています…';
+      var btn=document.getElementById('anrep-submit');
+      if(btn){btn.disabled=true;btn.style.opacity='.6';}
+
+      sendObjection(opts.workId||opts.targetId, reasonEl.value, detail).then(function(r){
+        bx.innerHTML='<div style="text-align:center;padding:20px">'+
+          '<div style="font-size:48px;margin-bottom:12px">'+(r.ok?'✓':'⚠')+'</div>'+
+          '<h3 style="color:'+(r.ok?'#10B981':'#C0392B')+';font-weight:700;margin-bottom:8px">'+
+            (r.ok?(r.already?'すでに受け付けています':'受け付けました'):'送信できませんでした')+'</h3>'+
+          '<p style="color:#666;font-size:13px;line-height:1.7">'+escHtml(r.message)+'<br><br>'+
+            (r.ok
+              ? '運営者が内容を確認し、必要と判断した場合は公開を中止します。<br>'+
+                '判断には少しお時間をいただきます。<br><br>'+
+                '<a href="/legal/dmca.html" style="color:#C0392B">著作権侵害に関する窓口</a>もございます。'
+              : 'お手数ですが、時間をおいてもう一度お試しください。')+
+            '<br><br>受付ID: <code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+escHtml(rep.id)+'</code>'+
+          '</p>'+
+          '<div style="margin-top:20px"><button id="anrep-done" style="padding:10px 24px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">閉じる</button></div></div>';
+        document.getElementById('anrep-done').onclick=close;
+      });
     };
   }
 
@@ -161,6 +211,7 @@
 
   window.AninovelModeration={
     openReportDialog:openReportDialog,
+    sendObjection:sendObjection,
     openModerationPanel:openModerationPanel,
     listPending:loadQueue,
     flushPending:flushPending,

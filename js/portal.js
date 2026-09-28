@@ -532,6 +532,13 @@
             style: 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;color:#fff;background:'
                  + (D ? D.statusColor(st) : '#6B635A')
           }, D ? D.statusLabel(st) : st));
+          // 公開中でも、直したぶんはまだ読者に届いていない
+          if (st === 'published' && w.pendingChanges) {
+            titleRow.appendChild(h('span', {
+              style: 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;'
+                   + 'color:#B45309;background:rgba(245,158,11,.16)'
+            }, '変更あり・未審査'));
+          }
           info.appendChild(titleRow);
           info.appendChild(h('div', { style: 'font-size:11px;color:var(--text-muted)' }, '更新: ' + formatDate(w.updatedAt)));
 
@@ -543,7 +550,15 @@
           }
           if (st === 'review') {
             info.appendChild(h('div', { style: 'font-size:11px;color:#B45309;margin-top:4px' },
-              '公開を依頼しました。運営者の確認をお待ちください。'));
+              w.publishedId
+                ? '変更の公開を依頼しました。確認のあいだも、いまの版は読者が読めます。'
+                : '公開を依頼しました。運営者の確認をお待ちください。'));
+          }
+          if (st === 'published' && w.pendingChanges) {
+            info.appendChild(h('div', {
+              style: 'font-size:11px;color:#B45309;margin-top:4px;padding:6px 8px;'
+                   + 'background:rgba(245,158,11,.10);border-radius:4px'
+            }, '直したぶんはまだ読者に届いていません。「変更の公開を依頼」を押すと、運営者が確認します。'));
           }
           row.appendChild(info);
 
@@ -552,8 +567,22 @@
           row.appendChild(openBtn);
 
           // 公開の依頼 / 取り下げ
-          (function(wid, wTitle, status, itemCount) {
+          (function(wid, wTitle, status, itemCount, pending) {
             var act;
+            // 公開中でも、直したぶんが未審査なら「変更の公開を依頼」を出す
+            if (status === 'published' && pending) {
+              act = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#B45309;font-size:11px',
+                title: '直したぶんを運営者が確認し、承認されると読者に届きます' }, '\u{1F4E4} 変更の公開を依頼');
+              act.onclick = function(e) {
+                e.stopPropagation();
+                if (!confirm('「' + wTitle + '」の変更の公開を依頼しますか？\n\n運営者が確認し、承認されると読者に届きます。\n確認のあいだも、いまの版は読者が読めます。')) return;
+                S.publishWork(wid)
+                  .then(function() { toast('変更の公開を依頼しました。'); refresh(); })
+                  .catch(function(err) { toast(err.message || '依頼に失敗しました'); });
+              };
+              row.insertBefore(act, row.lastChild);
+              return;
+            }
             if (status === 'review' || status === 'published') {
               var label = (status === 'published') ? '\u{1F4E5} 公開を止める' : '\u{1F4E5} 依頼を取り下げ';
               act = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#F59E0B;font-size:11px' }, label);
@@ -579,7 +608,7 @@
               };
             }
             row.insertBefore(act, row.lastChild);
-          })(w.id, w.title, st, w.itemCount);
+          })(w.id, w.title, st, w.itemCount, !!w.pendingChanges);
 
           var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626' }, '\u{1F5D1}️');
           delBtn.onclick = function() {

@@ -91,6 +91,42 @@ dl.kv dd{margin:0;word-break:break-word}
   <div id="rvList"></div>
   <div class="msg" id="rvMsg"></div>
 
+  <h1 style="margin-top:42px">公開中の作品</h1>
+  <p class="lead">いま読者が読める作品の一覧です。問題が見つかった作品は、ここから公開を止められます。<br>
+    <strong>止めても作品は消えません。</strong>読者から見えなくなるだけで、作者の手元には残ります。</p>
+
+  <div class="row" style="margin-bottom:16px">
+    <button class="btn sm ghost" id="pbReload">再読み込み</button>
+  </div>
+  <div id="pbList"></div>
+  <div class="msg" id="pbMsg"></div>
+
+  <h1 style="margin-top:42px">読者からの差し止め請求</h1>
+  <p class="lead">読者が「公開を止めてほしい」と申し出た作品です。件数の多い順に並びます。<br>
+    <strong>請求だけでは作品は止まりません。</strong>中身を読んで、必要なら「公開中の作品」から止めてください。</p>
+
+  <div class="row" style="margin-bottom:16px">
+    <button class="btn sm ghost" id="objReload">再読み込み</button>
+    <label class="row" style="gap:6px;margin:0;font-weight:400;font-size:.9rem">
+      <input type="checkbox" id="objOnlyNew" checked style="width:auto"> 未確認だけ表示
+    </label>
+  </div>
+  <div id="objList"></div>
+  <div class="msg" id="objMsg"></div>
+
+  <h1 style="margin-top:42px">AI の確認だけで公開された編集</h1>
+  <p class="lead">運営者を通さずに公開された変更の記録です。念のため、あとから目を通せるようにしてあります。<br>
+    気になるものは開いて確かめ、問題がなければ「確認済み」にしてください。</p>
+
+  <div class="row" style="margin-bottom:16px">
+    <button class="btn sm ghost" id="alReload">再読み込み</button>
+    <label class="row" style="gap:6px;margin:0;font-weight:400;font-size:.9rem">
+      <input type="checkbox" id="alOnlyNew" checked style="width:auto"> 未確認だけ表示
+    </label>
+  </div>
+  <div id="alList"></div>
+  <div class="msg" id="alMsg"></div>
+
   <h1 style="margin-top:42px">作品の作者を決める</h1>
   <p class="lead">その作品を「自分の作品」として編集・公開できる人を1人だけ指定します。<br>
     ここで指定された人だけが、その作品で作者モードに入れます。</p>
@@ -472,6 +508,44 @@ var rvQueue=[];
 
 function rvShow(kind,text){ var m=$('rvMsg'); m.className='msg '+(kind||''); m.textContent=text||''; }
 
+/* AI の判定を、運営者が5秒で読めるように出す。
+   ここで大事なのは「どこを見ればよいか」が分かること。
+   全文を読み直さずに済むよう、差分の件数を前に出している。 */
+function rvAiBlock(ai){
+  if(!ai){
+    return '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;'+
+      'background:rgba(107,99,90,.08);font-size:.86rem;color:var(--muted)">'+
+      'AI の審査結果がありません（この機能より前に依頼されたものです）。全文をご確認ください。</div>';
+  }
+  var look={
+    ok:      {c:'#059669', t:'AI: 問題は見つかりませんでした'},
+    flag:    {c:'#F59E0B', t:'AI: 判断に迷う箇所があります'},
+    block:   {c:'#DC2626', t:'AI: 公開できない表現の疑いがあります'},
+    unknown: {c:'#6B635A', t:'AI: 判定できませんでした'}
+  }[ai.verdict]||{c:'#6B635A', t:'AI: 判定なし'};
+
+  var d=ai.diff||null;
+  var diffText='';
+  if(d){
+    diffText = d.isFirst
+      ? '初回の投稿です。全文が審査の対象です。'
+      : ('前回の承認から　追加 '+(d.added||0)+'件 ／ 変更 '+(d.changed||0)+'件 ／ 削除 '+(d.removed||0)+'件'+
+         ((d.newMedia)?' ／ <strong style="color:#DC2626">画像・動画が'+d.newMedia+'点増えています</strong>':'')+
+         '　（AI が見たのは追加と変更の部分です）');
+  }
+
+  return '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;'+
+      'background:rgba(0,0,0,.03);border-left:4px solid '+look.c+'">'+
+    '<div style="font-weight:700;font-size:.9rem;color:'+look.c+'">'+esc(look.t)+'</div>'+
+    (diffText?'<div class="hint" style="margin-top:6px">'+diffText+'</div>':'')+
+    ((ai.categories&&ai.categories.length)
+      ? '<div style="margin-top:6px;font-size:.86rem">該当: '+esc(ai.categories.join('、'))+'</div>' : '')+
+    ((ai.reasons&&ai.reasons.length)
+      ? '<ul style="margin:6px 0 0;padding-left:18px;font-size:.86rem">'+
+        ai.reasons.map(function(r){return '<li>'+esc(r)+'</li>';}).join('')+'</ul>' : '')+
+    '</div>';
+}
+
 function rvStatusLabel(s){
   return {draft:'下書き',review:'審査待ち',published:'公開中',rejected:'差し戻し'}[s]||s||'下書き';
 }
@@ -509,6 +583,7 @@ function rvRender(){
         '<dt>本文の数</dt><dd>'+esc(String(d.itemCount||0))+' 件</dd>'+
         '<dt>作品ID</dt><dd style="font-family:monospace;font-size:.85rem">'+esc(d.id)+'</dd>'+
       '</dl>'+
+      rvAiBlock(d.aiReview)+
       '<div class="row" style="margin-top:14px;flex-wrap:wrap">'+
         '<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(d.id)+'" target="_blank" '+
           'rel="noopener" style="text-decoration:none">📖 中身を読む（別のタブ）</a>'+
@@ -561,6 +636,240 @@ document.addEventListener('click',function(ev){
   if(!note){ rvShow('err','差し戻すときは理由が必要です。'); return; }
   rvShow('ok','差し戻しています…');
   rvAct(id, false, note);
+});
+
+/* ============================================================
+   公開中の作品 ／ 公開の中止
+   ------------------------------------------------------------
+   審査の窓口とは別にしてある。審査は「作者が依頼したもの」を見る場で、
+   公開したあとに問題が見つかった作品は、そこにいないため。
+   昔からある作品（下書きを経ていないもの）もここから止められる。
+
+   止めても作品は消さない。カタログと公開用の本体から外すだけで、
+   作者の下書きは残る。直して出し直せば、また審査を経て公開できる。
+   ============================================================ */
+
+var pbWorks=[];
+
+function pbShow(kind,text){ var m=$('pbMsg'); m.className='msg '+(kind||''); m.textContent=text||''; }
+
+async function pbLoad(){
+  pbShow('ok','読み込んでいます…');
+  var res=await adminFetch('/api/admin/published');
+  if(res.authRequired){ authLost($('pbMsg')); return; }
+  if(!res.ok){ pbShow('err',res.error); return; }
+  pbWorks=(res.data||{}).works||[];
+  pbShow('');
+  pbRender();
+}
+
+function pbRender(){
+  var el=$('pbList');
+  if(!pbWorks.length){
+    el.innerHTML='<div class="card"><p style="margin:0;color:var(--muted)">公開中の作品はありません。</p></div>';
+    return;
+  }
+  el.innerHTML='<div class="card"><p class="hint" style="margin:0 0 12px">'+
+      pbWorks.length+'件が公開されています。</p>'+
+    pbWorks.map(function(w){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;'+
+          'border-top:1px solid var(--line);flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:200px">'+
+          '<div style="font-weight:600">'+esc(w.title)+'</div>'+
+          '<div class="hint">'+esc(w.author||'作者名なし')+
+            ' ／ <span style="font-family:monospace;font-size:.85rem">'+esc(w.id)+'</span>'+
+            (w.updatedAt?' ／ 更新 '+esc(new Date(w.updatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})):'')+
+          '</div>'+
+        '</div>'+
+        '<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(w.id)+'" target="_blank" '+
+          'rel="noopener" style="text-decoration:none">📖 読む</a>'+
+        '<button class="btn sm ghost" data-pb="stop" data-id="'+esc(w.id)+'" '+
+          'style="color:#DC2626">公開を中止する</button>'+
+      '</div>';
+    }).join('')+'</div>';
+}
+
+$('pbReload').onclick=pbLoad;
+pbLoad();
+
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-pb]');
+  if(!b) return;
+  var id=b.getAttribute('data-id');
+  var w=pbWorks.filter(function(x){return x.id===id;})[0]||{};
+  var title=w.title||id;
+
+  var reason=prompt('「'+title+'」の公開を中止します。\n理由を書いてください（作者の画面に表示されます）。\n\n例: 公序良俗に反する表現が含まれているため','');
+  if(reason===null) return;
+  reason=String(reason).trim();
+  if(!reason){ pbShow('err','公開を中止するときは理由が必要です。'); return; }
+  if(!confirm('「'+title+'」の公開を中止しますか？\n\n読者から見えなくなります。作品そのものは消えません。')) return;
+
+  pbShow('ok','公開を中止しています…');
+  (async function(){
+    var res=await adminFetch('/api/admin/published',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id, reason:reason})
+    });
+    if(res.authRequired){ authLost($('pbMsg')); return; }
+    if(!res.ok){ pbShow('err',res.error); return; }
+    pbShow('ok','「'+title+'」の公開を中止しました。'+((res.data||{}).message||''));
+    pbLoad();
+    rvLoad();
+  })();
+});
+
+/* ============================================================
+   読者からの差し止め請求 ／ AI の確認だけで公開された編集
+   ------------------------------------------------------------
+   請求が何件あっても、ここでは作品を止めない。
+   止めるのは「公開中の作品」の区画で、理由を書いて行う。
+   件数だけで自動的に止める作りにすると、
+   嫌がらせで他人の作品を落とせてしまうため。
+   ============================================================ */
+
+var objRows=[], objReasons={}, alRows=[];
+
+function objShow(k,t){ var m=$('objMsg'); m.className='msg '+(k||''); m.textContent=t||''; }
+function alShow(k,t){ var m=$('alMsg'); m.className='msg '+(k||''); m.textContent=t||''; }
+
+async function objLoad(){
+  objShow('ok','読み込んでいます…');
+  var res=await adminFetch('/api/admin/objections');
+  if(res.authRequired){ authLost($('objMsg')); return; }
+  if(!res.ok){ objShow('err',res.error); alShow('err',res.error); return; }
+  var d=res.data||{};
+  objRows=d.objections||[];
+  objReasons=d.reasons||{};
+  alRows=d.autoPublished||[];
+  objShow(''); alShow('');
+  objRender(); alRender();
+}
+
+function objRender(){
+  var onlyNew=$('objOnlyNew').checked;
+  var rows=objRows.filter(function(r){ return !onlyNew || !r.handled; });
+  var el=$('objList');
+  if(!rows.length){
+    el.innerHTML='<div class="card"><p style="margin:0;color:var(--muted)">'+
+      (onlyNew?'未確認の差し止め請求はありません。':'差し止め請求はありません。')+'</p></div>';
+    return;
+  }
+  el.innerHTML=rows.map(function(r){
+    var top=Object.keys(r.reasons||{}).sort(function(a,b){return r.reasons[b]-r.reasons[a];});
+    var heavy = r.count>=3;
+    return '<div class="card" style="margin-bottom:14px'+(heavy?';border-color:#DC2626':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'+
+        '<div style="min-width:0">'+
+          '<div style="font-weight:700;font-family:monospace;font-size:.95rem">'+esc(r.workId)+'</div>'+
+          '<div class="hint">最初の請求 '+esc(r.first?new Date(r.first).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+
+            ' ／ 最新 '+esc(r.last?new Date(r.last).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</div>'+
+        '</div>'+
+        '<span style="font-size:.8rem;font-weight:700;padding:3px 12px;border-radius:99px;color:#fff;'+
+          'background:'+(heavy?'#DC2626':(r.count>=2?'#F59E0B':'#6B635A'))+'">'+r.count+' 件</span>'+
+      '</div>'+
+      (top.length?'<div style="margin-top:10px;font-size:.88rem">理由: '+
+        esc(top.map(function(k){return (objReasons[k]||k)+'（'+r.reasons[k]+'）';}).join('、'))+'</div>':'')+
+      '<div id="objd_'+esc(r.workId)+'" class="hint" style="margin-top:8px"></div>'+
+      '<div class="row" style="margin-top:12px;flex-wrap:wrap">'+
+        '<button class="btn sm ghost" data-obj="detail" data-id="'+esc(r.workId)+'">請求の中身を見る</button>'+
+        '<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(r.workId)+'" target="_blank" '+
+          'rel="noopener" style="text-decoration:none">📖 作品を読む</a>'+
+        '<button class="btn sm ghost" data-obj="handled" data-id="'+esc(r.workId)+'">'+
+          (r.handled?'未確認に戻す':'確認済みにする')+'</button>'+
+      '</div>'+
+      '<p class="hint" style="margin:10px 0 0">公開を止める場合は、上の「公開中の作品」から理由を書いて止めてください。</p>'+
+    '</div>';
+  }).join('');
+}
+
+async function objDetail(workId){
+  var box=$('objd_'+workId);
+  if(!box) return;
+  box.textContent='読み込んでいます…';
+  var res=await adminFetch('/api/admin/objections?work='+encodeURIComponent(workId));
+  if(res.authRequired){ authLost($('objMsg')); return; }
+  if(!res.ok){ box.textContent=res.error; return; }
+  var items=(res.data||{}).items||[];
+  if(!items.length){ box.textContent='中身を取り出せませんでした。'; return; }
+  box.innerHTML='<div style="margin-top:6px;border-top:1px solid var(--line);padding-top:8px">'+
+    items.map(function(it){
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--line)">'+
+        '<div style="font-size:.86rem"><strong>'+esc(it.reasonLabel)+'</strong>'+
+          ' <span class="hint">'+esc(it.reporter==='member'?'会員':'未ログイン')+
+          ' ／ '+esc(it.at?new Date(it.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</span></div>'+
+        (it.comment?'<div class="bio" style="margin-top:4px">'+esc(it.comment)+'</div>':'')+
+      '</div>';
+    }).join('')+'</div>';
+}
+
+function alRender(){
+  var onlyNew=$('alOnlyNew').checked;
+  var rows=alRows.filter(function(r){ return !onlyNew || !r.checked; });
+  var el=$('alList');
+  if(!rows.length){
+    el.innerHTML='<div class="card"><p style="margin:0;color:var(--muted)">'+
+      (onlyNew?'未確認の自動公開はありません。':'自動公開の記録はありません。')+'</p></div>';
+    return;
+  }
+  el.innerHTML='<div class="card">'+rows.map(function(r,i){
+    var d=r.diff||{};
+    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;'+
+        (i?'border-top:1px solid var(--line);':'')+'flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:200px">'+
+        '<div style="font-weight:600">'+esc(r.title||'（無題）')+
+          (r.checked?'':' <span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:99px;'+
+            'color:#B45309;background:rgba(245,158,11,.16)">未確認</span>')+'</div>'+
+        '<div class="hint">'+esc(r.ownerEmail||'')+' ／ '+
+          esc(r.at?new Date(r.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</div>'+
+        '<div class="hint">追加 '+(d.added||0)+'件 ／ 変更 '+(d.changed||0)+'件 ／ 削除 '+(d.removed||0)+'件</div>'+
+      '</div>'+
+      (r.publishedId?'<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(r.publishedId)+
+        '" target="_blank" rel="noopener" style="text-decoration:none">📖 読む</a>':'')+
+      (r.checked?'':'<button class="btn sm ghost" data-al="check" data-id="'+esc(r.id)+'">確認済みにする</button>')+
+    '</div>';
+  }).join('')+'</div>';
+}
+
+$('objReload').onclick=objLoad;
+$('alReload').onclick=objLoad;
+$('objOnlyNew').onchange=objRender;
+$('alOnlyNew').onchange=alRender;
+objLoad();
+
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-obj],button[data-al]');
+  if(!b) return;
+  var id=b.getAttribute('data-id');
+
+  if(b.hasAttribute('data-al')){
+    (async function(){
+      var res=await adminFetch('/api/admin/objections',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({autoLogId:id})
+      });
+      if(res.authRequired){ authLost($('alMsg')); return; }
+      if(!res.ok){ alShow('err',res.error); return; }
+      alShow('ok','確認済みにしました。');
+      objLoad();
+    })();
+    return;
+  }
+
+  var act=b.getAttribute('data-obj');
+  if(act==='detail'){ objDetail(id); return; }
+
+  var row=objRows.filter(function(x){return x.workId===id;})[0]||{};
+  (async function(){
+    var res=await adminFetch('/api/admin/objections',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({workId:id, handled:!row.handled})
+    });
+    if(res.authRequired){ authLost($('objMsg')); return; }
+    if(!res.ok){ objShow('err',res.error); return; }
+    objShow('ok',(res.data||{}).message||'更新しました。');
+    objLoad();
+  })();
 });
 </script>
 </body>

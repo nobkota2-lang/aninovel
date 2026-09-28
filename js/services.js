@@ -708,6 +708,7 @@
               id: w.id, title: w.title, description: w.description || '',
               createdAt: w.createdAt, updatedAt: w.updatedAt,
               status: w.status, publishedId: w.publishedId || null,
+              pendingChanges: !!w.pendingChanges,
               reviewNote: w.reviewNote || '', submittedAt: w.submittedAt || null,
               itemCount: w.itemCount || 0,
             };

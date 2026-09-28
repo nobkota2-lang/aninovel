@@ -63,8 +63,17 @@ export async function onRequestPut(context) {
     d.reviewNote = '';
   }
 
+  // すでに公開されている作品を書き換えたときは、その変更に印を付けるだけで、
+  // 読者に見えるものは承認済みの版のまま変えない。
+  // 初回だけ審査して、あとは編集し放題では審査の意味がないため。
+  // 作者がもう一度「公開を依頼」し、承認された時点で差し替わる。
+  if (d.status === STATUS.PUBLISHED || d.status === STATUS.REVIEW) {
+    d.pendingChanges = true;
+  }
+
   await writeDraft(r.store, d);
-  return json({ ok: true, id: d.id, status: d.status, savedAt: d.updatedAt });
+  return json({ ok: true, id: d.id, status: d.status, savedAt: d.updatedAt,
+    pendingChanges: !!d.pendingChanges });
 }
 
 export async function onRequestDelete(context) {

@@ -26,6 +26,15 @@
  *   review    … 作者が公開を依頼した。オーナーの審査待ち
  *   published … オーナーが承認して公開済み
  *   rejected  … 差し戻し。理由 (reviewNote) を付けて作者に返す
+ *
+ * 公開したあとの編集について
+ *   公開済みの作品を作者が書き換えても、その場では読者に届かない。
+ *   pendingChanges に印を付けるだけで、読者が読むのは承認済みの版のまま。
+ *   作者がもう一度「公開を依頼」し、オーナーが承認したときに差し替わる。
+ *   初回だけ審査して、あとは編集し放題では、審査の意味がないため。
+ *
+ *   審査中も、すでに公開されている版は下げない。誤字直しを審査に出したら
+ *   作品が読めなくなる、という不便を避けるため。
  */
 
 import { kvOf, normEmail } from './_authlib.js';
@@ -125,6 +134,13 @@ export function summarize(d) {
     reviewedAt: d.reviewedAt || null,
     reviewNote: d.reviewNote || '',
     publishedId: d.publishedId || null,
+    pendingChanges: !!d.pendingChanges,
+    aiReview: d.aiReview ? {
+      verdict: d.aiReview.verdict, level: d.aiReview.level,
+      categories: d.aiReview.categories || [], reasons: d.aiReview.reasons || [],
+      diff: d.aiReview.diff || null, model: d.aiReview.model || null,
+      at: d.aiReview.at || null,
+    } : null,
     itemCount: (d.data && Array.isArray(d.data.content)) ? d.data.content.length : 0,
   };
 }
@@ -166,6 +182,55 @@ export async function putInReview(store, draft) {
   q.sort((a, b) => String(a.submittedAt || '').localeCompare(String(b.submittedAt || '')));
   await store.put(REVIEW_KEY, JSON.stringify(q));
   await putRef(store, draft);
+}
+
+/* ---------------- 自動公開の記録 ---------------- */
+
+const AUTOLOG_KEY = '__drafts_autolog__';
+const AUTOLOG_MAX = 200;
+
+/**
+ * AI の確認だけで公開した編集を、運営者があとから見直せるように残す。
+ * 自動公開は「人が見ていない公開」なので、記録が無いと後で追えない。
+ * 運営者は管理画面でこの一覧を見て、気になるものを開いて確かめられる。
+ */
+export async function logAutoPublish(store, draft, ai) {
+  try {
+    const raw = await store.get(AUTOLOG_KEY);
+    let log = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(log)) log = [];
+    log.unshift({
+      id: draft.id,
+      publishedId: draft.publishedId || null,
+      title: draft.title || '',
+      ownerEmail: draft.ownerEmail || '',
+      at: new Date().toISOString(),
+      diff: (ai && ai.diff) || null,
+      model: (ai && ai.model) || null,
+      checked: false,          // 運営者が目を通したか
+    });
+    if (log.length > AUTOLOG_MAX) log.length = AUTOLOG_MAX;
+    await store.put(AUTOLOG_KEY, JSON.stringify(log));
+  } catch (e) { /* 記録に失敗しても公開そのものは成立している */ }
+}
+
+export async function readAutoLog(store) {
+  try {
+    const raw = await store.get(AUTOLOG_KEY);
+    const a = raw ? JSON.parse(raw) : [];
+    return Array.isArray(a) ? a : [];
+  } catch (e) { return []; }
+}
+
+/** 運営者が「確認した」と印を付ける。 */
+export async function markAutoLogChecked(store, id) {
+  try {
+    const log = await readAutoLog(store);
+    let hit = false;
+    log.forEach(e => { if (e && e.id === id && !e.checked) { e.checked = true; hit = true; } });
+    if (hit) await store.put(AUTOLOG_KEY, JSON.stringify(log));
+    return hit;
+  } catch (e) { return false; }
 }
 
 export async function dropFromReview(store, id) {

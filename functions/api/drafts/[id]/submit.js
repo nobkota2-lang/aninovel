@@ -10,8 +10,9 @@
 
 import {
   json, loadForReader, writeDraft, putInReview, dropFromReview,
-  unpublishWorkId, STATUS,
+  unpublishWorkId, publishDraft, logAutoPublish, STATUS,
 } from '../../../_drafts.js';
+import { reviewDraft } from '../../../_moderate.js';
 
 export async function onRequestPost(context) {
   const r = await loadForReader(context, context.params.id, { mineOnly: true });
@@ -25,14 +26,97 @@ export async function onRequestPost(context) {
   if (d.status === STATUS.REVIEW) {
     return json({ ok: true, id: d.id, status: d.status, message: 'すでに審査をお待ちいただいています。' });
   }
+  // 公開中の作品は、書き換えたときだけ再依頼できる。
+  // 変えていないのに依頼されても、審査する中身が無い。
+  if (d.status === STATUS.PUBLISHED && !d.pendingChanges) {
+    return json({
+      error: 'no_changes',
+      message: 'この作品はすでに公開中で、前回の承認から変更がありません。',
+    }, 409);
+  }
 
-  d.status = STATUS.REVIEW;
+  // ===== AI による公序良俗チェック =====
+  // 初回  … AI が見たうえで、必ず運営者が最終確認する
+  // 編集  … 前に承認した版との差分を AI が見る。問題が無ければ自動で公開。
+  //          疑わしい・判定できない・画像が増えた場合は運営者へ回す。
+  //
+  // 前に承認した版は、公開用の本体 work:<pubId> がそれにあたる。
+  let prevData = null;
+  if (d.publishedId) {
+    try {
+      const raw = await r.store.get('work:' + d.publishedId);
+      if (raw) prevData = JSON.parse(raw);
+    } catch (e) { prevData = null; }
+  }
+
+  let ai;
+  try {
+    ai = await reviewDraft(context.env, prevData, d.data);
+  } catch (e) {
+    // AI の呼び出しそのものが失敗した。素通りさせず、運営者へ回す。
+    ai = {
+      verdict: 'unknown', level: 'unknown', categories: [],
+      reasons: ['AI の審査を実行できませんでした（' + ((e && e.message) || '原因不明') + '）。運営者が確認してください。'],
+      diff: null, needsHuman: true, canAutoPublish: false,
+      checkedChars: 0, calls: 0, model: null, at: new Date().toISOString(),
+    };
+  }
+  d.aiReview = ai;
   d.submittedAt = new Date().toISOString();
   d.reviewNote = '';
+
+  // ===== 明らかに不適切なものは、運営者を待たせずその場で返す =====
+  if (ai.verdict === 'block') {
+    d.status = d.publishedId ? STATUS.PUBLISHED : STATUS.REJECTED;
+    d.reviewNote = 'AI の審査で、公開できない表現が見つかりました。'
+      + (ai.categories.length ? '（' + ai.categories.join('、') + '）' : '')
+      + (ai.reasons.length ? ' ' + ai.reasons[0] : '')
+      + ' 該当箇所を直してから、もう一度依頼してください。';
+    if (d.publishedId) d.pendingChanges = true;   // 公開中の版はそのまま
+    await writeDraft(r.store, d);
+    return json({
+      ok: false, blocked: true, id: d.id, status: d.status,
+      ai: { verdict: ai.verdict, categories: ai.categories, reasons: ai.reasons },
+      message: d.reviewNote,
+    }, 422);
+  }
+
+  // ===== 編集で、AI が問題なしと判断したものは自動で公開 =====
+  if (ai.canAutoPublish && d.publishedId) {
+    const pub = await publishDraft(r.store, d);
+    d.status = STATUS.PUBLISHED;
+    d.publishedId = pub.pubId;
+    d.pendingChanges = false;
+    d.reviewedAt = new Date().toISOString();
+    d.reviewNote = '';
+    d.autoPublishedAt = d.reviewedAt;
+    await writeDraft(r.store, d);
+    await dropFromReview(r.store, d.id);
+    // 運営者があとから見直せるよう、自動公開の記録を残す
+    await logAutoPublish(r.store, d, ai);
+    return json({
+      ok: true, id: d.id, status: d.status, autoPublished: true,
+      publishedId: pub.pubId,
+      ai: { verdict: ai.verdict, diff: ai.diff },
+      message: '変更を公開しました。AI の確認で問題は見つかりませんでした。',
+    });
+  }
+
+  // ===== それ以外は運営者の審査へ =====
+  // 公開中のものを再依頼する場合、publishedId は残したままにする。
+  // 審査のあいだも、すでに公開されている版は読めるようにしておくため。
+  d.status = STATUS.REVIEW;
   await writeDraft(r.store, d);
   await putInReview(r.store, d);
 
-  return json({ ok: true, id: d.id, status: d.status, submittedAt: d.submittedAt });
+  return json({
+    ok: true, id: d.id, status: d.status, submittedAt: d.submittedAt,
+    autoPublished: false,
+    ai: { verdict: ai.verdict, categories: ai.categories, reasons: ai.reasons, diff: ai.diff },
+    message: ai.diff && ai.diff.isFirst
+      ? '公開を依頼しました。運営者の確認をお待ちください。'
+      : '変更の公開を依頼しました。運営者の確認が必要な点がありましたので、確認をお待ちください。',
+  });
 }
 
 export async function onRequestDelete(context) {
