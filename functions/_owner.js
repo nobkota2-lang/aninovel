@@ -32,7 +32,8 @@ export async function whoAmI(request, env) {
   // 1) サイトのログイン（セッションクッキー）
   try {
     const su = await currentUser(request, env);
-    if (su) return { email: su.email, roles: (su.roles || ['reader']).slice(), via: 'session' };
+    // nickname は「画面に出す作者名」の初期値に使う。権限とは無関係。
+    if (su) return { email: su.email, nickname: su.nickname || '', roles: (su.roles || ['reader']).slice(), via: 'session' };
   } catch (e) {}
 
   // 2) Cloudflare Access（管理画面の入口）
@@ -42,7 +43,7 @@ export async function whoAmI(request, env) {
     const kv = kvOf(env);
     let u = null;
     try { u = kv ? await getUser(kv, acc.email) : null; } catch (e) {}
-    if (isActive(u)) return { email: u.email, roles: (u.roles || ['reader']).slice(), via: 'access' };
+    if (isActive(u)) return { email: u.email, nickname: u.nickname || '', roles: (u.roles || ['reader']).slice(), via: 'access' };
     // 利用者の記録がまだ無い＝立ち上げ直後。環境変数の指定でだけ通す。
     if (acc.isOwner) return { email: acc.email, roles: ['reader', 'author', 'owner'], via: 'access-bootstrap' };
     return { email: acc.email, roles: ['reader'], via: 'access' };

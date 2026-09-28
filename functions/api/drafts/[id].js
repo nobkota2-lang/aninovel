@@ -1,0 +1,80 @@
+/**
+ * 下書き1件の読み書き  /api/drafts/:id
+ * ------------------------------------------------------------
+ *   GET    /api/drafts/draft_xxx … 本文つきで取り出す
+ *   PUT    /api/drafts/draft_xxx … 保存 { data, title?, description?, penName? }
+ *   DELETE /api/drafts/draft_xxx … 削除 (公開済みなら公開も取り下げる)
+ *
+ * 読めるのは作者本人と、審査を依頼されたあとのオーナーだけ。
+ * 書けるのは作者本人だけ。オーナーでも他人の下書きは書き換えない。
+ *
+ * KV の無料枠は1日1,000書き込みしかない。1回の保存で
+ * 「本体」と「一覧」の2件を書くので、自動保存はしない。
+ * 端末側では今までどおり即座に localStorage へ控えを取り、
+ * サーバーへは保存ボタンを押したときだけ送る。
+ */
+
+import {
+  json, loadForReader, writeDraft, removeDraft, unpublishWorkId,
+  STATUS, MAX_BYTES,
+} from '../../_drafts.js';
+
+export async function onRequestGet(context) {
+  const r = await loadForReader(context, context.params.id);
+  if (r.deny) return r.deny;
+  return json({ ok: true, mine: r.mine, draft: r.draft });
+}
+
+export async function onRequestPut(context) {
+  const r = await loadForReader(context, context.params.id, { mineOnly: true });
+  if (r.deny) return r.deny;
+
+  let raw;
+  try { raw = await context.request.text(); }
+  catch (e) { return json({ error: 'bad_body', message: '本文を読み取れませんでした。' }, 400); }
+
+  if (new TextEncoder().encode(raw).length > MAX_BYTES) {
+    return json({ error: 'too_large', message: '作品データが大きすぎます (上限10MB)。' }, 413);
+  }
+
+  let body;
+  try { body = JSON.parse(raw); }
+  catch (e) { return json({ error: 'bad_json', message: 'JSON の形式が不正です。' }, 400); }
+  if (!body || typeof body !== 'object') {
+    return json({ error: 'bad_json', message: 'JSON の形式が不正です。' }, 400);
+  }
+
+  const data = (body.data && typeof body.data === 'object') ? body.data : null;
+  if (!data || !Array.isArray(data.content)) {
+    return json({ error: 'bad_data', message: '作品データの形式が不正です (content 配列が必要です)。' }, 400);
+  }
+
+  const d = r.draft;
+  d.data = data;
+  if (typeof body.title === 'string' && body.title.trim()) d.title = body.title.trim().slice(0, 200);
+  else if (data.novel && data.novel.title) d.title = String(data.novel.title).slice(0, 200);
+  if (typeof body.description === 'string') d.description = body.description.slice(0, 1000);
+  if (typeof body.penName === 'string' && body.penName.trim()) d.penName = body.penName.trim().slice(0, 100);
+
+  // 差し戻されたあとに手を入れたら、審査前の状態へ戻す。
+  // 直したのに「差し戻し」のままだと、作者が何をすべきか分からなくなる。
+  if (d.status === STATUS.REJECTED) {
+    d.status = STATUS.DRAFT;
+    d.reviewNote = '';
+  }
+
+  await writeDraft(r.store, d);
+  return json({ ok: true, id: d.id, status: d.status, savedAt: d.updatedAt });
+}
+
+export async function onRequestDelete(context) {
+  const r = await loadForReader(context, context.params.id, { mineOnly: true });
+  if (r.deny) return r.deny;
+
+  let unpublished = 0;
+  if (r.draft.publishedId) {
+    unpublished = await unpublishWorkId(r.store, r.draft.publishedId);
+  }
+  await removeDraft(r.store, r.draft.ownerEmail, r.draft.id);
+  return json({ ok: true, id: r.draft.id, unpublished });
+}
