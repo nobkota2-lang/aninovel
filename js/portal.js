@@ -515,52 +515,85 @@
 
     function refresh() {
       listEl.innerHTML = '';
+      var D = window.AninovelDrafts;
       S.getMyWorks().then(function(works) {
         if (!works.length) {
           listEl.appendChild(h('p', { style: 'text-align:center;color:var(--text-muted);padding:20px' }, 'まだ作品がありません。下の「新規作成」からはじめましょう。'));
           return;
         }
         works.forEach(function(w) {
+          var st = w.status || 'draft';
           var row = h('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px' });
           var info = h('div', { style: 'flex:1;min-width:0' });
-          info.appendChild(h('div', { style: 'font-weight:600' }, w.title));
+
+          var titleRow = h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' });
+          titleRow.appendChild(h('span', { style: 'font-weight:600' }, w.title));
+          titleRow.appendChild(h('span', {
+            style: 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;color:#fff;background:'
+                 + (D ? D.statusColor(st) : '#6B635A')
+          }, D ? D.statusLabel(st) : st));
+          info.appendChild(titleRow);
           info.appendChild(h('div', { style: 'font-size:11px;color:var(--text-muted)' }, '更新: ' + formatDate(w.updatedAt)));
+
+          // 差し戻されたときは、理由をその場に出す。別画面を探させない。
+          if (st === 'rejected' && w.reviewNote) {
+            info.appendChild(h('div', {
+              style: 'font-size:11px;color:#DC2626;margin-top:4px;padding:6px 8px;background:rgba(220,38,38,.07);border-radius:4px'
+            }, '差し戻しの理由: ' + w.reviewNote));
+          }
+          if (st === 'review') {
+            info.appendChild(h('div', { style: 'font-size:11px;color:#B45309;margin-top:4px' },
+              '公開を依頼しました。運営者の確認をお待ちください。'));
+          }
           row.appendChild(info);
-          var openBtn = h('button', { className: 'btn btn-author btn-sm' }, '\u270F\uFE0F 編集');
+
+          var openBtn = h('button', { className: 'btn btn-author btn-sm' }, '✏️ 編集');
           openBtn.onclick = function() { window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id); };
           row.appendChild(openBtn);
-          // 投稿/取り下げボタン
-          (function(wid, wTitle) {
-            S.isPublished(wid).then(function(isPub) {
-              if (isPub) {
-                var unpubBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#F59E0B;font-size:11px', title: '投稿を取り下げる' }, '\u{1F4E5} 取下');
-                unpubBtn.onclick = function(e) {
-                  e.stopPropagation();
-                  if (!confirm('「' + wTitle + '」の投稿を取り下げますか？')) return;
-                  S.unpublishWork(wid).then(function() { toast('取り下げました'); refresh(); });
-                };
-                row.insertBefore(unpubBtn, row.lastChild);
-                info.appendChild(h('span', { style: 'font-size:10px;color:#059669;font-weight:700' }, ' \u2714 投稿済'));
-              } else {
-                var pubBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#6366F1;font-size:11px', title: '読者に公開する' }, '\u{1F4E4} 投稿');
-                pubBtn.onclick = function(e) {
-                  e.stopPropagation();
-                  if (!w.data || !w.data.content || w.data.content.length === 0) { toast('コンテンツがない作品は投稿できません'); return; }
-                  if (!confirm('「' + wTitle + '」を投稿しますか？\n読者が読んで評価できるようになります。')) return;
-                  S.publishWork(wid).then(function() { toast('投稿しました！'); refresh(); });
-                };
-                row.insertBefore(pubBtn, row.lastChild);
-              }
-            });
-          })(w.id, w.title);
-          var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626' }, '\u{1F5D1}\uFE0F');
+
+          // 公開の依頼 / 取り下げ
+          (function(wid, wTitle, status, itemCount) {
+            var act;
+            if (status === 'review' || status === 'published') {
+              var label = (status === 'published') ? '\u{1F4E5} 公開を止める' : '\u{1F4E5} 依頼を取り下げ';
+              act = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#F59E0B;font-size:11px' }, label);
+              act.onclick = function(e) {
+                e.stopPropagation();
+                var msg = (status === 'published')
+                  ? '「' + wTitle + '」の公開を止めますか？\n読者から見えなくなります。作品そのものは残ります。'
+                  : '「' + wTitle + '」の公開の依頼を取り下げますか？';
+                if (!confirm(msg)) return;
+                S.unpublishWork(wid)
+                  .then(function() { toast(status === 'published' ? '公開を止めました' : '取り下げました'); refresh(); })
+                  .catch(function(err) { toast(err.message || '取り下げに失敗しました'); });
+              };
+            } else {
+              act = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#6366F1;font-size:11px', title: '運営者の確認を経て公開されます' }, '\u{1F4E4} 公開を依頼');
+              act.onclick = function(e) {
+                e.stopPropagation();
+                if (!itemCount) { toast('中身のない作品は依頼できません。まず本文を書いてください。'); return; }
+                if (!confirm('「' + wTitle + '」の公開を依頼しますか？\n\n運営者が内容を確認し、問題がなければ公開されます。\nこの時点ではまだ公開されません。')) return;
+                S.publishWork(wid)
+                  .then(function() { toast('公開を依頼しました。確認をお待ちください。'); refresh(); })
+                  .catch(function(err) { toast(err.message || '依頼に失敗しました'); });
+              };
+            }
+            row.insertBefore(act, row.lastChild);
+          })(w.id, w.title, st, w.itemCount);
+
+          var delBtn = h('button', { className: 'btn btn-ghost btn-sm', style: 'color:#DC2626' }, '\u{1F5D1}️');
           delBtn.onclick = function() {
-            if (!confirm('「' + w.title + '」を削除しますか？')) return;
-            S.deleteMyWork(w.id).then(function() { toast('削除しました'); refresh(); });
+            if (!confirm('「' + w.title + '」を削除しますか？\nこの操作は取り消せません。')) return;
+            S.deleteMyWork(w.id)
+              .then(function() { toast('削除しました'); refresh(); })
+              .catch(function(err) { toast(err.message || '削除に失敗しました'); });
           };
           row.appendChild(delBtn);
           listEl.appendChild(row);
         });
+      }).catch(function(err) {
+        listEl.appendChild(h('p', { style: 'text-align:center;color:#DC2626;padding:20px;font-size:13px' },
+          (err && err.message) || '作品の一覧を取得できませんでした。'));
       });
     }
     refresh();
@@ -572,6 +605,8 @@
       S.createMyWork({ title: title }).then(function(w) {
         toast('作成しました');
         window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id);
+      }).catch(function(err) {
+        toast((err && err.message) || '作品を作成できませんでした');
       });
     };
     content.appendChild(createBtn);

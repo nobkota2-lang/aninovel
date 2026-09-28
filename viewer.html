@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v184_author_publish';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v185_server_drafts';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -57,7 +57,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- 作品はサーバーに保存する。services.js より先に読み込む -->
+    <script src="js/drafts-client.js"></script>
     <script src="js/services.js"></script>
+    <script>
+    // 作品IDの世代
+    //   my_<時刻>   … 旧。端末の localStorage の中だけにあった作品
+    //   draft_<...> … 新。サーバーにある下書き（作者本人とオーナーだけが読める）
+    //   pub_<...>   … 公開済み。読者が読むもの
+    // 「自分が書いている作品か」の判定を1か所にまとめる。
+    // 以前は各所で _isMyDraftId(id) と書いていたため、
+    // 新しい draft_ を足すたびに書き漏らす危険があった。
+    function _isMyDraftId(id){
+      id = String(id == null ? '' : id);
+      return id.indexOf('draft_') === 0 || _isMyDraftId(id);
+    }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600;700&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=Shippori+Mincho:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;700&family=BIZ+UDPMincho&family=Klee+One:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&family=BIZ+UDPGothic&family=Zen+Maru+Gothic:wght@400;500;700&family=M+PLUS+1p:wght@400;500;700&display=swap" rel="stylesheet">
@@ -778,8 +793,24 @@ function scrollToItem(id,opt){
 function saveData(silent){try{
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   var payload={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
-  if(wp&&wp.indexOf('my_')===0){
-    if(typeof window._saveMyWork==='function'){window._saveMyWork();console.info('[Save] my_ → aninovel_my_works に保存',wp);}
+  if(wp&&wp.indexOf('draft_')===0){
+    // 下書きはサーバーが正本。端末の控えは drafts-client.js が先に取るので、
+    // 通信に失敗しても書いたものは消えない。
+    if(window.AninovelDrafts){
+      window.AninovelDrafts.save(wp,payload,{title:(state.novel&&state.novel.title)||''})
+        .then(function(){ if(!silent)showToast('サーバーに保存しました'); console.info('[Save] draft_ → サーバーに保存',wp); })
+        .catch(function(e){
+          console.warn('[Save] サーバーへの保存に失敗',e&&e.message);
+          showToast('保存できませんでした: '+((e&&e.message)||'通信エラー')+'（書いた内容はこの端末に残っています）');
+        });
+    }else{
+      console.warn('[Save] drafts-client.js が読み込まれていません');
+      showToast('保存機能を読み込めませんでした。ページを再読み込みしてください。');
+    }
+    return;
+  }else if(wp&&_isMyDraftId(wp)){
+    // 旧 my_ 作品。引っ越しが済むまでは、これまでどおり端末に保存する。
+    if(typeof window._saveMyWork==='function'){window._saveMyWork();console.info('[Save] my_ → 端末に保存',wp);}
     else{console.warn('[Save] _saveMyWork未定義');}
   }else if(wp&&wp.indexOf('pub_')===0){
     var pub=JSON.parse(localStorage.getItem('aninovel_published_works')||'{}');
@@ -937,7 +968,7 @@ function _canAuthorThisWork(){
     var roles=u.roles||[u.role||'reader'];
     if(roles.indexOf('owner')>=0)return true;
     if(roles.indexOf('author')<0)return false;
-    if(typeof _workParam==='string'&&_workParam.indexOf('my_')===0)return true;
+    if(typeof _workParam==='string'&&_isMyDraftId(_workParam))return true;
     var owner=state&&state._workOwnerEmail;
     return !!owner&&owner===String(u.email||'').toLowerCase();
   }catch(e){return false;}
@@ -2336,7 +2367,7 @@ function _audioBaseUrl(){
   // リポジトリに事前配置された音声のみ。投稿作品(pub_*)やマイ作品(my_*)は null を返す。
   var wp=(typeof _workParam!=='undefined')?_workParam:null;
   if(!wp)return null;
-  if(wp.indexOf('pub_')===0||wp.indexOf('my_')===0)return null;
+  if(wp.indexOf('pub_')===0||_isMyDraftId(wp))return null;
   return 'data/audio/'+encodeURIComponent(wp)+'/';
 }
 
@@ -2574,7 +2605,8 @@ function _loadAudioManifest(){
 // したパターンに対応)。逆方向(my_* を開いたとき pub_* を見に行く)は通常不要。
 function _relatedWorkIds(wid){
   var ids=[wid];
-  if(wid&&wid.indexOf('pub_')===0)ids.push('my_'+wid.slice(4));
+  if(wid&&wid.indexOf('pub_')===0){ids.push('my_'+wid.slice(4));ids.push('draft_'+wid.slice(4));}
+  else if(wid&&wid.indexOf('draft_')===0)ids.push('pub_'+wid.slice(6));
   else if(wid&&wid.indexOf('my_')===0)ids.push('pub_'+wid.slice(3));
   return ids;
 }
@@ -5591,7 +5623,14 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
   // 👥 を見せる相手: この作品の作者本人とオーナー。
   // すでに作者モードで開けている人は、経路に関わらず必ず見せる
   // (編集用のボタンが出ているのに登場人物だけ出ない、を防ぐ)。
-  var _showChars=_mayAuthor||state.isAuthorMode;var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf("my_")===0){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_canAuthorThisWork()){var _mineP=_isMyPubWork();h+='<button onclick="publishMyWork()" class="btn" style="background:'+(_mineP?'#6366F1':'#0E7490')+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+(_mineP?'この作品の変更を読者に公開する':'オーナー権限で他の人の作品を上書き公開')+'">'+(_mineP?'📤 公開保存':'📢 上書き公開')+'</button>';}h+='<button onclick="openClassifyReview()" class="btn" style="background:#8B5CF6;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="地の文・独白・会話を自動判定し、確信の持てないものだけ確認します">🔎 文の種別</button><button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button>'+(_showChars?'<button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="'+(state.isAuthorMode?'登場人物（追加・削除・編集）':'登場人物の一覧（作者モードで追加・削除）')+'">👥</button>':'')+'<button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span>'+_readerSaveButtonsHTML()+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button><button onclick="aiRefineSpeakers()" class="tool-chip" title="規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。">🎭 AI話者判定</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
+  var _showChars=_mayAuthor||state.isAuthorMode;var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf('draft_')===0){
+      // 下書きは「公開」ではなく「公開の依頼」。押しただけでは公開されない。
+      var _ds=state._draftStatus||'draft';
+      var _dl={draft:'📤 公開を依頼',review:'⏳ 審査待ち',published:'✔ 公開中',rejected:'📤 直して再依頼'}[_ds]||'📤 公開を依頼';
+      var _dc={draft:'#6366F1',review:'#F59E0B',published:'#059669',rejected:'#DC2626'}[_ds]||'#6366F1';
+      var _dt={draft:'運営者の確認を経て公開されます',review:'運営者の確認をお待ちください',published:'公開中です。変更を反映するにはもう一度依頼してください',rejected:'差し戻されています。直してから再度依頼してください'}[_ds]||'';
+      h+='<button onclick="publishMyWork()" class="btn" style="background:'+_dc+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+_dt+'">'+_dl+'</button>';
+    }else if(_workParam&&_isMyDraftId(_workParam)){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_canAuthorThisWork()){var _mineP=_isMyPubWork();h+='<button onclick="publishMyWork()" class="btn" style="background:'+(_mineP?'#6366F1':'#0E7490')+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+(_mineP?'この作品の変更を読者に公開する':'オーナー権限で他の人の作品を上書き公開')+'">'+(_mineP?'📤 公開保存':'📢 上書き公開')+'</button>';}h+='<button onclick="openClassifyReview()" class="btn" style="background:#8B5CF6;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="地の文・独白・会話を自動判定し、確信の持てないものだけ確認します">🔎 文の種別</button><button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button>'+(_showChars?'<button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="'+(state.isAuthorMode?'登場人物（追加・削除・編集）':'登場人物の一覧（作者モードで追加・削除）')+'">👥</button>':'')+'<button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span>'+_readerSaveButtonsHTML()+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button><button onclick="aiRefineSpeakers()" class="tool-chip" title="規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。">🎭 AI話者判定</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar（登場人物）
     // 立ち読み・登録読者・他の人の作品を読んでいる作者には出さない。
     // その人たちは本文のアイコンを押して、自分用の見た目だけを変える。
@@ -7003,7 +7042,7 @@ var _portalMode=!!_workParam;
   if(window.AninovelServices.__demoWrapped) return;
   var orig=window.AninovelServices.getWork.bind(window.AninovelServices);
   window.AninovelServices.getWork=function(id){
-    if(!id||id.indexOf('my_')===0||id.indexOf('pub_')===0)return orig(id);
+    if(!id||_isMyDraftId(id)||id.indexOf('pub_')===0)return orig(id);
     // スラッグ形式（デモ作品等）はサーバKVを先に確認、無ければ元のフロー(静的contentUrl)へ
     return fetch('/api/works/'+encodeURIComponent(id),{cache:'no-store'})
       .then(function(r){
@@ -7067,8 +7106,65 @@ async function uploadCover(file){
     alert('表紙をアップロードしました');
   }catch(e){ alert('表紙アップロード失敗: '+e.message); }
 }
+
+/**
+ * 下書きの公開をオーナーに依頼する。
+ * ここでは公開されない。カタログに載るのは承認されたときだけ。
+ *
+ * 音声について: 承認後に読者が聞くのは pub_<番号> の下にある音声なので、
+ * 依頼のこの時点で、承認後に使われる場所へ先に送っておく。
+ * オーナーの端末にはこの作者の音声が無く、承認の瞬間には送りようがないため。
+ * 差し戻された場合、送った音声は使われないまま残る。
+ */
+async function _submitDraftForReview(){
+    if(!window.AninovelDrafts){alert('保存機能を読み込めませんでした。ページを再読み込みしてください。');return;}
+    if(!state.content||state.content.length===0){alert('中身のない作品は依頼できません。まず本文を書いてください。');return;}
+    if(!_isMyPubWork()){alert('自分の作品だけが依頼できます。');return;}
+
+    if(!confirm('この作品の公開を依頼しますか？\n\n運営者が内容を確認し、問題がなければ公開されます。\nこの時点ではまだ公開されません。'))return;
+
+    // まず今の内容をサーバーへ保存する。依頼したものと中身がずれないように。
+    try{
+        await window.AninovelDrafts.save(_workParam,
+            {novel:state.novel,chapters:state.chapters,characters:state.characters,
+             content:state.content,displaySettings:state.displaySettings,version:'2.2'},
+            {title:(state.novel&&state.novel.title)||''});
+    }catch(e){
+        alert('保存に失敗したため、依頼を中止しました。\n'+((e&&e.message)||'通信エラー'));
+        return;
+    }
+
+    // 承認後に使われる場所へ音声を送る
+    var futurePubId='pub_'+_workParam.slice(6);
+    try{
+        var _pg=_showProgress('\uD83D\uDD0A 音声を送信中');
+        var _ar;
+        try{
+            _ar=await _audioUploadStreamed(_workParam,futurePubId,{copyTo:futurePubId,
+                onProgress:function(a,b){_updateProgress(_pg,a,b);}});
+        }finally{_hideProgress(_pg);}
+        if(_ar&&_ar.total){
+            console.info('[Submit] 音声送信: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total);
+            if(_ar.fail>0)alert('音声'+_ar.fail+'件の送信に失敗しました。\n公開後、その分は標準音声になります。もう一度依頼すれば再送されます。');
+        }
+    }catch(e){console.warn('[Submit] 音声送信エラー(依頼は続行):',e);}
+
+    try{
+        await window.AninovelDrafts.submit(_workParam);
+        state._draftStatus='review';
+        alert('公開を依頼しました。\n\n運営者の確認をお待ちください。\n結果は「マイ作品」の一覧に表示されます。');
+        render();
+    }catch(e){
+        alert('依頼に失敗しました: '+((e&&e.message)||'通信エラー'));
+    }
+}
+
 async function publishMyWork(){
-    var isMy=_workParam && _workParam.indexOf('my_')===0;
+    // ===== 新: サーバー下書き(draft_) は「公開の依頼」 =====
+    // 押しても公開されない。オーナーが確認して承認したときに公開される。
+    if(_workParam&&_workParam.indexOf('draft_')===0){ return _submitDraftForReview(); }
+
+    var isMy=_workParam && _isMyDraftId(_workParam);
     // 投稿済み作品(pub_*)は、その作品の作者本人とオーナーが公開できる。
     // 以前はオーナーだけだったため、作者は自分の作品を更新できなかった。
     var mayPublish=_canAuthorThisWork();
@@ -7196,8 +7292,45 @@ window.onload=function(){
     loadData();
     document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
     if(_workParam){loadReaderCustom(_workParam);_readerProfileSync(_workParam);
-        // my_ プレフィックスならマイ作品(localStorage)から読み込む
-        if(_workParam.indexOf('my_')===0){
+        // draft_ はサーバーの下書き置き場から読む。
+        // 読めるのは作者本人と、審査を依頼されたあとのオーナーだけ。
+        // 公開はされていないので、カタログにも検索にも出ない。
+        if(_workParam.indexOf('draft_')===0){
+            if(!window.AninovelDrafts){
+                alert('保存機能を読み込めませんでした。ページを再読み込みしてください。');
+                window.location.href='index.html';
+                return;
+            }
+            window.AninovelDrafts.get(_workParam).then(function(d){
+                if(!d)throw new Error('下書きが見つかりません');
+                var data=d.data||{};
+                state._workOwnerEmail=d.ownerEmail?String(d.ownerEmail).toLowerCase():null;
+                state._draftStatus=d.status||'draft';
+                state._draftReviewNote=d.reviewNote||'';
+                if(data.novel)state.novel=data.novel;
+                if(data.chapters)state.chapters=data.chapters;
+                if(data.characters)state.characters=data.characters;
+                if(data.content)state.content=data.content;
+                if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
+                state.currentScreen='reader';
+                // 自分の下書きなら作者モードで開く。オーナーが審査で開いたときは読者モード。
+                state.isAuthorMode=_isMyPubWork();
+                render();
+                _schedulePregen();
+            }).catch(function(e){
+                var msg=(e&&e.message)||'下書きを開けませんでした';
+                if(e&&(e.status===401||e.status===403)){
+                    alert(msg+'\n\nログイン画面へ移動します。');
+                    window.location.href='login.html?dest='+encodeURIComponent(location.pathname+location.search);
+                    return;
+                }
+                alert(msg);
+                window.location.href='index.html';
+            });
+            return;
+        }
+        // my_ プレフィックスは旧世代。端末の localStorage から読み込む
+        if(_isMyDraftId(_workParam)){
             try{
                 var u=_srvUser();
                 var all=JSON.parse(localStorage.getItem('aninovel_my_works')||'{}');
@@ -7245,7 +7378,7 @@ window.onload=function(){
             if(data.content)state.content=data.content;
             if(data.displaySettings)Object.assign(state.displaySettings,data.displaySettings);
             // 同梱作品オーバーライド適用 (pub_/my_ 以外のとき)
-            if(_workParam.indexOf('pub_')!==0&&_workParam.indexOf('my_')!==0){
+            if(_workParam.indexOf('pub_')!==0&&!_isMyDraftId(_workParam)){
               try{
                 var _ov=JSON.parse(localStorage.getItem('aninovel_bundled_overrides')||'{}');
                 var _od=_ov[_workParam]&&_ov[_workParam].data;
