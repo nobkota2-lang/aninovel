@@ -65,6 +65,22 @@ function draftKey(email, id) { return 'draft:' + normEmail(email) + ':' + id; }
 function indexKey(email) { return 'drafts:' + normEmail(email); }
 const REVIEW_KEY = '__drafts_review__';
 
+/**
+ * 「この下書きIDの持ち主は誰か」をたどるための印。
+ * オーナーは作者のメールを知らないと下書きを開けない。審査待ちの一覧からは
+ * 引けるが、承認や差し戻しで一覧から外れたあとは引けなくなる。
+ * そこで、一度でも審査に出た下書きだけ、この印を残しておく。
+ * 書くのは状態が変わったときだけなので、KV の書き込み回数はほとんど増えない。
+ */
+function refKey(id) { return 'draftref:' + id; }
+
+async function putRef(store, draft) {
+  try { await store.put(refKey(draft.id), normEmail(draft.ownerEmail)); } catch (e) {}
+}
+async function readRef(store, id) {
+  try { return (await store.get(refKey(id))) || null; } catch (e) { return null; }
+}
+
 /* ---------------- 読み書き ---------------- */
 
 export async function readDraft(store, email, id) {
@@ -85,6 +101,7 @@ export async function writeDraft(store, draft) {
 
 export async function removeDraft(store, email, id) {
   await store.delete(draftKey(email, id));
+  try { await store.delete(refKey(id)); } catch (e) {}
   const list = await readIndex(store, email);
   const next = list.filter(e => e && e.id !== id);
   if (next.length !== list.length) {
@@ -148,6 +165,7 @@ export async function putInReview(store, draft) {
   if (i >= 0) q[i] = row; else q.push(row);
   q.sort((a, b) => String(a.submittedAt || '').localeCompare(String(b.submittedAt || '')));
   await store.put(REVIEW_KEY, JSON.stringify(q));
+  await putRef(store, draft);
 }
 
 export async function dropFromReview(store, id) {
@@ -195,12 +213,14 @@ export async function loadForReader(context, id, opts) {
   let draft = await readDraft(store, gate.who.email, id);
   if (draft) return { store, who: gate.who, isOwner: gate.isOwner, draft, mine: true };
 
-  // 本人の棚に無い。オーナーなら、審査待ちの一覧から持ち主を引く。
+  // 本人の棚に無い。オーナーなら、審査待ちの一覧か、残した印から持ち主を引く。
+  // 印をたどるのは、承認・差し戻しで一覧から外れたあとも開けるようにするため。
   if (gate.isOwner) {
     const q = await readReviewQueue(store);
     const row = q.find(e => e && e.id === id);
-    if (row && row.ownerEmail) {
-      const d = await readDraft(store, row.ownerEmail, id);
+    const holder = (row && row.ownerEmail) || await readRef(store, id);
+    if (holder) {
+      const d = await readDraft(store, holder, id);
       if (d) {
         if (need.mineOnly) {
           return { deny: json({ error: 'forbidden', message: '他の作者の下書きは編集できません。' }, 403) };

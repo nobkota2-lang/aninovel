@@ -163,13 +163,35 @@
       }
     },
 
-    /** 下書きを1件、本文つきで取り出す。 */
+    /**
+     * 下書きを1件、本文つきで取り出す。
+     *
+     * 入口が2つある理由:
+     *   Cloudflare Access は "api/admin/*" にしか付かない。
+     *   作者はサイトのログイン(クッキー)で /api/drafts/:id を通る。
+     *   オーナーが審査画面から開いたときはサイトのログインが無いことがあるので、
+     *   断られたら Access が守っている /api/admin/drafts/:id を試す。
+     *   どちらも通らなければ、本当に権限が無い。
+     */
     get: async function (id) {
       try {
         var r = await call('/' + encodeURIComponent(id));
         cacheBody(id, r.draft, false);
         return r.draft;
       } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+          try {
+            var res = await fetch('/api/admin/drafts/' + encodeURIComponent(id),
+              { cache: 'no-store', credentials: 'same-origin' });
+            if (res.ok) {
+              var j = await res.json();
+              if (j && j.draft) {
+                console.info('[drafts] オーナーとして審査のために開きました');
+                return j.draft;
+              }
+            }
+          } catch (e2) { /* Access のログイン画面へ飛ばされた等。元の失敗を返す */ }
+        }
         var c = cachedBody(id);
         if (c && e.status !== 401 && e.status !== 403) {
           console.warn('[drafts] サーバーから取れなかったので控えを開きます:', e.message);
