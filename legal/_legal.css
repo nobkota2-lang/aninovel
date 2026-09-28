@@ -30,3 +30,6 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .legal-footer a{color:var(--text2);text-decoration:none;margin:0 8px}
 .legal-footer a:hover{text-decoration:underline}
 @media(max-width:640px){.legal-doc{margin:16px;padding:28px 18px}.legal-doc h1{font-size:22px}.legal-doc h2{font-size:16px}}
+
+/* 表の中の補足（氏名を請求により開示する旨など） */
+.legal-doc .note-inline{font-size:12px;color:var(--muted)}

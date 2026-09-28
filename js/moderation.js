@@ -74,7 +74,7 @@
     bx.style.cssText='background:#fff;color:#2D2A26;border-radius:12px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 24px 64px rgba(0,0,0,.4);font-size:14px;line-height:1.7';
     bx.innerHTML=
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:#C0392B">⚠ 通報する</h3><button id="anrep-close" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#666">&times;</button></div>'
-      +'<p style="color:#666;font-size:12px;margin-bottom:18px">通報内容は運営が確認します。虚偽通報は禁止されています(<a href="/aninovel/legal/terms.html" style="color:#C0392B">利用規約</a>)。</p>'
+      +'<p style="color:#666;font-size:12px;margin-bottom:18px">通報内容は運営が確認します。虚偽通報は禁止されています(<a href="/legal/terms.html" style="color:#C0392B">利用規約</a>)。</p>'
       +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">対象</label><div style="background:#F5EFE6;padding:10px 12px;border-radius:6px;font-size:13px;color:#666">'
         +'種別: '+escHtml(opts.targetType||'work')+' / ID: '+escHtml(opts.targetId||opts.workId||'(unknown)')
         +(opts.ctx?'<br>'+escHtml(opts.ctx).slice(0,200):'')
@@ -115,7 +115,7 @@
         canary:(window.AninovelAntiPiracy&&window.AninovelAntiPiracy.getCanary&&window.AninovelAntiPiracy.getCanary())||null
       };
       enqueue(rep);
-      bx.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:12px">✓</div><h3 style="color:#10B981;font-weight:700;margin-bottom:8px">通報を受け付けました</h3><p style="color:#666;font-size:13px;line-height:1.7">運営にて確認の上、<br><a href="/aninovel/legal/dmca.html" style="color:#C0392B">著作権侵害通報窓口</a>に定める手続に従い対応します。<br><br>受付ID: <code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+rep.id+'</code></p><div style="margin-top:20px"><button id="anrep-done" style="padding:10px 24px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">閉じる</button></div></div>';
+      bx.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:12px">✓</div><h3 style="color:#10B981;font-weight:700;margin-bottom:8px">通報を受け付けました</h3><p style="color:#666;font-size:13px;line-height:1.7">運営にて確認の上、<br><a href="/legal/dmca.html" style="color:#C0392B">著作権侵害通報窓口</a>に定める手続に従い対応します。<br><br>受付ID: <code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+rep.id+'</code></p><div style="margin-top:20px"><button id="anrep-done" style="padding:10px 24px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">閉じる</button></div></div>';
       document.getElementById('anrep-done').onclick=close;
     };
   }

@@ -237,7 +237,7 @@
           +'作品の著作権・版権を譲渡したり販売したりすることはありません。'
           +'素材や道具の販売もしません。</div>'
         +'<div style="margin-top:6px">📌 作者の収益は、読まれた量に応じたポイントで分配します。'
-          +'算定方法は<a href="legal/terms.html" style="color:#0E7490">利用規約</a>に記載します。</div>'
+          +'算定方法は<a href="/legal/terms.html" style="color:#0E7490">利用規約</a>に記載します。</div>'
       +'</div>';
 
     ov.appendChild(bx);

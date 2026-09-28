@@ -54,7 +54,7 @@
       +'<label style="display:flex;align-items:center;gap:8px;padding:6px"><input type="checkbox" id="annl-pref-weekly" checked> 週次ダイジェスト(新着・ランキング)</label>'
       +'<label style="display:flex;align-items:center;gap:8px;padding:6px"><input type="checkbox" id="annl-pref-announce" checked> お知らせ・新機能案内</label>'
       +'</div>'
-      +'<div style="margin-bottom:14px"><label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#666"><input type="checkbox" id="annl-pledge"> <a href="/aninovel/legal/privacy.html" style="color:#C0392B" target="_blank">プライバシーポリシー</a>に同意します</label></div>'
+      +'<div style="margin-bottom:14px"><label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#666"><input type="checkbox" id="annl-pledge"> <a href="/legal/privacy.html" style="color:#C0392B" target="_blank">プライバシーポリシー</a>に同意します</label></div>'
       +'<button id="annl-submit" style="width:100%;padding:12px;background:#C0392B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">購読する</button>'
       +'<p id="annl-msg" style="margin-top:10px;font-size:12px;text-align:center;display:none"></p>';
     ov.appendChild(bx);document.body.appendChild(ov);
