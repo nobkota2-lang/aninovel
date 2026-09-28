@@ -19,7 +19,11 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .legal-doc table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
 .legal-doc th,.legal-doc td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top}
 .legal-doc th{background:var(--bg2);font-weight:600;width:30%}
-.legal-doc .placeholder{color:var(--accent);font-weight:600;background:#FFF4F1;padding:1px 6px;border-radius:3px;font-family:monospace;font-size:13px}
+/* 社内用の「あとで置換する」印だった。値はすべて確定したので、本文と同じ見た目にする
+   (span は他から参照されている可能性があるため残す) */
+.legal-doc .placeholder{color:inherit;font-weight:inherit;background:none;padding:0;border-radius:0;font-family:inherit;font-size:inherit}
+/* 記入例として枠を見せたいところだけ .sample を付ける */
+.legal-doc .placeholder.sample{color:var(--accent);font-weight:600;background:#FFF4F1;padding:1px 6px;border-radius:3px;font-family:monospace;font-size:13px}
 .legal-doc .notice{background:#FFF4F1;border-left:4px solid var(--accent);padding:14px 18px;margin:24px 0;border-radius:4px;font-size:14px;color:var(--text2)}
 .legal-doc .notice strong{color:var(--accent)}
 .legal-footer{text-align:center;padding:32px 16px 48px;color:var(--muted);font-size:12px}
