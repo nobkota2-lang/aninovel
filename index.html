@@ -65,6 +65,68 @@
 <!-- Phase 1.3: Character gallery improvements   -->
 <!-- ============================================ -->
 <style id="phase1-enhancements">
+/* ========== プランへの導線 (2026-09-27 追加) ==========
+   料金表がフッターのリンクだけだったので、ヘッダと帯からも開けるようにした。 */
+.header-plan-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  margin-right: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #8A5A00;
+  background: linear-gradient(135deg, #FFF3D6, #FFE9BC);
+  border: 1px solid #F0C879;
+  border-radius: 99px;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.header-plan-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(240, 200, 121, .5);
+  text-decoration: none;
+}
+html[data-theme="dark"] .header-plan-link,
+body.dark .header-plan-link {
+  color: #FFE9BC;
+  background: rgba(240, 200, 121, .14);
+  border-color: rgba(240, 200, 121, .45);
+}
+
+.campaign-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 14px;
+  padding: 11px 18px;
+  text-align: center;
+  text-decoration: none;
+  color: #8A5A00;
+  background: linear-gradient(135deg, #FFF7E6, #FFEFD6);
+  border-bottom: 1px solid #F0C879;
+}
+.campaign-ribbon:hover { background: linear-gradient(135deg, #FFF3D6, #FFE7B8); text-decoration: none; }
+.campaign-ribbon-main { font-size: 14px; font-weight: 700; }
+.campaign-ribbon-sub  { font-size: 12.5px; opacity: .85; }
+html[data-theme="dark"] .campaign-ribbon,
+body.dark .campaign-ribbon {
+  color: #FFE9BC;
+  background: rgba(240, 200, 121, .12);
+  border-bottom-color: rgba(240, 200, 121, .35);
+}
+
+.hero-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .header-plan-link { padding: 5px 9px; font-size: 12px; }
+  .campaign-ribbon { padding: 9px 14px; }
+  .campaign-ribbon-main { font-size: 13px; }
+  .campaign-ribbon-sub  { font-size: 11.5px; }
+}
+
 /* ========== Phase 1.1: ビジュアル強化 ========== */
 
 /* 作品カードのホバー効果 */
@@ -238,10 +300,20 @@
   </a>
   <div class="header-actions">
     <span id="aninovel-lang-slot" style="display:inline-flex;align-items:center;margin-right:6px"></span>
+    <a href="#" class="header-plan-link" data-i18n="nav.plan"
+       title="料金とプランを見る（いまはキャンペーン期間中につき無料）"
+       onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">&#x1F48E; プラン</a>
     <div id="auth-area"></div>
     <button class="btn-icon" id="theme-toggle" title="テーマ切替">&#x1F313;</button>
   </div>
 </header>
+
+<!-- キャンペーン告知 (料金表への導線その2) -->
+<a href="#" class="campaign-ribbon"
+   onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">
+  <span class="campaign-ribbon-main">&#x1F389; キャンペーン期間中につき、読者会員・作者会員は無料</span>
+  <span class="campaign-ribbon-sub">登録なしの立ち読みは1日5作品まで &middot; プランを見る &rsaquo;</span>
+</a>
 
 <!-- ヒーロー -->
 <section class="portal-hero">
@@ -252,7 +324,10 @@
     <a href="#main" class="btn btn-primary btn-lg">📖 作品を見る</a>
     <a href="#about-section" class="btn btn-ghost btn-lg">アニノベルとは？</a>
   </div>
-  <p class="hero-note">ログイン不要で読めます</p>
+  <p class="hero-note">
+    登録なしで1日5作品まで読めます &middot;
+    <a href="#" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">無料の会員登録でもっと読む</a>
+  </p>
   <div class="hero-stats" id="hero-stats"></div>
 </section>
 

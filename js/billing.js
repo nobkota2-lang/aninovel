@@ -1,41 +1,64 @@
-/* アニノベル 課金・サブスク クライアント
- * バックエンド未稼働時はスタブ動作 (アラートで案内のみ)
+/* アニノベル 課金・サブスク クライアント  js/billing.js
+ * ------------------------------------------------------------
+ * 2026-09-27 改訂: 料金モデルを事業計画どおりに書き換えた。
  *
- * 本実装には以下が必要:
- *   - Supabase Edge Functions (/create-checkout, /stripe-webhook, /billing-portal)
- *   - Stripe アカウント・Product/Price ID
+ *   立ち読み (登録なし) … 無料。1日5作品まで
+ *   読者会員            … キャンペーン期間中は無料
+ *                          終了後の新規登録、および終了から3カ月経過で
+ *                          月額330円 (税込)
+ *   作者会員            … キャンペーン期間中は無料
+ *                          作品の登録・編集を続けている間は終了後も無料
+ *                          3カ月間 登録・編集がない場合は読者会員と同額
  *
- * 設定:
- *   window.ANINOVEL_BILLING_API='https://api.aninovel.com'; // Edge Functions ベースURL
- *   window.ANINOVEL_STRIPE_PRICES={
- *     'reader-premium-monthly': 'price_xxx',
- *     'reader-premium-yearly':  'price_yyy',
- *     'author-pro-monthly':     'price_zzz',
- *     'author-pro-yearly':      'price_www'
- *   };
+ *   キャンペーンは登録作品が1,000件に達するまで。
+ *   販売するのは「作品を読むための権利」だけ。著作権・版権は売らない。
+ *
+ * 決済 (Stripe) は第4段でまだ繋いでいない。この画面はいま
+ * 「登録するだけ・お支払いなし」で完結する。startCheckout と
+ * openCustomerPortal は第4段のために残してあるが、ボタンからは呼ばない。
+ *
+ * 設定 (第4段で使う):
+ *   window.ANINOVEL_BILLING_API='https://api.aninovel.com';
+ *   window.ANINOVEL_STRIPE_PRICES={'member-monthly':'price_xxx'};
  */
 (function(){
   'use strict';
+
   var API=window.ANINOVEL_BILLING_API||null;
   var PRICES=window.ANINOVEL_STRIPE_PRICES||{};
 
-  function getUser(){try{return JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){return null;}}
+  /* ---------- 料金のことば (1か所にまとめる) ---------- */
+  var PRICE_YEN   = 330;               // 税込
+  var PRICE_LABEL = '月額330円 (税込)';
+  var CAMPAIGN    = true;              // キャンペーン期間中か
+  var GOAL_WORKS  = 1000;              // キャンペーン終了の目安
+  var PEEK_LIMIT  = 5;                 // 立ち読みの1日あたり作品数
 
-  // 現在のサブスク状態 (ローカル参照、本来はサーバ照会)
+  /* ---------- 利用者 ---------- */
+  function getUser(){
+    try{
+      var u=JSON.parse(localStorage.getItem('aninovel_user'));
+      return (u&&u.loggedIn&&u._server)?u:null;   // サーバーで確認できた人だけ
+    }catch(e){return null;}
+  }
+  function hasRole(u,r){
+    try{return !!(u&&u.roles&&u.roles.indexOf(r)>=0);}catch(e){return false;}
+  }
   function getSubscription(){
     var u=getUser();
-    if(!u)return null;
-    return u.subscription||null; // 'premium' | 'author_pro' | null
+    return (u&&u.subscription)||null;   // 第4段で 'member' などが入る
+  }
+  function isPremium(){
+    // キャンペーン中は登録会員すべてが広告以外の制限なしで読める
+    return !!getUser();
   }
 
-  function isPremium(){return getSubscription()==='premium'||getSubscription()==='author_pro';}
-
-  // チェックアウト開始
+  /* ---------- 第4段のための土台 (いまボタンからは呼ばない) ---------- */
   async function startCheckout(planKey){
     var u=getUser();
-    if(!u||!u.loggedIn){alert('課金にはログインが必要です。先にアカウントを作成・ログインしてください。');return;}
+    if(!u){alert('お支払いの手続きにはログインが必要です。');return;}
     if(!API){
-      alert('決済システムは現在準備中です。\n\nこの機能は #2+#3 (Supabase Edge Functions) と連携して実装されます。\n\n計画されているプラン:\n・Reader Premium  ¥480/月 (広告非表示)\n・Author Pro     ¥980/月 (投稿無制限+収益還元)');
+      alert('いまはキャンペーン期間中のため、お支払いはありません。\n無料でお使いいただけます。');
       return;
     }
     var priceId=PRICES[planKey];
@@ -56,11 +79,10 @@
     }
   }
 
-  // 顧客ポータル(解約・カード変更)
   async function openCustomerPortal(){
     var u=getUser();
-    if(!u||!u.loggedIn){alert('ログインが必要です');return;}
-    if(!API){alert('決済システム準備中');return;}
+    if(!u){alert('ログインが必要です');return;}
+    if(!API){alert('いまはキャンペーン期間中のため、お支払いの管理画面はありません。');return;}
     try{
       var res=await fetch(API+'/billing-portal',{
         method:'POST',
@@ -72,46 +94,167 @@
     }catch(e){alert('ポータルを開けませんでした: '+e.message);}
   }
 
-  // 価格テーブル UI
+  /* ---------- 料金表 ---------- */
+
+  function esc(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function card(o){
+    var accent=o.accent||'#6B635A';
+    var border=o.you?accent:'#E2DCD4';
+    var priceHTML=o.strike
+      ? '<span style="font-size:15px;color:#A39A8F;text-decoration:line-through;margin-right:8px">'+esc(o.strike)+'</span>'
+        +'<span style="font-size:30px;font-weight:700;color:'+accent+'">'+esc(o.price)+'</span>'
+      : '<span style="font-size:30px;font-weight:700;color:'+accent+'">'+esc(o.price)+'</span>';
+
+    return '<div style="background:#fff;border:2px solid '+border+';border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">'
+      +(o.you?'<div style="align-self:flex-start;background:'+accent+';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">いまのあなた</div>':'')
+      +'<div>'
+        +'<h3 style="font-size:17px;font-weight:700;color:'+accent+';margin:0">'+esc(o.title)+'</h3>'
+        +'<div style="margin-top:6px">'+priceHTML+'</div>'
+        +'<p style="font-size:12px;color:#6B635A;margin:4px 0 0;line-height:1.6">'+esc(o.lead)+'</p>'
+      +'</div>'
+      +'<ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:1.9;flex:1">'
+        +o.features.map(function(f){return '<li>'+esc(f)+'</li>';}).join('')
+      +'</ul>'
+      +(o.note?'<p style="font-size:11px;color:#8A8078;line-height:1.7;margin:0;padding-top:10px;border-top:1px dashed #E2DCD4">'+esc(o.note)+'</p>':'')
+      +(o.action||'')
+      +'</div>';
+  }
+
+  function actionBtn(label,accent,href){
+    return '<a href="'+esc(href)+'" style="display:block;text-align:center;padding:11px;background:'+accent
+      +';color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">'+esc(label)+'</a>';
+  }
+  function actionFlat(label){
+    return '<div style="text-align:center;padding:11px;background:#EFEAE3;color:#8A8078;border-radius:6px;font-size:13px">'
+      +esc(label)+'</div>';
+  }
+
   function openPricingModal(){
-    var existing=document.getElementById('aninovel-pricing-modal');if(existing)existing.remove();
+    var existing=document.getElementById('aninovel-pricing-modal');
+    if(existing)existing.remove();
+
+    var u       = getUser();
+    var isAuthor= hasRole(u,'author')||hasRole(u,'owner');
+    var isReader= !!u && !isAuthor;
+    var guest   = !u;
+
     var ov=document.createElement('div');
     ov.id='aninovel-pricing-modal';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:"Zen Kaku Gothic New",system-ui,sans-serif';
-    ov.onclick=function(e){if(e.target===ov)ov.remove();};
-
-    var current=getSubscription();
+    ov.setAttribute('role','dialog');
+    ov.setAttribute('aria-modal','true');
+    ov.setAttribute('aria-label','プラン');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;'
+      +'align-items:center;justify-content:center;padding:16px;'
+      +'font-family:"Zen Kaku Gothic New",system-ui,sans-serif';
+    ov.onclick=function(e){if(e.target===ov)close();};
 
     var bx=document.createElement('div');
-    bx.style.cssText='background:#FAF6F0;color:#2D2A26;border-radius:16px;max-width:880px;width:100%;max-height:92vh;overflow-y:auto;padding:36px;box-shadow:0 24px 64px rgba(0,0,0,.4)';
+    bx.style.cssText='background:#FAF6F0;color:#2D2A26;border-radius:16px;max-width:920px;width:100%;'
+      +'max-height:92vh;overflow-y:auto;padding:32px;box-shadow:0 24px 64px rgba(0,0,0,.4)';
+
+    var cards=''
+      + card({
+          title:'立ち読み',
+          price:'¥0',
+          lead:'登録なしで、そのまま読めます。',
+          you:guest,
+          accent:'#6B635A',
+          features:[
+            '1日'+PEEK_LIMIT+'作品まで読めます',
+            'ログインは不要',
+            'しおりはこの端末にだけ残ります',
+            '広告が表示されます'
+          ],
+          note:'もっと読みたくなったら、無料の読者会員にご登録ください。',
+          action: guest ? actionBtn('無料で読者会員になる','#0E7490','register.html') : actionFlat('ご登録ありがとうございます')
+        })
+      + card({
+          title:'読者会員',
+          price: CAMPAIGN ? '¥0' : PRICE_YEN.toLocaleString('ja-JP')+'円/月',
+          strike: CAMPAIGN ? PRICE_YEN.toLocaleString('ja-JP')+'円/月' : null,
+          lead: CAMPAIGN ? 'キャンペーン期間中につき無料。' : PRICE_LABEL+'。いつでも解約できます。',
+          you:isReader,
+          accent:'#0E7490',
+          features:[
+            '作品数の制限なく読み放題',
+            'しおりがどの端末でも同じ場所から',
+            '読み方の設定 (色・アイコン・音声) を保存',
+            '投票・お気に入り',
+            '広告が表示されます'
+          ],
+          note:'キャンペーン終了後にご登録の方、および終了から3カ月を過ぎてお使いの方には '
+              +PRICE_LABEL+' をお願いします。',
+          action: guest ? actionBtn('無料で登録する','#0E7490','register.html')
+                        : (isReader?actionFlat('ご利用中 ✓'):actionFlat('作者会員に含まれます'))
+        })
+      + card({
+          title:'作者会員',
+          price: CAMPAIGN ? '¥0' : '条件により¥0',
+          strike: null,
+          lead: CAMPAIGN ? 'キャンペーン期間中につき無料。読者会員の機能もすべて含みます。'
+                         : '作品を書き続けている間は無料です。',
+          you:isAuthor,
+          accent:'#C0392B',
+          features:[
+            '読者会員のすべての機能',
+            '作品を投稿できます (公開はオーナーの審査後)',
+            '読まれた分だけ収益分配のポイントが貯まります',
+            '登場人物・声・色を自分で設定できます'
+          ],
+          note:'作品の登録・編集を続けている作者は、キャンペーン終了後も無料です。'
+              +'3カ月間 登録・編集がない場合は、読者会員と同じ '+PRICE_LABEL+' をお願いします。',
+          action: guest ? actionBtn('作者として登録する','#C0392B','register.html')
+                        : (isAuthor?actionFlat('ご利用中 ✓'):actionBtn('作者になる','#C0392B','register.html'))
+        });
+
     bx.innerHTML=
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px"><h2 style="font-size:24px;font-weight:700;font-family:\'Noto Serif JP\',serif">プラン</h2><button id="anbill-close" style="border:none;background:transparent;font-size:24px;cursor:pointer">&times;</button></div>'
-      +'<p style="color:#6B635A;margin-bottom:24px;font-size:14px">アニノベルをもっと楽しむための有料プランです。いつでも解約できます。</p>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">'
-      +planCard('Free','¥0','基本機能、広告あり、月3作品まで投稿',['作品の閲覧・投票','吹き出し表示','音声読み上げ(基本)','しおり機能','作品投稿(月3まで)'],'free',current==='free'||!current,null)
-      +planCard('Reader Premium','¥480','/月','読者向け、広告非表示',['Free の全機能','📵 広告非表示','📚 しおり無制限','🎁 優先機能アクセス','💬 優先サポート'],'reader-premium-monthly',current==='premium','#3498DB')
-      +planCard('Author Pro','¥980','/月','作者向け、収益還元',['Reader Premium の全機能','📤 投稿数無制限','💰 PV連動の収益還元','📊 詳細な解析ダッシュボード','🎤 高品質音声優先生成','🛡️ 著作権保護優先処理'],'author-pro-monthly',current==='author_pro','#C0392B')
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px">'
+        +'<h2 style="font-size:23px;font-weight:700;font-family:\'Noto Serif JP\',serif;margin:0">プラン</h2>'
+        +'<button id="anbill-close" aria-label="閉じる" style="border:none;background:transparent;'
+          +'font-size:26px;line-height:1;cursor:pointer;color:#6B635A">&times;</button>'
       +'</div>'
-      +'<div style="margin-top:20px;padding:14px;background:#FFF4F1;border-radius:8px;font-size:12px;color:#6B635A">📌 年間プラン(2ヶ月分割引)もあります。詳細は決済画面で選択できます。</div>'
-      +(current?'<div style="margin-top:16px;text-align:center"><button id="anbill-portal" style="padding:10px 24px;border:1px solid #2D2A26;background:transparent;color:#2D2A26;border-radius:6px;cursor:pointer">サブスク管理 (解約・カード変更)</button></div>':'');
+
+      +(CAMPAIGN
+        ? '<div style="background:linear-gradient(135deg,#FFF7E6,#FFEFD6);border:1px solid #F0C879;'
+            +'border-radius:10px;padding:14px 16px;margin-bottom:20px">'
+            +'<div style="font-weight:700;font-size:15px;color:#8A5A00">🎉 いまはキャンペーン期間中につき、すべて無料です</div>'
+            +'<p style="font-size:12.5px;color:#7A6A50;margin:6px 0 0;line-height:1.75">'
+              +'登録作品が'+GOAL_WORKS.toLocaleString('ja-JP')+'件に達するまでキャンペーンを続けます。'
+              +'終了後も3カ月は無料のままです。お支払いの手続きは、いまはありません。'
+            +'</p>'
+          +'</div>'
+        : '')
+
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px">'
+        +cards
+      +'</div>'
+
+      +'<div style="margin-top:20px;padding:14px 16px;background:#F3EFE8;border-radius:8px;'
+        +'font-size:12px;color:#6B635A;line-height:1.85">'
+        +'<div>📌 有料になるのは「作品を読むための権利」です。'
+          +'作品の著作権・版権を譲渡したり販売したりすることはありません。'
+          +'素材や道具の販売もしません。</div>'
+        +'<div style="margin-top:6px">📌 作者の収益は、読まれた量に応じたポイントで分配します。'
+          +'算定方法は<a href="legal/terms.html" style="color:#0E7490">利用規約</a>に記載します。</div>'
+      +'</div>';
+
     ov.appendChild(bx);
     document.body.appendChild(ov);
 
-    document.getElementById('anbill-close').onclick=function(){ov.remove();};
-    var portal=document.getElementById('anbill-portal');if(portal)portal.onclick=function(){openCustomerPortal();};
-    bx.querySelectorAll('[data-anbill-plan]').forEach(function(b){
-      b.onclick=function(){var k=b.dataset.anbillPlan;if(k==='free')return;startCheckout(k);};
-    });
-  }
+    var prevFocus=document.activeElement;
+    function close(){
+      document.removeEventListener('keydown',onKey);
+      ov.remove();
+      try{if(prevFocus&&prevFocus.focus)prevFocus.focus();}catch(e){}
+    }
+    function onKey(e){if(e.key==='Escape')close();}
+    document.addEventListener('keydown',onKey);
 
-  function planCard(title,price,sub,desc,features,key,current,accent){
-    accent=accent||'#888';
-    var btn=current
-      ? '<button disabled style="width:100%;padding:12px;background:#10B981;color:#fff;border:none;border-radius:6px;font-weight:600">現在のプラン ✓</button>'
-      : (key==='free'
-          ? '<button disabled style="width:100%;padding:12px;background:#E2DCD4;color:#888;border:none;border-radius:6px">無料</button>'
-          : '<button data-anbill-plan="'+key+'" style="width:100%;padding:12px;background:'+accent+';color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">このプランにする</button>');
-    return '<div style="background:#fff;border:2px solid '+(current?accent:'#E2DCD4')+';border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px"><div><h3 style="font-size:18px;font-weight:700;color:'+accent+'">'+title+'</h3><div style="margin-top:6px"><span style="font-size:32px;font-weight:700">'+price+'</span><span style="color:#888;font-size:14px">'+(sub.charAt(0)==='/'?sub:'')+'</span></div><p style="font-size:12px;color:#666;margin-top:4px">'+(sub.charAt(0)==='/'?desc:sub)+'</p></div><ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:1.9;flex:1">'+features.map(function(f){return '<li>'+f+'</li>';}).join('')+'</ul>'+btn+'</div>';
+    var btn=document.getElementById('anbill-close');
+    if(btn){btn.onclick=close;btn.focus();}
   }
 
   window.AninovelBilling={
@@ -119,7 +262,12 @@
     openCustomerPortal:openCustomerPortal,
     openPricingModal:openPricingModal,
     getSubscription:getSubscription,
-    isPremium:isPremium
+    isPremium:isPremium,
+    priceYen:PRICE_YEN,
+    campaign:CAMPAIGN,
+    peekLimit:PEEK_LIMIT
   };
-  console.info('[Billing] 課金モジュール読込完了。AninovelBilling.openPricingModal() で価格表表示。');
+
+  console.info('[Billing] 料金モジュール読込完了 (キャンペーン'+(CAMPAIGN?'中':'終了')+')。'
+    +'AninovelBilling.openPricingModal() で料金表。');
 })();
