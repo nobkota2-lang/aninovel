@@ -588,97 +588,85 @@ body.dark .campaign-ribbon {
     worksTitle.parentNode.insertBefore(filterSection, worksTitle);
     
     // フィルタロジック
-    var _phase1Page = 0;
-    var _PHASE1_PER = 10;
-    function _renderPhase1Pager(pages) {
-      var grid = document.getElementById('works-grid');
-      if (!grid) return;
-      var pager = document.getElementById('phase1-pager');
-      if (pages <= 1) { if (pager) pager.remove(); return; }
-      if (!pager) {
-        pager = document.createElement('div');
-        pager.id = 'phase1-pager';
-        pager.className = 'phase1-pager';
-        grid.parentNode.insertBefore(pager, grid.nextSibling);
-      }
-      pager.innerHTML = '';
-      var prev = document.createElement('button');
-      prev.className = 'phase1-pager-btn'; prev.type = 'button'; prev.textContent = '\u2039';
-      prev.disabled = (_phase1Page <= 0);
-      prev.onclick = function(){ if (_phase1Page > 0) { _phase1Page--; applyFilter(); } };
-      var label = document.createElement('span');
-      label.className = 'phase1-pager-label';
-      label.textContent = (_phase1Page + 1) + ' / ' + pages;
-      var next = document.createElement('button');
-      next.className = 'phase1-pager-btn'; next.type = 'button'; next.textContent = '\u203A';
-      next.disabled = (_phase1Page >= pages - 1);
-      next.onclick = function(){ if (_phase1Page < pages - 1) { _phase1Page++; applyFilter(); } };
-      pager.appendChild(prev); pager.appendChild(label); pager.appendChild(next);
-    }
+    // ------------------------------------------------------------
+    // 2026-09-29 作り直し。
+    //
+    // 直した不具合:
+    //   青空文庫シリーズは #aozora-grid という別区画に描かれているのに、
+    //   絞り込みは #works-grid しか見ていなかった。そのため「短編」を
+    //   選んでも青空文庫の全作品が出てきていた。
+    //
+    // 直した作りの弱さ:
+    //   以前は画面に出ているカードを DOM 上で隠していた。一覧は10件ずつの
+    //   ページ送りなので、2ページ目以降にある該当作品は見つけられなかった。
+    //   また字数を表示テキストから正規表現で拾っており、英語表示（chars）では
+    //   拾えなかった。
+    //
+    // いまは、全作品を持っている portal.js に絞り込みを任せ、
+    // 両方の区画を描き直してもらう。この画面は条件を渡すだけ。
+
+    var _p1Pending = null;
+
     function applyFilter() {
-      _phase1Page = _phase1Page || 0;
-      var query = document.getElementById('phase1-search-input').value.toLowerCase().trim();
-      var lengthFilter = document.getElementById('phase1-length-filter').value;
-      var cards = worksGrid.querySelectorAll('.work-card');
-      var visibleCount = 0;
-      var totalCount = cards.length;
-      
-      cards.forEach(function(card) {
-        var text = card.textContent.toLowerCase();
-        var match = card.textContent.match(/([0-9,]+)字/);
-        var chars = match ? parseInt(match[1].replace(/,/g, '')) : 0;
-        
-        var matchesSearch = !query || text.indexOf(query) !== -1;
-        var matchesLength = !lengthFilter || (
-          (lengthFilter === 'short' && chars <= 5000) ||
-          (lengthFilter === 'medium' && chars > 5000 && chars <= 20000) ||
-          (lengthFilter === 'long' && chars > 20000)
-        );
-        
-        if (matchesSearch && matchesLength) {
-          card._p1match = true;
-          visibleCount++;
-        } else {
-          card._p1match = false;
-          card.style.display = 'none';
-        }
-      });
-      // --- ページング: マッチしたカードを10件ずつ表示 ---
-      var matched = Array.prototype.filter.call(cards, function(c){ return c._p1match; });
-      var pages = Math.max(1, Math.ceil(matched.length / _PHASE1_PER));
-      if (_phase1Page >= pages) _phase1Page = pages - 1;
-      if (_phase1Page < 0) _phase1Page = 0;
-      matched.forEach(function(c, i){
-        var onPage = (i >= _phase1Page * _PHASE1_PER) && (i < (_phase1Page + 1) * _PHASE1_PER);
-        c.style.display = onPage ? '' : 'none';
-      });
-      _renderPhase1Pager(pages);
-      
-      // 統計表示
-      var statsEl = document.getElementById('phase1-filter-stats');
-      if (visibleCount === totalCount) {
-        statsEl.textContent = '全 ' + totalCount + ' 作品を表示中';
-      } else {
-        statsEl.textContent = visibleCount + ' / ' + totalCount + ' 作品を表示中';
+      var qEl = document.getElementById('phase1-search-input');
+      var lEl = document.getElementById('phase1-length-filter');
+      if (!qEl || !lEl) return;
+
+      var opts = { query: qEl.value, length: lEl.value };
+      var api = window.AninovelPortal;
+
+      if (!api || typeof api.setWorkFilter !== 'function') {
+        // portal.js がまだ作品を読み込めていない。条件を覚えて待つ。
+        _p1Pending = opts;
+        return;
       }
-      
-      // 結果なし表示
-      var existingNoResults = document.getElementById('phase1-no-results');
-      if (visibleCount === 0) {
-        if (!existingNoResults) {
-          var noResults = document.createElement('div');
-          noResults.id = 'phase1-no-results';
-          noResults.className = 'phase1-no-results';
-          noResults.textContent = '😔 該当する作品が見つかりませんでした';
-          worksGrid.parentNode.insertBefore(noResults, worksGrid.nextSibling);
+      _p1Pending = null;
+
+      var r;
+      try { r = api.setWorkFilter(opts); }
+      catch (e) { console.warn('[filter] 絞り込みに失敗:', e); return; }
+
+      var active = !!(opts.query.trim() || opts.length);
+      var statsEl = document.getElementById('phase1-filter-stats');
+      if (statsEl && r) {
+        statsEl.textContent = active
+          ? (r.matched + ' / ' + r.total + ' 作品が該当'
+             + (r.aozora ? '（うち青空文庫 ' + r.aozora + ' 作品）' : '')
+             + (r.unknownLength ? ' ／ 字数が記録されていない ' + r.unknownLength + ' 作品は長さで絞れません' : ''))
+          : ('全 ' + r.total + ' 作品');
+      }
+
+      var noRes = document.getElementById('phase1-no-results');
+      if (active && r && r.matched === 0) {
+        if (!noRes) {
+          var el = document.createElement('div');
+          el.id = 'phase1-no-results';
+          el.className = 'phase1-no-results';
+          el.textContent = '\uD83D\uDE14 該当する作品が見つかりませんでした';
+          if (worksGrid && worksGrid.parentNode) {
+            worksGrid.parentNode.insertBefore(el, worksGrid.nextSibling);
+          }
         }
-      } else {
-        if (existingNoResults) {
-          existingNoResults.remove();
-        }
+      } else if (noRes) {
+        noRes.remove();
       }
     }
-    
+
+    // portal.js の読み込みが終わるのを待って、一度だけ件数を出す。
+    // 待っているあいだに利用者が条件を入れていたら、それを掛ける。
+    (function waitForPortal() {
+      var tries = 0;
+      var t = setInterval(function () {
+        var api = window.AninovelPortal;
+        if (api && typeof api.setWorkFilter === 'function') {
+          clearInterval(t);
+          applyFilter();          // _p1Pending があればここで反映される
+        } else if (++tries > 40) {
+          clearInterval(t);       // 20秒待っても来なければあきらめる（一覧は出ている）
+        }
+      }, 500);
+    })();
+
     // イベントリスナー
     document.getElementById('phase1-search-input').addEventListener('input', applyFilter);
     document.getElementById('phase1-length-filter').addEventListener('change', applyFilter);

@@ -54,6 +54,77 @@
   // 横並びのカードが増えると見づらいので、10件ごとにページを切って表示する。
   var PAGE_SIZE = 10;
   var _pageNo = {};   // key -> 現在のページ番号
+
+  // ---- 作品一覧の絞り込み ------------------------------------------
+  // 全作品を覚えておき、絞り込みのたびに両方の区画を描き直す。
+  var _allWorks = [], _allVotes = {}, _isAozoraFn = function(){ return false; };
+  var _workFilter = null;   // {query, length} or null
+
+  /** 1作品が、いまの絞り込みに当てはまるか */
+  function _matchWork(w) {
+    var f = _workFilter;
+    if (!f) return true;
+    if (f.query) {
+      var hay = [w.title, w.titleEn, w.author, w.authorEn, w.description]
+        .concat(w.tags || []).join(' ').toLowerCase();
+      if (hay.indexOf(f.query) < 0) return false;
+    }
+    if (f.length) {
+      var c = Number(w.charCount);
+      // 字数の分からない作品は、長さで絞ったときには出さない。
+      // 「0字」として短編に混ぜると、数字の裏づけがない作品が紛れる。
+      if (!isFinite(c) || c <= 0) return false;
+      if (f.length === 'short')  return c <= 5000;
+      if (f.length === 'medium') return c > 5000 && c <= 20000;
+      if (f.length === 'long')   return c > 20000;
+    }
+    return true;
+  }
+
+  /** 両方の区画を描き直す。絞り込みの結果は件数で返す。 */
+  function _paintWorks() {
+    // 字数が記録されていない作品は、長さで絞ったときに出せない。
+    // 黙って消えると不親切なので、何件あったかを数えて画面に伝える。
+    var unknownLen = 0;
+    if (_workFilter && _workFilter.length) {
+      _allWorks.forEach(function (w) {
+        var c = Number(w.charCount);
+        if (!isFinite(c) || c <= 0) unknownLen++;
+      });
+    }
+    var matched = _allWorks.filter(_matchWork);
+    var regular = [], aozora = [];
+    matched.forEach(function (w) { (_isAozoraFn(w) ? aozora : regular).push(w); });
+
+    var grid = $('#works-grid');
+    if (grid) _renderPagedGrid(grid, regular, _allVotes, 'works');
+
+    // 青空文庫の区画。該当が無ければ区画ごと隠す（空の見出しを見せない）。
+    try {
+      var az = document.getElementById('aozora-section');
+      if (!az) {
+        renderAozoraSeries(aozora, _allVotes);
+      } else {
+        var ag = document.getElementById('aozora-grid');
+        if (ag) _renderPagedGrid(ag, aozora, _allVotes, 'aozora');
+      }
+      var az2 = document.getElementById('aozora-section');
+      if (az2) az2.style.display = aozora.length ? '' : 'none';
+    } catch (e) { console.warn('[Aozora] section skipped:', e); }
+
+    return { total: _allWorks.length, matched: matched.length,
+             regular: regular.length, aozora: aozora.length,
+             unknownLength: unknownLen };
+  }
+
+  /** 画面（index.html の絞り込み欄）から呼ぶ窓口 */
+  function setWorkFilter(opts) {
+    var q = String((opts && opts.query) || '').toLowerCase().trim();
+    var len = String((opts && opts.length) || '');
+    _workFilter = (q || len) ? { query: q, length: len } : null;
+    _pageNo['works'] = 1; _pageNo['aozora'] = 1;   // 絞り込んだら1ページ目から
+    return _paintWorks();
+  }
   function _renderPagedGrid(grid, works, votes, key) {
     if (!grid) return;
     var total = works.length;
@@ -201,6 +272,15 @@
     var head = h('div', { className: 'card-head' });
     head.appendChild(h('div', { className: 'card-title' }, _wEn(work,'title')));
     head.appendChild(h('div', { className: 'card-author' }, _wEn(work,'author')));
+    // 絞り込みが使う数値を、カード自身に持たせておく。
+    // 以前は表示テキストから「◯◯字」を正規表現で拾っていたため、
+    // 英語表示（chars）や表記ゆれで拾えなくなる弱さがあった。
+    try {
+      var _cc = Number(work.charCount); if (isFinite(_cc) && _cc > 0) card.dataset.chars = String(_cc);
+      var _pc = Number(work.pageCount); if (isFinite(_pc) && _pc > 0) card.dataset.pages = String(_pc);
+      if (work.id) card.dataset.workId = String(work.id);
+    } catch (e) {}
+
     var stats = h('div', { className: 'card-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_pEn()?'p':'頁') }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + (_pEn()?' chars':'字') }));
@@ -239,6 +319,24 @@
   }
 
   // === ランキング項目 ===
+  var RANKING_MAX = 10;
+  var RANKING_DESC_CHARS = 40;
+
+  /**
+   * ランキングに出す概要。
+   * 投稿時に自動で作られる「タイトル by 作者」のような説明は、
+   * 隣の行と同じことしか言わないので出さない。
+   */
+  function _rankDesc(work) {
+    var d = String((work && work.description) || '').trim();
+    if (!d) return '';
+    var t = String((work && work.title) || '').trim();
+    var a = String((work && work.author) || '').trim();
+    if (t && (d === t + ' by ' + a || d === t + ' / ' + a || d === t)) return '';
+    d = d.replace(/\s+/g, ' ');
+    return d.length > RANKING_DESC_CHARS ? (d.slice(0, RANKING_DESC_CHARS) + '…') : d;
+  }
+
   function createRankingItem(work, index, votes) {
     var v = votes[work.id] || { total: 0, userVoted: false };
     var item = h('div', { className: 'ranking-item' });
@@ -248,6 +346,8 @@
     var info = h('div', { className: 'ranking-info' });
     info.appendChild(h('div', { className: 'ranking-title' }, _wEn(work,'title')));
     info.appendChild(h('div', { className: 'ranking-author' }, _wEn(work,'author')));
+    var _rd = _rankDesc(work);
+    if (_rd) info.appendChild(h('div', { className: 'ranking-desc' }, _rd));
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
@@ -269,7 +369,8 @@
       var list = $('#ranking-list');
       if (!list) return;
       list.innerHTML = '';
-      works.forEach(function(w, i) {
+      // 上位10作品まで。全作品を縦に並べると、ランキングとしての意味が薄れる。
+      works.slice(0, RANKING_MAX).forEach(function(w, i) {
         list.appendChild(createRankingItem(w, i, {}));
       });
       // ソートボタン更新
@@ -874,24 +975,20 @@ function updateWelcomeBanner() {
       // 作品一覧（新着順）。青空文庫シリーズ（tags に「青空文庫」）は別枠へ分離。
       // フィルタで万一失敗しても本一覧が消えないよう保護する。
       function _isAozora(w){ try { return (w.tags||[]).indexOf('青空文庫')>=0; } catch(e){ return false; } }
-      var grid = $('#works-grid');
-      if (grid) {
-        var sorted = catalog.works.slice().sort(function(a, b) {
-          var ta = Date.parse(a && a.createdAt); if (isNaN(ta)) ta = 0;
-          var tb = Date.parse(b && b.createdAt); if (isNaN(tb)) tb = 0;
-          return tb - ta;
-        });
-        var regular = sorted;
-        try { regular = sorted.filter(function(w){ return !_isAozora(w); }); }
-        catch(e){ regular = sorted; }
-        _renderPagedGrid(grid, regular, votes, 'works');
-      }
 
-      // 青空文庫シリーズ コーナー（謝辞付き）。失敗しても本一覧に影響させない。
-      try {
-        var _aozora = catalog.works.filter(_isAozora);
-        renderAozoraSeries(_aozora, votes);
-      } catch (e) { console.warn('[Aozora] section skipped:', e); }
+      // 絞り込みのために、全作品と投票を覚えておく。
+      // 以前は画面に出ている10件のカードだけを DOM 上で隠していたため、
+      // 2ページ目以降にある該当作品が見えず、また別区画の青空文庫には
+      // そもそも効いていなかった。データを持っている側で絞るのが正しい。
+      _allWorks = catalog.works.slice().sort(function(a, b) {
+        var ta = Date.parse(a && a.createdAt); if (isNaN(ta)) ta = 0;
+        var tb = Date.parse(b && b.createdAt); if (isNaN(tb)) tb = 0;
+        return tb - ta;
+      });
+      _allVotes = votes;
+      _isAozoraFn = _isAozora;
+
+      _paintWorks();
 
       // ランキング
       renderRanking('votes');
@@ -959,4 +1056,9 @@ function updateWelcomeBanner() {
   } else {
     init();
   }
+  window.AninovelPortal = Object.assign(window.AninovelPortal || {}, {
+    setWorkFilter: setWorkFilter,
+    repaintWorks: _paintWorks
+  });
+
 })();
