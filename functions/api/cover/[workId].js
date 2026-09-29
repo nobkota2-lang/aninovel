@@ -36,11 +36,17 @@ export async function onRequestPut(context){
 
 export async function onRequestGet(context){
   const bucket = context.env.AUDIO_R2;
-  if(!bucket) return json({ error: 'R2 bucket "AUDIO_R2" が未バインド' }, 500);
+  // 置き場が無い＝表紙が無い、として 404 を返す。
+  // 以前は 500 を返していたため、バインディングが外れた日に
+  // 作品一覧のすべての表紙がサーバーエラーとして記録された。
+  // 読む側にとっては「表紙が無い」だけなので、404 のほうが正しい。
+  if(!bucket) return new Response('No cover storage', { status: 404 });
   const workId = (context.params.workId || '').toString();
   if(!ID_RE.test(workId)) return json({ error: 'invalid work id' }, 400);
 
-  const obj = await bucket.get('cover/' + workId);
+  let obj = null;
+  try { obj = await bucket.get('cover/' + workId); }
+  catch(e){ return new Response('Not Found', { status: 404 }); }
   if(!obj) return new Response('Not Found', { status: 404 });
   const headers = new Headers();
   headers.set('Content-Type', obj.httpMetadata?.contentType || 'image/png');

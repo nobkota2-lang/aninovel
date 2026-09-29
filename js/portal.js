@@ -260,13 +260,29 @@
     card.onclick = function() { openWork(work.id); };
     var top = h('div', { className: 'card-top' });
     var cover = h('div', { className: 'card-cover' });
+    // 表紙は「色と題名」を先に置き、画像が確かに読めたときだけ上に重ねる。
+    //
+    // 以前は画像の URL を背景に指定するだけだった。そのため画像が返って
+    // こない（R2 が落ちている、表紙が消された、通信が遅い）と、色も題名も
+    // 無い空白の四角が並んでしまった。2026-09-29 に実際にこうなった。
+    // 先に下地を描いておけば、画像が無くても作品一覧として読める。
+    cover.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
+    var _coverTitle = h('div', { className: 'card-cover-title' }, _wEn(work, 'title'));
+    cover.appendChild(_coverTitle);
+
     if (work.coverImage) {
-      cover.style.backgroundImage = 'url(' + work.coverImage + ')';
-      cover.style.backgroundSize = 'cover';
-      cover.style.backgroundPosition = 'center';
-    } else {
-      cover.style.background = work.coverColor || 'linear-gradient(135deg,#6366F1,#8B5CF6)';
-      cover.appendChild(h('div', { className: 'card-cover-title' }, _wEn(work,'title')));
+      var _img = new Image();
+      _img.onload = function () {
+        cover.style.backgroundImage = 'url(' + work.coverImage + ')';
+        cover.style.backgroundSize = 'cover';
+        cover.style.backgroundPosition = 'center';
+        if (_coverTitle && _coverTitle.parentNode) _coverTitle.parentNode.removeChild(_coverTitle);
+      };
+      _img.onerror = function () {
+        // 読めなかった。下地のまま置いておく。
+        console.info('[cover] 表紙を読めなかったので色と題名で表示します:', work.id);
+      };
+      _img.src = work.coverImage;
     }
     top.appendChild(cover);
     var head = h('div', { className: 'card-head' });
