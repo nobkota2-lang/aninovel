@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v187_reading_log';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v188_fix_recursion';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -70,7 +70,11 @@
     // 新しい draft_ を足すたびに書き漏らす危険があった。
     function _isMyDraftId(id){
       id = String(id == null ? '' : id);
-      return id.indexOf('draft_') === 0 || _isMyDraftId(id);
+      // ここは自分を呼んではいけない。
+      // v185 で「X.indexOf('my_')===0 を _isMyDraftId(X) に置き換える」
+      // という一括置換をしたとき、この関数自身の中の同じ書き方まで
+      // 置き換わり、無限再帰になって作品が開けなくなっていた。
+      return id.indexOf('draft_') === 0 || id.lastIndexOf('my_', 0) === 0;
     }
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600;700&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=Shippori+Mincho:wght@400;500;600;700&display=swap" rel="stylesheet">
