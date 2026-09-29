@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v186_review_on_edit';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v187_reading_log';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -3755,6 +3755,89 @@ function navSearch(idx){if(idx<0||idx>=state.searchResults.length)return;state.s
   for(var p=0;p<br.length-1;p++){if(r.order>br[p]&&r.order<br[p+1]){newPage=p;break}}if(newPage!==state.currentPage){state.currentPage=newPage;render()}else{renderSearchResults()}state._scrollToId=r.id;if(state._scrollToId){scrollToItem(state._scrollToId,{force:true});state._scrollToId=null}}
 function hlText(text,query){if(!query||!state.searchOpen)return esc(text);var e=esc(text),q=esc(query);try{return e.replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<span class="search-highlight">$1</span>')}catch(ex){return e}}
 function displayText(text,query){var en=(state.lang==='en');var c=en?(text||''):toFullWidth(text||'');if(!query)return hlText(c,null);var fq=en?query:toFullWidth(query);var r1=hlText(c,fq);if(r1!==esc(c))return r1;return hlText(c,query)}
+/* ============================================================
+   立ち読みの上限と、読書の記録
+   ------------------------------------------------------------
+   ・登録なしの読者は1日5作品まで。同じ日に読み返した作品は数えない。
+   ・登録会員は制限なし。ただし読書の量は記録する（収益分配の元）。
+   ・サーバー側が数えられない（D1 未設定・通信失敗）ときは読ませる。
+     上限を判定できないからといって読者を締め出すのは損が大きい。
+   ============================================================ */
+var _readStart = 0, _readTimer = null, _readSent = 0;
+
+async function _peekCheck(workId){
+  try{
+    var res = await fetch('/api/reading', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body: JSON.stringify({ action:'open', workId: workId })
+    });
+    if(!res.ok) return { allowed:true, unavailable:true };
+    return await res.json();
+  }catch(e){
+    return { allowed:true, unavailable:true };   // 数えられないなら読ませる
+  }
+}
+
+/** 立ち読みの上限に達したときの画面 */
+function _showPeekLimit(info){
+  var m = (info && info.message) ||
+    '登録なしで読める作品は1日5作品までです。';
+  document.body.innerHTML =
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;'
+      +'font-family:\'Zen Kaku Gothic New\',system-ui,sans-serif;background:#FAF6F0;color:#2D2A26">'
+    +'<div style="max-width:460px;text-align:center">'
+      +'<div style="font-size:52px;margin-bottom:12px">📚</div>'
+      +'<h1 style="font-size:22px;font-weight:700;margin:0 0 12px;font-family:\'Noto Serif JP\',serif">'
+        +'今日の立ち読みはここまでです</h1>'
+      +'<p style="font-size:14px;line-height:1.9;color:#6B635A;margin:0 0 6px">'+ esc(m) +'</p>'
+      +'<p style="font-size:13px;line-height:1.9;color:#6B635A;margin:0 0 24px">'
+        +'日付が変わればまた5作品お読みいただけます。'
+        +'<br><strong>いまはキャンペーン期間中につき、会員登録も無料です。</strong></p>'
+      +'<a href="/register.html" style="display:block;padding:13px;background:#0E7490;color:#fff;'
+        +'border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:10px">無料で読者会員になる</a>'
+      +'<a href="/login.html" style="display:block;padding:13px;border:1px solid #E2DCD4;color:#2D2A26;'
+        +'border-radius:8px;text-decoration:none;margin-bottom:10px">ログインする</a>'
+      +'<a href="/" style="display:block;padding:13px;color:#6B635A;text-decoration:none;font-size:13px">'
+        +'作品一覧に戻る</a>'
+    +'</div></div>';
+}
+
+/** 読んだ量をサーバーへ送る。閉じるときと、一定時間ごと。 */
+function _readingReport(finished){
+  if(!_workParam) return;
+  if(_workParam.indexOf('pub_') !== 0) return;      // 公開作品だけ
+  var now = Date.now();
+  var sec = Math.max(0, Math.round((now - (_readStart || now)) / 1000) - _readSent);
+  if(sec < 5 && !finished) return;                   // 数秒の開閉は記録しない
+  _readSent += sec;
+  var tp = (typeof getTP === 'function') ? getTP() : 0;
+  var prog = (tp > 0) ? Math.min(1, (state.currentPage + 1) / tp) : 0;
+  var body = JSON.stringify({ action:'progress', workId:_workParam,
+    seconds: sec, progress: prog, finished: !!finished || prog >= 0.98 });
+  try{
+    // 閉じる瞬間でも届くように sendBeacon を使う
+    if(finished && navigator.sendBeacon){
+      navigator.sendBeacon('/api/reading', new Blob([body], {type:'application/json'}));
+      return;
+    }
+  }catch(e){}
+  fetch('/api/reading', { method:'POST', headers:{'Content-Type':'application/json'},
+    credentials:'same-origin', body: body, keepalive: true }).catch(function(){});
+}
+
+function _readingStart(){
+  if(!_workParam || _workParam.indexOf('pub_') !== 0) return;
+  _readStart = Date.now(); _readSent = 0;
+  clearInterval(_readTimer);
+  // 1分ごとに送る。長く読んでいる人の記録が、閉じ忘れで消えないように。
+  _readTimer = setInterval(function(){ _readingReport(false); }, 60 * 1000);
+  window.addEventListener('pagehide', function(){ _readingReport(true); }, { once:true });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden') _readingReport(false);
+  });
+}
+
 function showToast(msg){var t=document.createElement('div');t.className='anim-slide-up';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg-toolbar);color:#fff;padding:10px 24px;border-radius:24px;font-size:14px;z-index:999;box-shadow:0 4px 16px var(--shadow-strong)';t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s'},2000);setTimeout(function(){t.remove()},2500)}
 
 async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.audioStore){var wid=_currentWorkId();var ids=Object.keys(d.audioStore),cnt=0;var pg=_showProgress('🔊 音声データ取込中');try{for(var k=0;k<ids.length;k++){var iid=ids[k],rec=d.audioStore[iid];_updateProgress(pg,k+1,ids.length,iid);try{var blob=_b64ToBlob(rec.b64,rec.mime||'audio/wav');await _idbPut(wid,iid,blob,rec.meta||{});cnt++;}catch(ie){console.warn('音声取込失敗',iid,ie);}}}finally{_hideProgress(pg);}console.info('[Import] 音声'+cnt+'件をIndexedDBに保存 workId='+wid);}showToast('インポート完了'+(d.audioStore?' (音声'+Object.keys(d.audioStore).length+'件)':''));render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert((state.lang==='en'?'Error: ':'エラー: ')+e.message)}}
@@ -7379,6 +7462,12 @@ window.onload=function(){
             window.location.href='index.html';
             return;
         }
+        // 公開作品は、開く前に立ち読みの上限を確かめる。
+        (_workParam.indexOf('pub_')===0
+          ? _peekCheck(_workParam)
+          : Promise.resolve({allowed:true})
+        ).then(function(_pk){
+        if(_pk && _pk.allowed === false){ _showPeekLimit(_pk); return; }
         window.AninovelServices.getWork(_workParam).then(function(data){
             state._workOwnerEmail=(data&&data.ownerEmail)?String(data.ownerEmail).toLowerCase():null;
             if(data.novel)state.novel=data.novel;
@@ -7406,7 +7495,9 @@ window.onload=function(){
             state.isAuthorMode=_canAuthorThisWork();
             _restoreProgress();_preloadWorkTrans();render();
             _schedulePregen();
+            _readingStart();   // ここから読書時間を数える
         }).catch(function(e){console.error(e);render()});
+        });   // _peekCheck の結果を受けたところの閉じ
     } else {
         // ?work= なしで viewer.html を直接開かれた場合はポータルへ戻す
         window.location.replace('index.html');

@@ -12,6 +12,7 @@ import {
   json, loadForReader, writeDraft, putInReview, dropFromReview,
   unpublishWorkId, publishDraft, logAutoPublish, STATUS,
 } from '../../../_drafts.js';
+import { upsertWorkMeta } from '../../../_d1.js';
 import { reviewDraft } from '../../../_moderate.js';
 
 export async function onRequestPost(context) {
@@ -84,6 +85,8 @@ export async function onRequestPost(context) {
   // ===== 編集で、AI が問題なしと判断したものは自動で公開 =====
   if (ai.canAutoPublish && d.publishedId) {
     const pub = await publishDraft(r.store, d);
+  // 集計のために、作品の状態と日付を D1 にも残す。D1 が無ければ何もしない。
+  try { await upsertWorkMeta(context.env, pub.meta); } catch (e) {}
     d.status = STATUS.PUBLISHED;
     d.publishedId = pub.pubId;
     d.pendingChanges = false;

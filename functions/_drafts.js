@@ -359,7 +359,11 @@ export async function publishDraft(store, draft) {
   if (i >= 0) catalog[i] = row; else catalog.push(row);
   await store.put(CATALOG_KEY, JSON.stringify(catalog));
 
-  return { pubId, entry: row };
+  return { pubId, entry: row, meta: {
+    workId: pubId, draftId: draft.id, ownerEmail: draft.ownerEmail,
+    title: entry.title, status: 'published',
+    createdAt: draft.createdAt, publishedAt: row.updatedAt,
+  } };
 }
 
 /** 公開を取り下げる。カタログからも本体からも消す。下書きは残す。 */

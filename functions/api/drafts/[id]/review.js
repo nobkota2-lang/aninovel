@@ -15,6 +15,7 @@ import {
   json, loadForReader, writeDraft, dropFromReview,
   publishDraft, unpublishWorkId, STATUS,
 } from '../../../_drafts.js';
+import { upsertWorkMeta } from '../../../_d1.js';
 
 function ownerOnly(r) {
   if (!r.isOwner) {
@@ -72,6 +73,8 @@ export async function onRequestPost(context) {
   }
 
   const pub = await publishDraft(r.store, d);
+  // 集計のために、作品の状態と日付を D1 にも残す。D1 が無ければ何もしない。
+  try { await upsertWorkMeta(context.env, pub.meta); } catch (e) {}
   d.status = STATUS.PUBLISHED;
   d.publishedId = pub.pubId;
   d.pendingChanges = false;         // 承認した内容が、いま読者に見えている版

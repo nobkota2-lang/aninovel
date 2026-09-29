@@ -1,5 +1,43 @@
+name = "aninovel"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "."
+
+# ------------------------------------------------------------
+# 2026-09-29 修正
+#   これまで [[kv_namespaces]] が1つしかないのに binding と id を
+#   2組書いていた。TOML では後の行が前の行を上書きするため、
+#   WORKS の指定が消えて RATE_LIMIT_KV だけが残る状態だった。
+#   （本番は Cloudflare のダッシュボード側の設定で動いていたので
+#     表に出ていなかったが、wrangler で動かすと壊れる）
+#   区画を分けて、2つとも効くようにした。
+# ------------------------------------------------------------
+
+# 作品・利用者・下書き・カタログ
 [[kv_namespaces]]
 binding = "WORKS"
 id = "98931e4dfa8045828d502e8f83e6c98d"
+
+# 通信量の制限
+[[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
 id = "7094071d67e24f4e9d91ce3cde4b5fa6"
+
+# ------------------------------------------------------------
+# 読書ログ・ポイント台帳・立ち読みの数え上げ（D1 / SQLite）
+#
+# 使う前に、Cloudflare 側でデータベースを作って id を入れてください。
+#   1. Workers & Pages → D1 → Create database
+#      名前: aninovel
+#   2. 作られた Database ID を下の database_id に貼る
+#   3. Console に migrations/0001_init.sql を貼って実行
+#   4. Workers & Pages → aninovel → Settings → Bindings →
+#      D1 database binding を追加  変数名: DB  データベース: aninovel
+#      （本番の Pages はダッシュボード側の設定を使うため、この手順が必要）
+#
+# 設定が済むまでは、読書ログと立ち読みの数え上げは静かに止まります。
+# 作品を読むことは、いままでどおりできます。
+# ------------------------------------------------------------
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "aninovel"
+# database_id = "ここに Database ID を貼る"

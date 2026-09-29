@@ -18,6 +18,7 @@ import {
   json, loadForReader, writeDraft, removeDraft, unpublishWorkId,
   STATUS, MAX_BYTES,
 } from '../../_drafts.js';
+import { touchAuthored } from '../../_d1.js';
 
 export async function onRequestGet(context) {
   const r = await loadForReader(context, context.params.id);
@@ -72,6 +73,12 @@ export async function onRequestPut(context) {
   }
 
   await writeDraft(r.store, d);
+
+  // 「最後に作品を登録・編集した日」を残す。
+  // キャンペーン終了後、3か月編集がない作者に課金する判定に使う。
+  // D1 が無い間は何もしない。保存そのものは止めない。
+  try { await touchAuthored(context.env, d.ownerEmail); } catch (e) {}
+
   return json({ ok: true, id: d.id, status: d.status, savedAt: d.updatedAt,
     pendingChanges: !!d.pendingChanges });
 }
