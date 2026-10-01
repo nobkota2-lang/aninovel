@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v189_gallery_jpg';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v190_gallery_jpg_direct';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1760,7 +1760,7 @@ function _generateLipGif(cid,callback){
   var ch=state.characters.find(function(c){return c.id===cid;});
   if(!ch)return callback(null);
   var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
-  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  var iconImg=_galSrc(rc&&rc.iconImage?rc.iconImage:ch.iconImage);
   if(!iconImg)return callback(null);
   var displaySz=state.displaySettings.iconSize||56;
   // GIFは表示サイズの3倍 (上限256) で生成して、CSSでダウンスケール → 高解像度ディスプレイでも鮮明
@@ -1944,7 +1944,7 @@ function _startLipSyncChar(cid){
   var ch=state.characters.find(function(c){return c.id===cid;});
   if(!ch)return;
   var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
-  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  var iconImg=_galSrc(rc&&rc.iconImage?rc.iconImage:ch.iconImage);
   var iconClr=rc&&rc.iconColor?rc.iconColor:(ch.iconColor||'#6366F1');
   var sn=(_cname(ch)||'?').substring(0,2);
   // 発話中のアイテム配下のアイコンのみ対象
@@ -3713,7 +3713,7 @@ function _pregenCharGif(cid){
   if(!cid)return;
   var ch=state.characters.find(function(c){return c.id===cid;});if(!ch)return;
   var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];
-  var iconImg=rc&&rc.iconImage?rc.iconImage:ch.iconImage;
+  var iconImg=_galSrc(rc&&rc.iconImage?rc.iconImage:ch.iconImage);
   if(!iconImg)return;
   // 既にキャッシュ済みならスキップ
   var cached=_lipGifCache[cid];var displaySz=state.displaySettings.iconSize||56;
@@ -4028,6 +4028,18 @@ function _authorGender(){
     return 'male';
   }catch(e){ return 'male'; }
 }
+// ギャラリーのアイコンは 2026-10-01 に png から jpg へ移した。
+// 公開済みの作品データ・下書き・端末に保存された差し替えには png のまま残っているので、
+// 画面に出す直前で jpg に読み替える。読み替えないと、表示のたびに404を1回踏む。
+// 万一 jpg が無ければ _iconFallback が後始末をする。
+function _galSrc(v){
+  try{
+    var s=String(v||'');
+    if(s.indexOf('gallery/')<0) return v;
+    return s.replace(/\.png(\?[^\/]*)?$/i, '.jpg$1');
+  }catch(e){ return v; }
+}
+window._galSrc=_galSrc;
 function _iconFallback(img){
   try{
     var src=img.getAttribute('src')||'';
@@ -5083,7 +5095,7 @@ function rIcon(cid,sz){
       +'align-items:center;justify-content:center;color:var(--text-muted);'
       +'font-size:'+Math.round(_s*0.4)+'px;flex:0 0 auto">—</div>';
   }
-  var c=state.characters.find(function(ch){return ch.id===cid});if(!c)c=state.characters[state.characters.length-1];if(!c)return'';var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];var iconImg=rc&&rc.iconImage?rc.iconImage:c.iconImage;var iconClr=rc&&rc.iconColor?rc.iconColor:c.iconColor;var canEdit=state.isAuthorMode;var canCustom=!state.isAuthorMode&&_isLoggedIn();var dblAttr=canEdit?' data-dblchar="'+c.id+'" title="ダブルクリックで編集"':(canCustom?' data-customchar="'+c.id+'" title="クリックでカスタマイズ"':'');var cur=(canEdit||canCustom)?'cursor:pointer;':'';var inner=iconImg?'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;'+cur+'"><img src="'+iconImg+'" loading="lazy" onerror="_iconFallback(this)"></div>':'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;background:'+iconClr+';font-size:'+Math.round(sz/3)+'px;'+cur+'">'+esc((_cname(c)||'?').substring(0,2))+'</div>';return'<div class="char-icon-wrap" data-charid="'+cid+'">'+inner+'</div>'}
+  var c=state.characters.find(function(ch){return ch.id===cid});if(!c)c=state.characters[state.characters.length-1];if(!c)return'';var rc=(!state.isAuthorMode)&&state.readerCustom&&state.readerCustom[cid];var iconImg=_galSrc(rc&&rc.iconImage?rc.iconImage:c.iconImage);var iconClr=rc&&rc.iconColor?rc.iconColor:c.iconColor;var canEdit=state.isAuthorMode;var canCustom=!state.isAuthorMode&&_isLoggedIn();var dblAttr=canEdit?' data-dblchar="'+c.id+'" title="ダブルクリックで編集"':(canCustom?' data-customchar="'+c.id+'" title="クリックでカスタマイズ"':'');var cur=(canEdit||canCustom)?'cursor:pointer;':'';var inner=iconImg?'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;'+cur+'"><img src="'+iconImg+'" loading="lazy" onerror="_iconFallback(this)"></div>':'<div class="char-icon"'+dblAttr+' style="width:'+sz+'px;height:'+sz+'px;background:'+iconClr+';font-size:'+Math.round(sz/3)+'px;'+cur+'">'+esc((_cname(c)||'?').substring(0,2))+'</div>';return'<div class="char-icon-wrap" data-charid="'+cid+'">'+inner+'</div>'}
 function aBtn(id){if(!state.isAuthorMode)return'';var a=_acts.length;_acts.push(function(){moveContent(id,'up')});_acts.push(function(){moveContent(id,'down')});_acts.push(function(){deleteItem(id,'content')});return'<div class="author-actions" style="display:none;position:absolute;top:-8px;right:-8px;gap:4px;z-index:5"><button onclick="event.stopPropagation();act('+a+')" class="btn" style="padding:3px 8px;font-size:11px;background:var(--panel-bg);border:1px solid var(--border)">↑</button><button onclick="event.stopPropagation();act('+(a+1)+')" class="btn" style="padding:3px 8px;font-size:11px;background:var(--panel-bg);border:1px solid var(--border)">↓</button><button onclick="event.stopPropagation();act('+(a+2)+')" class="btn" style="padding:3px 8px;font-size:11px;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA">✕</button></div>'}
 function hv(){return' onmouseenter="var a=this.querySelector(\'.author-actions\');if(a)a.style.display=\'flex\'" onmouseleave="var a=this.querySelector(\'.author-actions\');if(a)a.style.display=\'none\'"'}
 function editAttr(item){if(!state.isAuthorMode)return'';var a=_acts.length;var cp=JSON.parse(JSON.stringify(item));_acts.push(function(){openEditModal('content',cp)});return' onclick="act('+a+')"'}
