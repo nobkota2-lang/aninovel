@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v188_fix_recursion';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v189_gallery_jpg';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -1768,11 +1768,13 @@ function _generateLipGif(cid,callback){
   var cacheKey='v7mp|'+sz+'|'+iconImg;
   var _iconDebug=iconImg.length>80?iconImg.substring(0,60)+'...(len='+iconImg.length+')':iconImg;
   console.info('[LipSync] '+cid+' icon=',_iconDebug);
-  // 事前生成GIF優先: iconImg が /gallery/.../X.png 形式なら 対応する /lipsync/.../X.gif を探す。
+  // 事前生成GIF優先: iconImg が /gallery/.../X.jpg 形式なら 対応する /lipsync/.../X.gif を探す。
+  // 拡張子は jpg / png / webp のどれでも受ける。2026-10-01にアイコンを png から jpg へ移したが、
+  // 古い作品データには png のまま残っている可能性があるので、両方を通す。
   // 見つかればそれを採用、無ければ next() で MediaPipe 生成にフォールバック。
   function tryPreGen(next){
-    var m=/(?:^https?:\/\/[^\/]+)?\/?gallery\/(.+)\.png$/i.exec(iconImg||"");
-    if(!m){console.info("[LipSync] アイコンが/gallery/...png形式でないため事前生成GIF探索をスキップ→MediaPipe。icon:",iconImg);return next();}
+    var m=/(?:^https?:\/\/[^\/]+)?\/?gallery\/(.+)\.(?:jpe?g|png|webp)(?:\?.*)?$/i.exec(iconImg||"");
+    if(!m){console.info("[LipSync] アイコンが/gallery/...の画像形式でないため事前生成GIF探索をスキップ→MediaPipe。icon:",iconImg);return next();}
     var gifUrl="/lipsync/"+m[1]+".gif";
     var probe=new Image(),done=false;
     probe.onload=function(){
@@ -4029,8 +4031,18 @@ function _authorGender(){
 function _iconFallback(img){
   try{
     var src=img.getAttribute('src')||'';
-    if(src.indexOf('/gallery/')<0){ img.onerror=null; return; }
+    // 作品データには先頭スラッシュ無しの "gallery/..." で入っている。
+    // 以前は '/gallery/' を探していたため、この関数が一度も働いていなかった。
+    if(src.indexOf('gallery/')<0){ img.onerror=null; return; }
     var tried=img.getAttribute('data-icontry')||'';
+    // 2026-10-01: ギャラリーのアイコンを png から jpg に移した。
+    // 公開済みの作品データ・下書き・端末に保存された差し替えには png のまま残るので、
+    // 読めなかったら同じ名前の jpg を試す。これで作品データを書き換えずに済む。
+    if(tried.indexOf('j')<0 && /\.png(\?|$)/i.test(src)){
+      img.setAttribute('data-icontry', tried+'j');
+      img.src=src.replace(/\.png(\?[^\/]*)?$/i, '.jpg$1');
+      return;
+    }
     if(!/part\d/.test(src) && tried.indexOf('p1')<0){
       img.setAttribute('data-icontry', tried+'p1');
       img.src=src.replace(/\/([^\/]+\.(?:png|jpg|jpeg|webp))(\?[^\/]*)?$/i, '/part01/$1$2');

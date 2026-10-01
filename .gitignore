@@ -14,3 +14,11 @@ legal/*.backup-*
 viewer.html.bak
 
 *.bak
+
+# 画像の作り直し台帳（build-assets.py が使う。中身は端末ごとの作業記録）
+.assets-build.json
+
+# gifsicle はGIF圧縮に使う外部ツール。リポジトリには入れない。
+# 入れてしまうとサイトの一部として配信され、aninovel.com から
+# .exe が誰でも落とせる状態になる（GPLの再配布義務も生じる）。
+tools/gifsicle/
