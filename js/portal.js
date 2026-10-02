@@ -5,6 +5,8 @@
 (function() {
   'use strict';
   var S = window.AninovelServices;
+  // デプロイできているかをコンソールで確かめるための目印。
+  window.__ANINOVEL_PORTAL_VER__ = 'v2_rank_desc_i18n';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -336,7 +338,10 @@
 
   // === ランキング項目 ===
   var RANKING_MAX = 10;
-  var RANKING_DESC_CHARS = 40;
+  // 以前はここで40字に切っていたが、1行に何字入るかは画面幅と字種で変わる。
+  // 切るのはCSS（text-overflow:ellipsis）に任せ、ここでは渡すだけにする。
+  // 下の数字は、異常に長い概要がDOMに流れ込むのを防ぐだけの安全弁。
+  var RANKING_DESC_GUARD = 300;
 
   /**
    * ランキングに出す概要。
@@ -344,13 +349,16 @@
    * 隣の行と同じことしか言わないので出さない。
    */
   function _rankDesc(work) {
-    var d = String((work && work.description) || '').trim();
+    // 表示中の言語の概要を使う。英語表示なら descriptionEn。
+    // ここで work.description を直に読んでいたため、英語表示でも
+    // 概要だけ日本語のまま残っていた。題名と作者はすでに _wEn を通っている。
+    var d = String(_wEn(work, 'description') || '').trim();
     if (!d) return '';
-    var t = String((work && work.title) || '').trim();
-    var a = String((work && work.author) || '').trim();
+    var t = String(_wEn(work, 'title') || '').trim();
+    var a = String(_wEn(work, 'author') || '').trim();
     if (t && (d === t + ' by ' + a || d === t + ' / ' + a || d === t)) return '';
     d = d.replace(/\s+/g, ' ');
-    return d.length > RANKING_DESC_CHARS ? (d.slice(0, RANKING_DESC_CHARS) + '…') : d;
+    return d.length > RANKING_DESC_GUARD ? (d.slice(0, RANKING_DESC_GUARD) + '…') : d;
   }
 
   function createRankingItem(work, index, votes) {
