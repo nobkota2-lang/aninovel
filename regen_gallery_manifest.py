@@ -16,6 +16,34 @@ E:\\aninovel\\aninovel\\ で実行してください（gallery/ と data/ があ
 """
 import os, sys, json, urllib.parse, collections, shutil
 
+# ============================================================
+# 【使わないでください — 2026-10-02 に用済みになりました】
+#
+# このスクリプトは古い並べ方を前提にしています。
+#   想定: gallery/<Gender>/<Race>_<Type>/<Age>/<file>.png
+#   現在: gallery/<Gender>/<Age>/<Type>/<file>.jpg
+# しかも拡張子が .png のままなので、いま走らせると
+# 1件も見つからないまま data/gallery-manifest.json を
+# 空の内容で上書きし、ギャラリーが丸ごと消えます。
+#
+# 正しい手順は tools/build-assets.py です。
+#   E:\MetaAI のオリジナルから圧縮して gallery/ と lipsync/ を作り、
+#   そのうえで data/gallery-manifest.json を書き出します。
+#
+#   cd E:\aninovel\aninovel
+#   python tools\build-assets.py --dry     … 何が起きるかだけ見る
+#   python tools\build-assets.py           … 実行
+#
+# 残してあるのは、昔の並べ方を調べたくなったときのためだけです。
+# ============================================================
+import sys as _sys
+if '--i-know-this-is-obsolete' not in _sys.argv:
+    print(__doc__ or '')
+    print('このスクリプトは使われなくなりました。tools/build-assets.py を使ってください。')
+    print('（どうしても動かす必要があるときは --i-know-this-is-obsolete を付けてください）')
+    raise SystemExit(1)
+
+
 ROOT = os.getcwd()
 GALLERY = os.path.join(ROOT, "gallery")
 LIPSYNC = os.path.join(ROOT, "lipsync")
