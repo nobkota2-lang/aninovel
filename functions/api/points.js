@@ -9,17 +9,85 @@
  *   利用者ではないので、自分のポイントを見ることができなくなる。
  *   だから Access の対象外のパスに置き、サイト自身のログインで判定する。
  *
+ * 当月は台帳を見ない（2026-10-03）
+ *   ポイント台帳(points)は、運営者が集計を走らせたときに書かれる。
+ *   台帳だけを見せると、作者は集計されるまで自分の今月を見られない。
+ *   「いま何点か」が分からないのでは、画面を置く意味が薄い。
+ *
+ *   そこで当月は読書ログ(reads)から直接計算して見せる。
+ *   式は運営者の集計と同じもの(_d1.js の SCORE_SQL)を使う。
+ *   ただし締め済み(confirmed=1)の期間は台帳の値をそのまま出す。
+ *   支払いの根拠にした数字は、後から動いて見えてはいけない。
+ *
  * 見せる範囲
  *   自分が owner_email になっている作品だけ。他の作者の数字は返さない。
  *   オーナーも、この口では自分の分しか見えない（全体は /api/admin/points）。
  *
  * 使い方
- *   GET /api/points              … 直近12期間の自分のポイント
- *   GET /api/points?period=2026-10 … その期間だけ
+ *   GET /api/points                 … 当月の暫定値と、過去12か月の履歴
+ *   GET /api/points?period=2026-09  … その期間だけ
  */
 
 import { requireWriter, json } from '../_owner.js';
-import { db, jstMonth } from '../_d1.js';
+import { db, jstMonth, SCORE_SQL, SCORE_NOTE_JA, SCORE_NOTE_EN } from '../_d1.js';
+
+/** 当月ぶんを読書ログから直接計算する */
+const LIVE = `
+SELECT r.work_id, w.title, w.title_en,
+       ROUND(SUM(${SCORE_SQL}), 4) AS points,
+       SUM(CASE WHEN r.seconds < 30 THEN 0 ELSE 1 END) AS reads_count
+  FROM reads r
+  JOIN works_meta w ON w.work_id = r.work_id
+ WHERE w.owner_email = ?1
+   AND substr(r.day, 1, 7) = ?2
+ GROUP BY r.work_id
+HAVING points > 0
+ ORDER BY points DESC`;
+
+/** 台帳から読む（過去の期間） */
+const LEDGER = `
+SELECT p.period, p.work_id, w.title, w.title_en, p.points, p.reads_count, p.confirmed, p.computed_at
+  FROM points p
+  LEFT JOIN works_meta w ON w.work_id = p.work_id
+ WHERE p.author_email = ?1
+   AND p.period >= ?2
+ ORDER BY p.period DESC, p.points DESC`;
+
+const LEDGER_ONE = `
+SELECT p.period, p.work_id, w.title, w.title_en, p.points, p.reads_count, p.confirmed, p.computed_at
+  FROM points p
+  LEFT JOIN works_meta w ON w.work_id = p.work_id
+ WHERE p.author_email = ?1
+   AND p.period = ?2
+ ORDER BY p.points DESC`;
+
+const r4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
+
+/** 12か月前の YYYY-MM */
+function twelveMonthsAgo() {
+  const [y, m] = jstMonth().split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 - 11, 1)).toISOString().slice(0, 7);
+}
+
+/** 台帳の行を期間ごとにまとめる */
+function groupByPeriod(rows) {
+  const by = {};
+  for (const r of rows) {
+    const p = by[r.period] || (by[r.period] = {
+      period: r.period, points: 0, reads: 0, confirmed: true, 暫定: false, works: [],
+    });
+    p.points += Number(r.points) || 0;
+    p.reads += Number(r.reads_count) || 0;
+    if (r.confirmed !== 1) p.confirmed = false;
+    p.works.push({
+      workId: r.work_id, title: r.title, titleEn: r.title_en || null,
+      points: r4(r.points), reads: Number(r.reads_count) || 0,
+    });
+  }
+  return Object.values(by)
+    .map((p) => ({ ...p, points: r4(p.points) }))
+    .sort((a, b) => b.period.localeCompare(a.period));
+}
 
 export async function onRequestGet(context) {
   const g = await requireWriter(context); if (g.deny) return g.deny;
@@ -29,54 +97,86 @@ export async function onRequestGet(context) {
   if (!d) {
     // D1 がまだ無い間は「0件」ではなく「まだ数えていない」と返す。
     // 0件と出すと、読まれていないのだと誤解させてしまう。
-    return json({ unavailable: true, email: me, periods: [],
-                  message: 'ポイントの集計はまだ始まっていません。' });
+    return json({
+      unavailable: true, email: me, 当月: jstMonth(), current: null, periods: [],
+      message: 'ポイントの集計はまだ始まっていません。',
+      数え方: SCORE_NOTE_JA, howCounted: SCORE_NOTE_EN,
+    });
   }
 
   const url = new URL(context.request.url);
-  const period = url.searchParams.get('period');
+  const asked = url.searchParams.get('period');
+  const month = jstMonth();
 
   try {
-    const sql = period
-      ? `SELECT p.period, p.work_id, w.title, p.points, p.reads_count, p.confirmed, p.computed_at
-           FROM points p LEFT JOIN works_meta w ON w.work_id = p.work_id
-          WHERE p.author_email = ?1 AND p.period = ?2
-          ORDER BY p.points DESC`
-      : `SELECT p.period, p.work_id, w.title, p.points, p.reads_count, p.confirmed, p.computed_at
-           FROM points p LEFT JOIN works_meta w ON w.work_id = p.work_id
-          WHERE p.author_email = ?1
-            AND p.period >= ?2
-          ORDER BY p.period DESC, p.points DESC`;
-
-    // 直近12か月ぶん
-    const from = (() => {
-      const [y, m] = jstMonth().split('-').map(Number);
-      const t = new Date(Date.UTC(y, m - 1 - 11, 1));
-      return t.toISOString().slice(0, 7);
-    })();
-
-    const rows = await d.prepare(sql).bind(me, period || from).all();
-    const list = (rows && rows.results) || [];
-
-    // 期間ごとにまとめる
-    const byPeriod = {};
-    for (const r of list) {
-      const p = byPeriod[r.period] || (byPeriod[r.period] = { period: r.period, points: 0, reads: 0, confirmed: true, works: [] });
-      p.points += Number(r.points) || 0;
-      p.reads  += Number(r.reads_count) || 0;
-      if (r.confirmed !== 1) p.confirmed = false;
-      p.works.push({ workId: r.work_id, title: r.title, points: r.points, reads: r.reads_count });
+    // ---- 期間の指定があるとき ----
+    if (asked) {
+      if (!/^\d{4}-\d{2}$/.test(asked)) {
+        return json({ error: 'bad_period', message: '期間は YYYY-MM の形で指定してください。' }, 400);
+      }
+      const led = await d.prepare(LEDGER_ONE).bind(me, asked).all();
+      const rows = (led && led.results) || [];
+      const confirmed = rows.length > 0 && rows.every((r) => r.confirmed === 1);
+      // 締めていない期間は、台帳より読書ログのほうが新しい
+      if (!confirmed) {
+        const live = await d.prepare(LIVE).bind(me, asked).all();
+        const lr = (live && live.results) || [];
+        return json({
+          email: me, period: asked, 暫定: true, confirmed: false,
+          合計ポイント: r4(lr.reduce((a, x) => a + (Number(x.points) || 0), 0)),
+          works: lr.map((x) => ({ workId: x.work_id, title: x.title, titleEn: x.title_en || null,
+                                  points: r4(x.points), reads: Number(x.reads_count) || 0 })),
+          数え方: SCORE_NOTE_JA, howCounted: SCORE_NOTE_EN,
+        });
+      }
+      const g1 = groupByPeriod(rows)[0];
+      return json({ email: me, period: asked, 暫定: false, confirmed: true,
+                    合計ポイント: g1.points, works: g1.works,
+                    数え方: SCORE_NOTE_JA, howCounted: SCORE_NOTE_EN });
     }
-    const periods = Object.values(byPeriod)
-      .map(p => ({ ...p, points: Math.round(p.points * 10000) / 10000 }))
-      .sort((a, b) => b.period.localeCompare(a.period));
+
+    // ---- 既定: 当月の暫定値 ＋ 過去12か月の履歴 ----
+    const [liveRes, ledRes] = await Promise.all([
+      d.prepare(LIVE).bind(me, month).all(),
+      d.prepare(LEDGER).bind(me, twelveMonthsAgo()).all(),
+    ]);
+
+    const liveRows = (liveRes && liveRes.results) || [];
+    const ledRows = ((ledRes && ledRes.results) || []);
+
+    // 当月が締め済みなら、台帳の値がそのまま答え。動かさない。
+    const thisMonthLedger = ledRows.filter((r) => r.period === month);
+    const thisMonthConfirmed =
+      thisMonthLedger.length > 0 && thisMonthLedger.every((r) => r.confirmed === 1);
+
+    let current;
+    if (thisMonthConfirmed) {
+      const g1 = groupByPeriod(thisMonthLedger)[0];
+      current = { period: month, 暫定: false, confirmed: true,
+                  points: g1.points, reads: g1.reads, works: g1.works };
+    } else {
+      current = {
+        period: month, 暫定: true, confirmed: false,
+        points: r4(liveRows.reduce((a, x) => a + (Number(x.points) || 0), 0)),
+        reads: liveRows.reduce((a, x) => a + (Number(x.reads_count) || 0), 0),
+        works: liveRows.map((x) => ({ workId: x.work_id, title: x.title, titleEn: x.title_en || null,
+                                      points: r4(x.points), reads: Number(x.reads_count) || 0 })),
+      };
+    }
+
+    // 履歴は当月を除く（当月は current に出している）
+    const periods = groupByPeriod(ledRows.filter((r) => r.period !== month));
 
     return json({
       email: me,
-      当月: jstMonth(),
+      当月: month,
+      current,
       periods,
-      合計ポイント: Math.round(periods.reduce((a, p) => a + p.points, 0) * 10000) / 10000,
-      数え方: '1件の読書につき、読んだ割合（0〜1）×（会員1.0／立ち読み0.5）。30秒未満は数えません。同じ人が同じ作品を同じ日に何度読んでも1件です。',
+      累計ポイント: r4(current.points + periods.reduce((a, p) => a + p.points, 0)),
+      数え方: SCORE_NOTE_JA,
+      howCounted: SCORE_NOTE_EN,
+      注記: '当月は暫定です。月が締まると確定し、以後は変わりません。',
+      note: 'The current month is provisional. It is finalised when the month is closed.',
     });
   } catch (e) {
     return json({ error: 'query_failed', message: String(e && e.message) }, 500);

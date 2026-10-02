@@ -30,11 +30,11 @@
  */
 
 import { requireOwner, json } from '../../_owner.js';
-import { db, jstMonth } from '../../_d1.js';
+import { db, jstMonth, SCORE_SQL } from '../../_d1.js';
 
-// 1件あたりの点数。会員は満点、立ち読みは半分。30秒未満は数えない。
-const SCORE = `CASE WHEN r.seconds < 30 THEN 0
-                    ELSE r.progress * (CASE WHEN r.member = 1 THEN 1.0 ELSE 0.5 END) END`;
+// 点数の式は _d1.js にひとつだけ置く。ここで別に書くと、作者が見る
+// 画面(api/points.js)との間でいつか食い違う。
+const SCORE = SCORE_SQL;
 
 const AGGREGATE = `
 INSERT INTO points (period, author_email, work_id, points, reads_count, confirmed, computed_at)
@@ -120,16 +120,22 @@ async function backfill(env, d, defaultOwner) {
     if (!owner && fallback) { owner = fallback; fromFallback = true; }
 
     try {
+      // 文字数は、読み切るのに要する最短時間の算出に使う（_d1.js 参照）。
+      // これが無い作品は既定の300秒で見積もるため、水増しに少し甘くなる。
+      const chars = Number(w.charCount) > 0 ? Math.round(Number(w.charCount)) : null;
       await d.prepare(
-        `INSERT INTO works_meta (work_id, owner_email, title, status, created_at, published_at, last_edited_at)
-         VALUES (?1, ?2, ?3, 'published', ?4, ?4, ?5)
+        `INSERT INTO works_meta (work_id, owner_email, title, status, created_at, published_at, last_edited_at, char_count, title_en)
+         VALUES (?1, ?2, ?3, 'published', ?4, ?4, ?5, ?6, ?7)
          ON CONFLICT(work_id) DO UPDATE SET
            owner_email = COALESCE(?2, owner_email),
            title       = COALESCE(?3, title),
-           status      = COALESCE('published', status)`
-      ).bind(w.id, owner, w.title || null, created || now, now).run();
+           status      = COALESCE('published', status),
+           char_count  = COALESCE(?6, char_count),
+           title_en    = COALESCE(?7, title_en)`
+      ).bind(w.id, owner, w.title || null, created || now, now, chars, w.titleEn || null).run();
       (owner ? done : skipped).push({ id: w.id, title: w.title, owner,
-                                      指定で補った: fromFallback || undefined });
+                                      指定で補った: fromFallback || undefined,
+                                      文字数: chars || '不明' });
     } catch (e) {
       skipped.push({ id: w.id, title: w.title, error: String(e && e.message) });
     }

@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v2_rank_desc_i18n';
+  window.__ANINOVEL_PORTAL_VER__ = 'v3_points_link';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -858,6 +858,18 @@ function updateWelcomeBanner() {
       banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_en?(' Welcome back, ' + _displayName(state.user)):(' おかえりなさい、' + state.user.displayName + ' さん'))));
       banner.appendChild(h('div', { className: 'welcome-role' }, (_en?('Current mode: ' + _roleLabel(rm) + ' (roles: ' + rolesLabel + ')'):('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'))));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
+      // 作者とオーナーには、自分のポイントへの入口を出す。
+      // 画面が無いと、読まれた実感も分配の根拠も作者に届かない。
+      if (ar === 'author' || ar === 'owner') {
+        var ptsLink = h('a', {
+          href: '/points.html',
+          className: 'welcome-points-link',
+          style: 'display:inline-block;margin-top:10px;padding:7px 14px;border-radius:999px;'
+               + 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);'
+               + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
+        }, _en ? '\uD83D\uDCCA Your points' : '\uD83D\uDCCA \u30dd\u30a4\u30f3\u30c8\u3092\u898b\u308b');
+        banner.appendChild(ptsLink);
+      }
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
       var aboutSec = _findAboutSection();

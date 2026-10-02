@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ポイント — AniNovel</title>
+<meta name="robots" content="noindex">
+<style>
+:root{
+  --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
+  --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52; --err:#b23a3a; --ok:#3a7d44;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+    --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+  --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.7;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:32px 20px 64px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{font-size:1.6rem;margin:0 0 6px;letter-spacing:.02em}
+.lead{color:var(--muted);font-size:.95rem;margin:0 0 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
+.card+.card{margin-top:16px}
+.card h2{font-size:1rem;margin:0 0 4px;letter-spacing:.02em}
+.btn{padding:8px 16px;border:0;border-radius:9px;background:var(--accent);color:#fff;
+  font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
+.btn:hover{background:var(--accent2)}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);white-space:nowrap}
+.btn.ghost:hover{background:rgba(139,94,52,.08)}
+.msg{margin-top:18px;padding:13px 15px;border-radius:9px;font-size:.92rem}
+.msg.err{background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);color:var(--err)}
+.foot{margin-top:26px;font-size:.88rem;color:var(--muted);text-align:center}
+.foot a{color:var(--accent);text-decoration:none}
+.foot a:hover{text-decoration:underline}
+.tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.74rem;font-weight:700;
+  vertical-align:middle}
+.tag.prov{background:rgba(201,162,39,.2);color:#8a6d0b}
+.tag.fixed{background:rgba(58,125,68,.15);color:#2f6637}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .tag.prov{color:#e2c761}
+  :root:not([data-theme="light"]) .tag.fixed{color:#8fc79a}
+}
+:root[data-theme="dark"] .tag.prov{color:#e2c761}
+:root[data-theme="dark"] .tag.fixed{color:#8fc79a}
+
+.big{font-size:2.6rem;font-weight:800;line-height:1.15;letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;margin:10px 0 0}
+.big .unit{font-size:1rem;font-weight:600;color:var(--muted);margin-left:8px}
+.sub{color:var(--muted);font-size:.88rem;margin:2px 0 0}
+
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.92rem}
+th,td{text-align:left;padding:9px 0;border-bottom:1px solid var(--line);vertical-align:baseline}
+th{font-size:.78rem;font-weight:600;color:var(--muted);letter-spacing:.03em}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.title{word-break:break-word;padding-right:12px}
+
+details{border-bottom:1px solid var(--line)}
+details:last-of-type{border-bottom:0}
+summary{cursor:pointer;padding:12px 0;display:flex;align-items:baseline;gap:10px;
+  list-style:none;font-size:.95rem}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"\25B8";color:var(--muted);font-size:.8rem;transition:transform .15s}
+details[open] summary::before{transform:rotate(90deg)}
+summary .period{font-weight:700;font-variant-numeric:tabular-nums}
+summary .spacer{flex:1}
+summary .pts{font-weight:700;font-variant-numeric:tabular-nums}
+summary .cnt{color:var(--muted);font-size:.84rem;font-variant-numeric:tabular-nums}
+details .inner{padding:0 0 10px 18px}
+details .inner table{margin-top:0}
+
+.empty{color:var(--muted);font-size:.92rem;margin:14px 0 0}
+.note{color:var(--muted);font-size:.85rem;margin:0}
+.note+.note{margin-top:8px}
+.skel{color:var(--muted);font-size:.92rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1 id="t-title">ポイント</h1>
+      <p class="lead" id="t-lead">ご自身の作品が読まれて得たポイントです。</p>
+    </div>
+    <button class="btn ghost" id="lang" type="button">English</button>
+  </div>
+
+  <div id="body"><p class="skel" id="t-loading">読み込んでいます…</p></div>
+
+  <p class="foot">
+    <a href="/index.html" id="t-back">トップに戻る</a>
+  </p>
+</div>
+
+<script>
+/* 作者が自分のポイントを見る画面  points.html
+ * ============================================================
+ * 数字は /api/points から取る。ここでは計算しない。
+ * 画面で計算すると、運営者の集計と食い違ったときに
+ * どちらが正しいのか分からなくなる。
+ *
+ * 当月は「暫定」。月が締まると「確定」になり、以後は動かない。
+ * その区別を色と札ではっきり出す。支払いの根拠になる数字なので、
+ * 変わりうる値と変わらない値を混ぜて見せてはいけない。
+ *
+ * 言語はサイト全体と同じ鍵（aninovel_lang_v1）を読む。
+ */
+(function () {
+  'use strict';
+
+  var KEY = 'aninovel_lang_v1', ALT = 'aninovel_lang';
+  function lang() {
+    try { var v = localStorage.getItem(KEY) || localStorage.getItem(ALT) || 'ja';
+          return v === 'en' ? 'en' : 'ja'; } catch (e) { return 'ja'; }
+  }
+  function t(ja, en) { return lang() === 'en' ? en : ja; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  /** 小数が出るので、桁を揃えて読みやすくする */
+  function pts(n) {
+    var v = Number(n) || 0;
+    return v.toLocaleString(lang() === 'en' ? 'en-US' : 'ja-JP',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function count(n) {
+    var v = Number(n) || 0;
+    return lang() === 'en' ? (v + (v === 1 ? ' read' : ' reads')) : (v + ' 回');
+  }
+  /** 2026-09 → 2026年9月 / September 2026 */
+  function periodLabel(p) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(p || ''));
+    if (!m) return String(p || '');
+    var y = m[1], mo = Number(m[2]);
+    if (lang() === 'en') {
+      var N = ['January','February','March','April','May','June',
+               'July','August','September','October','November','December'];
+      return N[mo - 1] + ' ' + y;
+    }
+    return y + '年' + mo + '月';
+  }
+
+  var data = null, failed = null;
+
+  function worksTable(works) {
+    if (!works || !works.length) {
+      return '<p class="empty">' + t('まだ読まれていません。', 'No reads yet.') + '</p>';
+    }
+    var h = '<table><thead><tr><th>' + t('作品', 'Work') + '</th>'
+          + '<th class="num">' + t('ポイント', 'Points') + '</th>'
+          + '<th class="num">' + t('読まれた回数', 'Reads') + '</th></tr></thead><tbody>';
+    for (var i = 0; i < works.length; i++) {
+      var w = works[i];
+      // 英語で見ているときは英語の題。無ければ元の題のまま出す。
+      var nm = (lang() === 'en' && w.titleEn) ? w.titleEn : (w.title || w.workId);
+      h += '<tr><td class="title">' + esc(nm) + '</td>'
+         + '<td class="num">' + pts(w.points) + '</td>'
+         + '<td class="num">' + count(w.reads) + '</td></tr>';
+    }
+    return h + '</tbody></table>';
+  }
+
+  function render() {
+    var el = document.getElementById('body');
+
+    document.documentElement.lang = lang();
+    document.title = t('ポイント — AniNovel', 'Points — AniNovel');
+    document.getElementById('t-title').textContent = t('ポイント', 'Points');
+    document.getElementById('t-lead').textContent =
+      t('ご自身の作品が読まれて得たポイントです。',
+        'Points earned when people read your works.');
+    document.getElementById('t-back').textContent = t('トップに戻る', 'Back to top');
+    document.getElementById('lang').textContent = t('English', '日本語');
+    document.getElementById('lang').setAttribute('aria-label',
+      t('英語に切り替える', 'Switch to Japanese'));
+
+    if (failed) {
+      el.innerHTML = '<div class="card"><div class="msg err">' + esc(failed.text) + '</div>'
+        + (failed.login
+            ? '<p class="foot" style="text-align:left;margin-top:16px">'
+              + '<a href="/login.html">' + t('ログインする', 'Sign in') + '</a></p>'
+            : '')
+        + '</div>';
+      return;
+    }
+    if (!data) { el.innerHTML = '<p class="skel">' + t('読み込んでいます…', 'Loading…') + '</p>'; return; }
+
+    if (data.unavailable) {
+      el.innerHTML = '<div class="card"><p class="note">'
+        + t('ポイントの集計はまだ始まっていません。',
+            'Point tracking has not started yet.') + '</p></div>';
+      return;
+    }
+
+    var cur = data.current || { period: data['当月'], points: 0, reads: 0, works: [], '暫定': true };
+    var h = '';
+
+    // ---- 今月 ----
+    h += '<div class="card">'
+       + '<h2>' + esc(periodLabel(cur.period)) + ' '
+       + (cur.confirmed
+            ? '<span class="tag fixed">' + t('確定', 'Final') + '</span>'
+            : '<span class="tag prov">' + t('暫定', 'Provisional') + '</span>')
+       + '</h2>'
+       + '<p class="big">' + pts(cur.points) + '<span class="unit">'
+       + t('ポイント', 'points') + '</span></p>'
+       + '<p class="sub">' + t('読まれた回数 ' + count(cur.reads), 'Reads: ' + (Number(cur.reads) || 0)) + '</p>'
+       + worksTable(cur.works)
+       + '</div>';
+
+    // ---- 累計 ----
+    h += '<div class="card">'
+       + '<h2>' + t('累計', 'All time') + '</h2>'
+       + '<p class="big">' + pts(data['累計ポイント']) + '<span class="unit">'
+       + t('ポイント', 'points') + '</span></p>'
+       + '<p class="sub">' + t('今月の暫定ぶんを含みます。',
+                               'Includes this month’s provisional total.') + '</p>'
+       + '</div>';
+
+    // ---- これまでの月 ----
+    h += '<div class="card"><h2>' + t('これまでの月', 'Earlier months') + '</h2>';
+    var ps = data.periods || [];
+    if (!ps.length) {
+      h += '<p class="empty">' + t('まだありません。今月が最初の月です。',
+                                   'Nothing yet — this is your first month.') + '</p>';
+    } else {
+      for (var i = 0; i < ps.length; i++) {
+        var p = ps[i];
+        h += '<details><summary>'
+           + '<span class="period">' + esc(periodLabel(p.period)) + '</span>'
+           + (p.confirmed ? '<span class="tag fixed">' + t('確定', 'Final') + '</span>'
+                          : '<span class="tag prov">' + t('暫定', 'Provisional') + '</span>')
+           + '<span class="spacer"></span>'
+           + '<span class="pts">' + pts(p.points) + '</span>'
+           + '<span class="cnt">' + count(p.reads) + '</span>'
+           + '</summary><div class="inner">' + worksTable(p.works) + '</div></details>';
+      }
+    }
+    h += '</div>';
+
+    // ---- 数え方 ----
+    h += '<div class="card"><h2>' + t('数え方', 'How points are counted') + '</h2>'
+       + '<p class="note">' + esc(lang() === 'en' ? data.howCounted : data['数え方']) + '</p>'
+       + '<p class="note">' + esc(lang() === 'en' ? data.note : data['注記']) + '</p>'
+       + '</div>';
+
+    el.innerHTML = h;
+  }
+
+  function load() {
+    fetch('/api/points', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401) {
+          failed = { login: true,
+            text: t('ポイントを見るには、作者としてログインしてください。',
+                    'Please sign in as an author to see your points.') };
+          return null;
+        }
+        if (r.status === 403) {
+          failed = { login: false,
+            text: t('この画面は作者の方だけがご覧になれます。',
+                    'This page is for authors only.') };
+          return null;
+        }
+        if (!r.ok) {
+          failed = { login: false,
+            text: t('いま読み込めませんでした。時間をおいてお試しください。',
+                    'Could not load right now. Please try again later.') };
+          return null;
+        }
+        return r.json();
+      })
+      .then(function (j) { if (j) { data = j; failed = null; } render(); })
+      .catch(function () {
+        failed = { login: false,
+          text: t('通信できませんでした。接続をご確認ください。',
+                  'Could not reach the server. Please check your connection.') };
+        render();
+      });
+  }
+
+  document.getElementById('lang').onclick = function () {
+    var next = lang() === 'en' ? 'ja' : 'en';
+    try { localStorage.setItem(KEY, next); localStorage.setItem(ALT, next); } catch (e) {}
+    render();
+  };
+  // 別のタブで言語を変えたときも揃える
+  window.addEventListener('storage', function (e) {
+    if (e.key === KEY || e.key === ALT) render();
+  });
+
+  render();
+  load();
+})();
+</script>
+</body>
+</html>

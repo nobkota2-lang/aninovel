@@ -16,16 +16,38 @@
  *
  * 数えない相手
  *   ・登録会員（読み放題。ただし読書ログは取る＝ポイントの元）
- *   ・作者本人とオーナー（自分の作品を確認しているだけ）
  *   ・下書き（draft_）… そもそも公開されていない
+ *
+ * 水増しへの守り（2026-10-03 追加）
+ *   ポイントは収益分配の根拠になるので、申告をそのまま信じない。
+ *
+ *   1) 滞在秒数と進み具合は、サーバー側で測った実経過時間で頭打ちにする。
+ *      作品を読み切るのに要する最短時間は文字数から出す（_d1.js 参照）。
+ *   2) 登録なしの読者は、その日「開いてよい」と判定された作品だけ記録する。
+ *      これが無いと、progress を直接投げるだけで1日5作品の上限を
+ *      通さずに全作品ぶん記録できた。
+ *   3) 自ら名乗っているボットは記録しない。
+ *      名乗らないボットには効かないが、素朴なものは落ちる。
+ *
+ *   いずれも「読ませない」ではなく「数えない」。読むことは妨げない。
  */
 
 import { currentUser } from '../_authlib.js';
 import { whoAmI, hasRole } from '../_owner.js';
 import {
-  db, readerMark, checkPeek, logRead, touchMember, jstDay, PEEK_LIMIT,
+  db, readerMark, checkPeek, logRead, touchMember, jstDay, peekSeen, PEEK_LIMIT,
 } from '../_d1.js';
 import { sameSite, denyHotlink } from '../_origin.js';
+
+// 自ら名乗っているボット。読むのは妨げないが、ポイントには数えない。
+// ブラウザ名を詐称されれば抜けられる。素朴なものを落とすための網。
+const BOT_UA = /bot|crawler|crawl|spider|slurp|curl|wget|python-requests|python-urllib|httpie|okhttp|libwww|java\/|go-http-client|axios|node-fetch|scrapy|headless|phantomjs|puppeteer|playwright|selenium/i;
+
+function looksLikeBot(request) {
+  const ua = request.headers.get('User-Agent') || '';
+  if (!ua) return true;               // 名乗らない相手も数えない
+  return BOT_UA.test(ua);
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -66,6 +88,18 @@ export async function onRequestPost(context) {
   }
 
   if (action === 'progress') {
+    // 自ら名乗っているボットは数えない
+    if (looksLikeBot(request)) {
+      return json({ ok: true, recorded: false, skipped: true, reason: 'bot' });
+    }
+    // 登録なしの読者は、その日「開いてよい」と判定された作品だけ。
+    // 作品を開く手順を踏まずに記録だけ投げる経路を塞ぐ。
+    if (!user) {
+      const opened = await peekSeen(env, reader, workId);
+      if (!opened) {
+        return json({ ok: true, recorded: false, skipped: true, reason: 'not_opened' });
+      }
+    }
     const r = await logRead(env, reader, workId, {
       seconds: body.seconds, progress: body.progress, finished: body.finished,
     });
