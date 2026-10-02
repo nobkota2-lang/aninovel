@@ -24,6 +24,7 @@
  *   POST /api/admin/points {"period":"2026-10"}              … 集計する
  *   POST /api/admin/points {"period":"2026-10","dryRun":true} … 計算して見せるだけ
  *   POST /api/admin/points {"backfill":true}                  … 既存作品を works_meta に取り込む
+ *   POST /api/admin/points {"backfill":true,"defaultOwner":"x@y"} … 持ち主が KV に無い作品だけ x@y のものにする
  *   POST /api/admin/points {"period":"2026-10","confirm":true}… 締める（以後動かない）
  *   GET  /api/admin/points?period=2026-10                     … 結果を見る
  */
@@ -74,9 +75,16 @@ function noDb() {
 /** 既存の公開作品を works_meta に取り込む。
  *  D1 を入れる前に公開した作品は works_meta に無く、そのままでは
  *  読まれてもポイントが誰のものか分からない。最初に1度だけ走らせる。 */
-async function backfill(env, d) {
+async function backfill(env, d, defaultOwner) {
   const kv = env.WORKS || env.WORKS_KV;
   if (!kv) return json({ error: 'no_kv' }, 500);
+
+  // KV に持ち主が入っていない作品の逃げ先。指定が無ければ持ち主なしのまま。
+  // すでに持ち主がいる作品には使わない。人の作品を奪わないため。
+  const fallback = defaultOwner ? String(defaultOwner).trim().toLowerCase() : null;
+  if (defaultOwner && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fallback)) {
+    return json({ error: 'bad_owner', message: 'defaultOwner はメールアドレスの形で指定してください。' }, 400);
+  }
 
   let catalog;
   try {
@@ -107,6 +115,10 @@ async function backfill(env, d) {
       created = (body && body.createdAt) || null;
     } catch (e) { /* 読めなければ持ち主なしとして記録する */ }
 
+    // KV に無いときだけ逃げ先を使う。KV にある持ち主は必ず優先する。
+    let fromFallback = false;
+    if (!owner && fallback) { owner = fallback; fromFallback = true; }
+
     try {
       await d.prepare(
         `INSERT INTO works_meta (work_id, owner_email, title, status, created_at, published_at, last_edited_at)
@@ -116,7 +128,8 @@ async function backfill(env, d) {
            title       = COALESCE(?3, title),
            status      = COALESCE('published', status)`
       ).bind(w.id, owner, w.title || null, created || now, now).run();
-      (owner ? done : skipped).push({ id: w.id, title: w.title, owner });
+      (owner ? done : skipped).push({ id: w.id, title: w.title, owner,
+                                      指定で補った: fromFallback || undefined });
     } catch (e) {
       skipped.push({ id: w.id, title: w.title, error: String(e && e.message) });
     }
@@ -157,7 +170,7 @@ export async function onRequestPost(context) {
   let body = {};
   try { body = await context.request.json(); } catch (e) {}
 
-  if (body.backfill) return backfill(context.env, d);
+  if (body.backfill) return backfill(context.env, d, body.defaultOwner);
 
   const period = String(body.period || jstMonth()).slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(period)) {
