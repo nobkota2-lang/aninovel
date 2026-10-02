@@ -12,13 +12,23 @@
 (function(){
   'use strict';
 
+  // 言語。ポータル(aninovel_lang_v1)とビューア(aninovel_lang)の両方を見る。
+  // billing.js と同じ形。ここで独自の記憶は持たない。
+  function _lang(){
+    try{
+      var v=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+      return v==='en'?'en':'ja';
+    }catch(e){ return 'ja'; }
+  }
+  function _t(ja,en){ return _lang()==='en' ? en : ja; }
+
   function gtagEvent(action,label){
     try{if(window.gtag)gtag('event','share',{method:action,content_id:label||location.pathname});}catch(e){}
   }
 
   function defaultText(opts){
     var title=opts.title||document.title;
-    return '「'+title+'」#アニノベル';
+    return _lang()==='en' ? '"'+title+'" #AniNovel' : '「'+title+'」#アニノベル';
   }
 
   function intentUrl(net,opts){
@@ -26,7 +36,7 @@
     var text=encodeURIComponent(opts.text||defaultText(opts));
     var title=encodeURIComponent(opts.title||document.title);
     switch(net){
-      case 'x':       return 'https://x.com/intent/post?text='+text+'&url='+url+'&hashtags=アニノベル';
+      case 'x':       return 'https://x.com/intent/post?text='+text+'&url='+url+'&hashtags='+encodeURIComponent(_t('アニノベル','AniNovel'));
       case 'threads': return 'https://www.threads.net/intent/post?text='+text+'%20'+url;
       case 'line':    return 'https://line.me/R/share?text='+text+'%20'+url;
       case 'facebook':return 'https://www.facebook.com/sharer/sharer.php?u='+url;
@@ -82,17 +92,17 @@
       {id:'threads',label:'Threads',color:'#000',icon:'@'},
       {id:'line',label:'LINE',color:'#06C755',icon:'LINE'},
       {id:'facebook',label:'Facebook',color:'#1877F2',icon:'f'},
-      {id:'hatena',label:'はてブ',color:'#00A4DE',icon:'B!'},
+      {id:'hatena',label:_t('はてブ','Hatena'),color:'#00A4DE',icon:'B!'},
     ];
 
     var grid=nets.map(function(n){return '<button data-share-net="'+n.id+'" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;border:1px solid #E2DCD4;background:#fff;border-radius:12px;cursor:pointer;transition:transform .1s"><div style="width:44px;height:44px;border-radius:50%;background:'+n.color+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+n.icon+'</div><div style="font-size:11px;color:#444">'+n.label+'</div></button>';}).join('');
 
     var canNative=!!navigator.share;
-    bx.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:16px;font-weight:700">📤 シェア</h3><button id="anshare-close" style="border:none;background:transparent;font-size:22px;cursor:pointer">&times;</button></div>'
+    bx.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:16px;font-weight:700">📤 '+_t('シェア','Share')+'</h3><button id="anshare-close" style="border:none;background:transparent;font-size:22px;cursor:pointer">&times;</button></div>'
       +'<div style="background:#F5EFE6;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#555">'+(opts.title||document.title)+'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:10px;margin-bottom:16px">'+grid+'</div>'
-      +'<div style="display:flex;gap:8px"><button id="anshare-copy" style="flex:1;padding:12px;background:#3D3A36;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">🔗 リンクをコピー</button>'
-      +(canNative?'<button id="anshare-native" style="flex:1;padding:12px;background:#C0392B;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">📲 OSの共有</button>':'')
+      +'<div style="display:flex;gap:8px"><button id="anshare-copy" style="flex:1;padding:12px;background:#3D3A36;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">🔗 '+_t('リンクをコピー','Copy link')+'</button>'
+      +(canNative?'<button id="anshare-native" style="flex:1;padding:12px;background:#C0392B;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">📲 '+_t('OSの共有','System share')+'</button>':'')
       +'</div>';
     ov.appendChild(bx);
     document.body.appendChild(ov);
@@ -102,7 +112,7 @@
     });
     document.getElementById('anshare-copy').onclick=async function(){
       var ok=await copyLink(opts);
-      this.textContent=ok?'✓ コピーしました':'❌ コピー失敗';
+      this.textContent=ok?_t('✓ コピーしました','✓ Copied'):_t('❌ コピー失敗','❌ Copy failed');
       this.style.background='#10B981';
       setTimeout(function(){ov.remove();},900);
     };
