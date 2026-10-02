@@ -85,7 +85,15 @@ async function backfill(env, d) {
   } catch (e) {
     return json({ error: 'catalog_unreadable', message: String(e && e.message) }, 500);
   }
-  const works = (catalog && catalog.works) || [];
+  // __catalog__ は配列で入っている（/api/catalog.js と同じ読み方）。
+  // 念のため { works: [...] } の形も受ける。
+  const works = Array.isArray(catalog) ? catalog
+              : (catalog && Array.isArray(catalog.works) ? catalog.works : []);
+  if (!works.length) {
+    return json({ ok: true, 取り込んだ作品: 0, 持ち主が分からない作品: 0,
+      注意: 'KV の __catalog__ に作品がありませんでした。KV バインディング(WORKS)を確認してください。',
+      done: [], skipped: [] });
+  }
   const now = new Date().toISOString();
 
   const done = [], skipped = [];

@@ -126,8 +126,13 @@
       el.addEventListener('click',function(e){
         e.preventDefault();
         var opts={};
-        if(el.dataset.shareTitle)opts.title=el.dataset.shareTitle;
-        if(el.dataset.shareText)opts.text=el.dataset.shareText;
+        // 英語モードでは data-share-title-en / data-share-text-en を優先する。
+        // 無ければ日本語の指定に落ちる。押した時点の言語で決まる。
+        var en=_lang()==='en';
+        opts.title=(en&&el.dataset.shareTitleEn)||el.dataset.shareTitle||undefined;
+        opts.text =(en&&el.dataset.shareTextEn) ||el.dataset.shareText ||undefined;
+        if(opts.title===undefined)delete opts.title;
+        if(opts.text===undefined)delete opts.text;
         if(el.dataset.shareUrl)opts.url=el.dataset.shareUrl;
         openMenu(opts);
       });
