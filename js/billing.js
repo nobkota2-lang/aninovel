@@ -30,6 +30,23 @@
   /* ---------- 料金のことば (1か所にまとめる) ---------- */
   var PRICE_YEN   = 330;               // 税込
   var PRICE_LABEL = '月額330円 (税込)';
+  var PRICE_LABEL_EN = '¥330 per month (incl. tax)';
+
+  /* ---------- 言語 ----------
+     料金表は開くたびに組み立て直す。値段や日数を混ぜた文は固定の対応表に
+     載らないので、i18n.js の文字列置換では追えない。描画するその場で
+     言語を見て選ぶ。読む鍵はポータルと同じ。 */
+  function _lang(){
+    try{
+      var v=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+      return v==='en'?'en':'ja';
+    }catch(e){ return 'ja'; }
+  }
+  function _t(ja,en){ return _lang()==='en' ? en : ja; }
+  function _price(){
+    return _lang()==='en' ? '¥'+PRICE_YEN.toLocaleString('en-US')+'/month'
+                          : PRICE_YEN.toLocaleString('ja-JP')+'円/月';
+  }
   var CAMPAIGN    = true;              // キャンペーン期間中か
   var PEEK_LIMIT  = 5;                 // 立ち読みの1日あたり作品数
 
@@ -55,13 +72,13 @@
   /* ---------- 第4段のための土台 (いまボタンからは呼ばない) ---------- */
   async function startCheckout(planKey){
     var u=getUser();
-    if(!u){alert('お支払いの手続きにはログインが必要です。');return;}
+    if(!u){alert(_t('お支払いの手続きにはログインが必要です。','You need to sign in before setting up payment.'));return;}
     if(!API){
-      alert('いまはキャンペーン期間中のため、お支払いはありません。\n無料でお使いいただけます。');
+      alert(_t('いまはキャンペーン期間中のため、お支払いはありません。\n無料でお使いいただけます。','There is nothing to pay during the campaign.\nAniNovel is free to use.'));
       return;
     }
     var priceId=PRICES[planKey];
-    if(!priceId){alert('不明なプラン: '+planKey);return;}
+    if(!priceId){alert(_t('不明なプラン: ','Unknown plan: ')+planKey);return;}
     try{
       var res=await fetch(API+'/create-checkout',{
         method:'POST',
@@ -71,17 +88,17 @@
       if(!res.ok)throw new Error('HTTP '+res.status);
       var data=await res.json();
       if(data.url)window.location.href=data.url;
-      else throw new Error('checkout URL欠落');
+      else throw new Error(_t('決済URLが返りませんでした','no checkout URL returned'));
     }catch(e){
       console.error('[Billing] checkout失敗',e);
-      alert('決済画面の開始に失敗しました: '+e.message);
+      alert(_t('決済画面の開始に失敗しました: ','Could not open the checkout page: ')+e.message);
     }
   }
 
   async function openCustomerPortal(){
     var u=getUser();
-    if(!u){alert('ログインが必要です');return;}
-    if(!API){alert('いまはキャンペーン期間中のため、お支払いの管理画面はありません。');return;}
+    if(!u){alert(_t('ログインが必要です','Please sign in.'));return;}
+    if(!API){alert(_t('いまはキャンペーン期間中のため、お支払いの管理画面はありません。','There is no billing portal during the campaign.'));return;}
     try{
       var res=await fetch(API+'/billing-portal',{
         method:'POST',
@@ -90,7 +107,7 @@
       });
       var data=await res.json();
       if(data.url)window.location.href=data.url;
-    }catch(e){alert('ポータルを開けませんでした: '+e.message);}
+    }catch(e){alert(_t('ポータルを開けませんでした: ','Could not open the billing portal: ')+e.message);}
   }
 
   /* ---------- 料金表 ---------- */
@@ -108,7 +125,7 @@
       : '<span style="font-size:30px;font-weight:700;color:'+accent+'">'+esc(o.price)+'</span>';
 
     return '<div style="background:#fff;border:2px solid '+border+';border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">'
-      +(o.you?'<div style="align-self:flex-start;background:'+accent+';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">いまのあなた</div>':'')
+      +(o.you?'<div style="align-self:flex-start;background:'+accent+';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">'+_t('いまのあなた','Your plan')+'</div>':'')
       +'<div>'
         +'<h3 style="font-size:17px;font-weight:700;color:'+accent+';margin:0">'+esc(o.title)+'</h3>'
         +'<div style="margin-top:6px">'+priceHTML+'</div>'
@@ -144,7 +161,7 @@
     ov.id='aninovel-pricing-modal';
     ov.setAttribute('role','dialog');
     ov.setAttribute('aria-modal','true');
-    ov.setAttribute('aria-label','プラン');
+    ov.setAttribute('aria-label',_t('プラン','Plans'));
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;'
       +'align-items:center;justify-content:center;padding:16px;'
       +'font-family:"Zen Kaku Gothic New",system-ui,sans-serif';
@@ -156,73 +173,77 @@
 
     var cards=''
       + card({
-          title:'立ち読み',
+          title:_t('立ち読み','Browsing'),
           price:'¥0',
-          lead:'登録なしで、そのまま読めます。',
+          lead:_t('登録なしで、そのまま読めます。','Start reading right away — no account needed.'),
           you:guest,
           accent:'#6B635A',
           features:[
-            '1日'+PEEK_LIMIT+'作品まで読めます',
-            'ログインは不要',
-            'しおりはこの端末にだけ残ります',
-            '広告が表示されます'
+            _t('1日'+PEEK_LIMIT+'作品まで読めます','Up to '+PEEK_LIMIT+' works a day'),
+            _t('ログインは不要','No sign-in required'),
+            _t('しおりはこの端末にだけ残ります','Bookmarks stay on this device only'),
+            _t('広告が表示されます','Ads are shown')
           ],
-          note:'もっと読みたくなったら、無料の読者会員にご登録ください。',
-          action: guest ? actionBtn('無料で読者会員になる','#0E7490','register.html') : actionFlat('ご登録ありがとうございます')
+          note:_t('もっと読みたくなったら、無料の読者会員にご登録ください。','Want to read more? Sign up as a reader — it is free.'),
+          action: guest ? actionBtn(_t('無料で読者会員になる','Become a reader — free'),'#0E7490','register.html')
+                        : actionFlat(_t('ご登録ありがとうございます','Thank you for registering'))
         })
       + card({
-          title:'読者会員',
-          price: CAMPAIGN ? '¥0' : PRICE_YEN.toLocaleString('ja-JP')+'円/月',
-          strike: CAMPAIGN ? PRICE_YEN.toLocaleString('ja-JP')+'円/月' : null,
-          lead: CAMPAIGN ? 'キャンペーン期間中につき無料。' : PRICE_LABEL+'。いつでも解約できます。',
+          title:_t('読者会員','Reader'),
+          price: CAMPAIGN ? '¥0' : _price(),
+          strike: CAMPAIGN ? _price() : null,
+          lead: CAMPAIGN ? _t('キャンペーン期間中につき無料。','Free during the campaign.')
+                         : _t(PRICE_LABEL+'。いつでも解約できます。', PRICE_LABEL_EN+'. Cancel any time.'),
           you:isReader,
           accent:'#0E7490',
           features:[
-            '作品数の制限なく読み放題',
-            'しおりがどの端末でも同じ場所から',
-            '読み方の設定 (色・アイコン・音声) を保存',
-            '投票・お気に入り',
-            '広告が表示されます'
+            _t('作品数の制限なく読み放題','Unlimited reading — no cap on works'),
+            _t('しおりがどの端末でも同じ場所から','Bookmarks follow you across devices'),
+            _t('読み方の設定 (色・アイコン・音声) を保存','Your reading settings (colours, icons, voices) are saved'),
+            _t('投票・お気に入り','Voting and favourites'),
+            _t('広告が表示されます','Ads are shown')
           ],
-          note:'キャンペーン終了後にご登録の方、および終了から3カ月を過ぎてお使いの方には '
-              +PRICE_LABEL+' をお願いします。',
-          action: guest ? actionBtn('無料で登録する','#0E7490','register.html')
-                        : (isReader?actionFlat('ご利用中 ✓'):actionFlat('作者会員に含まれます'))
+          note:_t('キャンペーン終了後にご登録の方、および終了から3カ月を過ぎてお使いの方には '+PRICE_LABEL+' をお願いします。',
+                  'If you sign up after the campaign ends, or keep using AniNovel more than three months after it ends, the fee is '+PRICE_LABEL_EN+'.'),
+          action: guest ? actionBtn(_t('無料で登録する','Sign up free'),'#0E7490','register.html')
+                        : (isReader?actionFlat(_t('ご利用中 ✓','Your current plan ✓'))
+                                   :actionFlat(_t('作者会員に含まれます','Included with the Author plan')))
         })
       + card({
-          title:'作者会員',
-          price: CAMPAIGN ? '¥0' : '条件により¥0',
+          title:_t('作者会員','Author'),
+          price: CAMPAIGN ? '¥0' : _t('条件により¥0','¥0 if active'),
           strike: null,
-          lead: CAMPAIGN ? 'キャンペーン期間中につき無料。読者会員の機能もすべて含みます。'
-                         : '作品を書き続けている間は無料です。',
+          lead: CAMPAIGN ? _t('キャンペーン期間中につき無料。読者会員の機能もすべて含みます。','Free during the campaign. Includes everything in the Reader plan.')
+                         : _t('作品を書き続けている間は無料です。','Free for as long as you keep writing.'),
           you:isAuthor,
           accent:'#C0392B',
           features:[
-            '読者会員のすべての機能',
-            '作品を投稿できます (公開はオーナーの審査後)',
-            '読まれた分だけ収益分配のポイントが貯まります',
-            '登場人物・声・色を自分で設定できます'
+            _t('読者会員のすべての機能','Everything in the Reader plan'),
+            _t('作品を投稿できます (公開はオーナーの審査後)','Publish your works (after review by the operator)'),
+            _t('読まれた分だけ収益分配のポイントが貯まります','Earn revenue-share points for how much your work is read'),
+            _t('登場人物・声・色を自分で設定できます','Set your own characters, voices and colours')
           ],
-          note:'作品の登録・編集を続けている作者は、キャンペーン終了後も無料です。'
-              +'3カ月間 登録・編集がない場合は、読者会員と同じ '+PRICE_LABEL+' をお願いします。',
-          action: guest ? actionBtn('作者として登録する','#C0392B','register.html')
-                        : (isAuthor?actionFlat('ご利用中 ✓'):actionBtn('作者になる','#C0392B','register.html'))
+          note:_t('作品の登録・編集を続けている作者は、キャンペーン終了後も無料です。3カ月間 登録・編集がない場合は、読者会員と同じ '+PRICE_LABEL+' をお願いします。',
+                  'Authors who keep adding or editing works stay free after the campaign ends. After three months with no activity, the fee is the same as the Reader plan: '+PRICE_LABEL_EN+'.'),
+          action: guest ? actionBtn(_t('作者として登録する','Sign up as an author'),'#C0392B','register.html')
+                        : (isAuthor?actionFlat(_t('ご利用中 ✓','Your current plan ✓'))
+                                   :actionBtn(_t('作者になる','Become an author'),'#C0392B','register.html'))
         });
 
     bx.innerHTML=
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px">'
-        +'<h2 style="font-size:23px;font-weight:700;font-family:\'Noto Serif JP\',serif;margin:0">プラン</h2>'
-        +'<button id="anbill-close" aria-label="閉じる" style="border:none;background:transparent;'
+        +'<h2 style="font-size:23px;font-weight:700;font-family:\'Noto Serif JP\',serif;margin:0">'+_t('プラン','Plans')+'</h2>'
+        +'<button id="anbill-close" aria-label="'+_t('閉じる','Close')+'" style="border:none;background:transparent;'
           +'font-size:26px;line-height:1;cursor:pointer;color:#6B635A">&times;</button>'
       +'</div>'
 
       +(CAMPAIGN
         ? '<div style="background:linear-gradient(135deg,#FFF7E6,#FFEFD6);border:1px solid #F0C879;'
             +'border-radius:10px;padding:14px 16px;margin-bottom:20px">'
-            +'<div style="font-weight:700;font-size:15px;color:#8A5A00">🎉 いまはキャンペーン期間中につき、すべて無料です</div>'
+            +'<div style="font-weight:700;font-size:15px;color:#8A5A00">'+_t('🎉 いまはキャンペーン期間中につき、すべて無料です','🎉 Everything is free during the campaign')+'</div>'
             +'<p style="font-size:12.5px;color:#7A6A50;margin:6px 0 0;line-height:1.75">'
-              +'キャンペーン終了後も3カ月は無料のままです。'
-              +'お支払いの手続きは、いまはありません。'
+              +_t('キャンペーン終了後も3カ月は無料のままです。お支払いの手続きは、いまはありません。',
+                   'It stays free for three months after the campaign ends. There is nothing to set up now.')
             +'</p>'
           +'</div>'
         : '')
@@ -233,11 +254,12 @@
 
       +'<div style="margin-top:20px;padding:14px 16px;background:#F3EFE8;border-radius:8px;'
         +'font-size:12px;color:#6B635A;line-height:1.85">'
-        +'<div>📌 有料になるのは「作品を読むための権利」です。'
-          +'作品の著作権・版権を譲渡したり販売したりすることはありません。'
-          +'素材や道具の販売もしません。</div>'
-        +'<div style="margin-top:6px">📌 作者の収益は、読まれた量に応じたポイントで分配します。'
-          +'算定方法は<a href="/legal/terms.html" style="color:#0E7490">利用規約</a>に記載します。</div>'
+        +'<div>'+_t('📌 有料になるのは「作品を読むための権利」です。作品の著作権・版権を譲渡したり販売したりすることはありません。素材や道具の販売もしません。',
+                     '📌 What you pay for is the right to read. We never transfer or sell the copyright in a work, and we do not sell assets or tools.')+'</div>'
+        +'<div style="margin-top:6px">'
+          +_t('📌 作者の収益は、読まれた量に応じたポイントで分配します。算定方法は','📌 Author earnings are shared as points based on how much their work is read. The calculation is set out in the ')
+          +'<a href="/legal/terms.html" style="color:#0E7490">'+_t('利用規約','Terms of Service')+'</a>'
+          +_t('に記載します。','.')+'</div>'
       +'</div>';
 
     ov.appendChild(bx);

@@ -33,3 +33,18 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 
 /* 表の中の補足（氏名を請求により開示する旨など） */
 .legal-doc .note-inline{font-size:12px;color:var(--muted)}
+
+/* ---- 言語切り替え（_legal-i18n.js が使う） ---- */
+/* 英語は参考訳である旨の断り。目立たせすぎず、しかし読み飛ばされない程度に */
+.legal-trans-note{
+  margin:0 0 24px;padding:10px 14px;border-left:3px solid #C9A227;
+  background:#FFFBF0;color:#6B5A2A;font-size:13px;line-height:1.7;border-radius:0 6px 6px 0;
+}
+.legal-lang-btn{
+  margin-left:auto;padding:5px 12px;border:1px solid rgba(0,0,0,.18);border-radius:16px;
+  background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer;
+  white-space:nowrap;transition:background .15s,border-color .15s;
+}
+.legal-lang-btn:hover{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.35)}
+.legal-header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+main[data-lang][hidden]{display:none!important}

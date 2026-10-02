@@ -19,7 +19,7 @@
   </nav>
 </header>
 
-<main id="main" class="legal-doc">
+<main id="main" class="legal-doc" data-lang="ja">
   <h1>アクセシビリティ方針</h1>
   <p class="meta">最終改定日: <span class="placeholder">2026年05月14日</span></p>
 
@@ -81,6 +81,70 @@
   </ul>
 </main>
 
+<main class="legal-doc" data-lang="en" hidden>
+  <p class="legal-trans-note">This English text is a reference translation provided for convenience. The Japanese version is the legally binding original; if the two differ, the Japanese version prevails.</p>
+  <h1>Accessibility Statement</h1>
+  <p class="meta">Last revised: <span class="placeholder">2026年05月14日</span></p>
+
+  <h2>1. Basic policy</h2>
+  <p>AniNovel aims to provide a service that is easy to use for all users, and our goal is conformance with <strong>W3C "WCAG 2.1" Level AA</strong>. In a manner also consistent with JIS X 8341-3:2016 in Japan, we will continue to build an environment in which as many people as possible can enjoy stories, including those with visual, auditory, motor, or cognitive difficulties.</p>
+
+  <h2>2. Current status</h2>
+  <h3>Implemented</h3>
+  <ul>
+    <li>Semantic markup in HTML (heading hierarchy, landmarks)</li>
+    <li>Keyboard operation support (principal features)</li>
+    <li>Zoomable up to 200% using the browser's zoom function</li>
+    <li>Conveying information without relying on color alone</li>
+    <li>Text size and line spacing adjustment features</li>
+    <li>Text-to-speech function (TTS)</li>
+    <li>Responsive design (mobile/tablet support)</li>
+    <li>Consideration for the prefers-reduced-motion setting</li>
+    <li>Consideration for the prefers-contrast: more setting</li>
+    <li>Explicit focus indication</li>
+    <li>"Skip to main content" link</li>
+  </ul>
+
+  <h3>Not yet implemented / planned</h3>
+  <ul>
+    <li>Full keyboard support for some complex UI</li>
+    <li>Detailed alternative text for all images</li>
+    <li>Testing on actual devices with major screen readers (NVDA/VoiceOver)</li>
+    <li>Multilingual support (full translation into English and other languages)</li>
+    <li>Captions for video content (future feature)</li>
+    <li>A dedicated theme for high-contrast mode</li>
+  </ul>
+
+  <h2>3. Technology stack</h2>
+  <ul>
+    <li>HTML5</li>
+    <li>CSS3 (CSS variables, media queries)</li>
+    <li>JavaScript (ES2018+)</li>
+    <li>WAI-ARIA (explicit roles and states)</li>
+  </ul>
+
+  <h2>4. Feedback and defect reports</h2>
+  <p>Please send any feedback on the accessibility of the Service, or reports of defects, to the contact below. We will respond as promptly as possible.</p>
+  <table>
+    <tr><th>Contact</th><td><span class="placeholder">contact@aninovel.com</span></td></tr>
+    <tr><th>Reception</th><td>24 hours. Responses are made on weekdays, 10:00-17:00</td></tr>
+  </table>
+
+  <h2>5. Conformance level assessment</h2>
+  <p>Self-assessment as of the time this page was prepared:</p>
+  <table>
+    <tr><th>WCAG 2.1 Level A</th><td>Conformant (some items still under testing)</td></tr>
+    <tr><th>WCAG 2.1 Level AA</th><td>Partially conformant (continuous improvement in progress)</td></tr>
+    <tr><th>WCAG 2.1 Level AAA</th><td>Not addressed (aspirational target)</td></tr>
+  </table>
+
+  <h2>6. Revision history</h2>
+  <ul>
+    <li><span class="placeholder">2026年05月14日</span>: First edition published</li>
+  </ul>
+</main>
+
+
 <footer class="legal-footer">
   <a href="../index.html">トップに戻る</a> |
   <a href="terms.html">利用規約</a> |
@@ -90,5 +154,6 @@
   <a href="accessibility.html">アクセシビリティ</a>
   <br><br>&copy; <span class="placeholder">2026</span> アニノベル
 </footer>
+<script src="_legal-i18n.js"></script>
 </body>
 </html>
