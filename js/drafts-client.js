@@ -216,6 +216,18 @@
     },
 
     /**
+     * 公開済みの作品を下書きとして取り込む。
+     * 下書きの仕組みができる前に公開した作品を、作者が直せるようにする。
+     * 公開IDはそのまま引き継ぐので、直して再公開しても同じ作品が更新される。
+     * すでに取り込み済みなら、そのときの下書きIDが返る（二重に作らない）。
+     */
+    importPublished: async function (workId) {
+      var r = await call('', { method: 'POST', body: { importWorkId: workId } });
+      try { await Drafts.list(); } catch (e) {}
+      return r;
+    },
+
+    /**
      * 保存。まず端末に控えを取り、それからサーバーへ送る。
      * 送信に失敗しても書いたものは残り、pending の印がつく。
      */

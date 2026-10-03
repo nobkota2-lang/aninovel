@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v4_points_btn_myworks';
+  window.__ANINOVEL_PORTAL_VER__ = 'v5_import_published';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -673,13 +673,40 @@
             }, '公開中'));
             linfo.appendChild(ltitle);
             linfo.appendChild(h('div', { style: 'font-size:11px;color:var(--text-muted);margin-top:4px' },
-              'この作品は下書きの仕組みができる前に公開したため、ここからは編集できません。'));
+              'この作品は下書きの仕組みができる前に公開したため、まだ編集できません。'
+              + '「編集を始める」を押すと、いま公開されている内容から下書きを作ります。'));
             lrow.appendChild(linfo);
+
             var lopen = h('button', { className: 'btn btn-ghost btn-sm' }, '\u{1F4D6} 読む');
             lopen.onclick = function() {
               window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id);
             };
             lrow.appendChild(lopen);
+
+            (function(wid, wTitle) {
+              var imp = h('button', { className: 'btn btn-author btn-sm' }, '\u270F\uFE0F 編集を始める');
+              imp.onclick = function(e) {
+                e.stopPropagation();
+                if (!confirm('「' + wTitle + '」を編集できるようにしますか？\n\n'
+                    + 'いま公開されている内容から下書きを作ります。\n'
+                    + '公開中の作品はそのままで、読者への見え方は変わりません。\n'
+                    + '直したあと「変更の公開を依頼」を押すと、運営者の確認を経て差し替わります。\n\n'
+                    + '※ 本文・題・登場人物の名前を書き換えると、手作業で入れた英訳は外れ、'
+                    + '機械翻訳に戻ります。取り込むだけなら何も変わりません。')) return;
+                imp.disabled = true;
+                imp.textContent = '取り込んでいます…';
+                S.importPublishedWork(wid).then(function(r) {
+                  toast(r && r.already ? 'すでに取り込まれています' : '取り込みました');
+                  refresh();
+                }).catch(function(err) {
+                  imp.disabled = false;
+                  imp.textContent = '\u270F\uFE0F 編集を始める';
+                  toast((err && err.message) || '取り込みに失敗しました');
+                });
+              };
+              lrow.appendChild(imp);
+            })(w.id, w.title);
+
             listEl.appendChild(lrow);
             return;
           }

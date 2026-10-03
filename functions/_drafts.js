@@ -301,13 +301,20 @@ export async function loadForReader(context, id, opts) {
 
 const CATALOG_KEY = '__catalog__';
 
-async function readCatalog(store) {
+export async function readCatalog(store) {
   try {
     const raw = await store.get(CATALOG_KEY);
     if (!raw) return [];
     const a = JSON.parse(raw);
     return Array.isArray(a) ? a : [];
   } catch (e) { return []; }
+}
+
+/** 公開カタログから1作品の行を取り出す。無ければ null。 */
+export async function readCatalogEntry(store, pubId) {
+  const list = await readCatalog(store);
+  for (const w of list) if (w && w.id === pubId) return w;
+  return null;
 }
 
 /** 下書きから、公開カタログに載せる1行を組み立てる。 */
@@ -354,8 +361,15 @@ export async function publishDraft(store, draft) {
   await store.put('work:' + pubId, JSON.stringify(data));
 
   const catalog = await readCatalog(store);
-  const row = Object.assign({}, entry, { updatedAt: new Date().toISOString() });
   const i = catalog.findIndex(w => w && w.id === pubId);
+
+  // 行を丸ごと置き換えてはいけない。
+  // buildCatalogEntry が作るのは本文から出せる項目だけで、
+  // 英訳の題(titleEn/descriptionEn/authorEn)、表紙の画像、sourceLang、
+  // 公開停止の印などは作らない。置き換えると、それらが消える。
+  // 作り直した項目だけを上から重ね、知らない項目はそのまま残す。
+  const row = Object.assign({}, (i >= 0 ? catalog[i] : {}), entry,
+                            { updatedAt: new Date().toISOString() });
   if (i >= 0) catalog[i] = row; else catalog.push(row);
   await store.put(CATALOG_KEY, JSON.stringify(catalog));
 

@@ -752,6 +752,20 @@
       });
     },
 
+    /**
+     * 公開済みの作品を取り込んで、編集できるようにする。
+     * 返り値の id が、以後その作品を編集するための下書きID。
+     */
+    importPublishedWork: function(workId) {
+      var user = getLS(KEYS.user);
+      if (!user || !user.loggedIn) {
+        return Promise.reject(new Error('作者としてログインしてください'));
+      }
+      var D;
+      try { D = this._drafts(); } catch (e) { return Promise.reject(e); }
+      return D.importPublished(workId);
+    },
+
     /** 作品を1件、本文つきで取り出す。 */
     getMyWork: function(workId) {
       try { return this._drafts().get(workId); }
