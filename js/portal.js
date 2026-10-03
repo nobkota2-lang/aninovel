@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v3_points_link';
+  window.__ANINOVEL_PORTAL_VER__ = 'v4_points_btn_myworks';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -564,6 +564,14 @@
       dashBtn.onclick = showDashboard;
       badge.appendChild(dashBtn);
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
+        // ポイントは別の画面なので、ダッシュボードと同じ絵柄にしない。
+        // 同じ 📊 にすると、どちらを押したのか分からなくなる。
+        var ptsBtn = h('a', { className: 'btn btn-ghost btn-sm', href: '/points.html',
+          title: _roleEn() ? 'Points' : 'ポイント',
+          style: 'text-decoration:none;display:inline-flex;align-items:center' }, '\u{1F3C5}');
+        badge.appendChild(ptsBtn);
+      }
+      if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
         myBtn.onclick = showMyWorksModal;
         badge.appendChild(myBtn);
@@ -648,6 +656,34 @@
         }
         works.forEach(function(w) {
           var st = w.status || 'draft';
+
+          // 下書きの仕組みができる前に公開した作品。
+          // 下書きが無いので編集も削除もできない。できない操作の
+          // ボタンを並べると押して失敗するだけなので、読む導線と
+          // 理由だけを出す。
+          if (w.legacyPublished) {
+            var lrow = h('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px;'
+              + 'border:1px solid var(--border);border-radius:8px' });
+            var linfo = h('div', { style: 'flex:1;min-width:0' });
+            var ltitle = h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' });
+            ltitle.appendChild(h('span', { style: 'font-weight:600' }, w.title));
+            ltitle.appendChild(h('span', {
+              style: 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;'
+                   + 'color:#fff;background:#3A7D44'
+            }, '公開中'));
+            linfo.appendChild(ltitle);
+            linfo.appendChild(h('div', { style: 'font-size:11px;color:var(--text-muted);margin-top:4px' },
+              'この作品は下書きの仕組みができる前に公開したため、ここからは編集できません。'));
+            lrow.appendChild(linfo);
+            var lopen = h('button', { className: 'btn btn-ghost btn-sm' }, '\u{1F4D6} 読む');
+            lopen.onclick = function() {
+              window.location.href = 'viewer.html?work=' + encodeURIComponent(w.id);
+            };
+            lrow.appendChild(lopen);
+            listEl.appendChild(lrow);
+            return;
+          }
+
           var row = h('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px' });
           var info = h('div', { style: 'flex:1;min-width:0' });
 
@@ -867,7 +903,7 @@ function updateWelcomeBanner() {
           style: 'display:inline-block;margin-top:10px;padding:7px 14px;border-radius:999px;'
                + 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);'
                + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
-        }, _en ? '\uD83D\uDCCA Your points' : '\uD83D\uDCCA \u30dd\u30a4\u30f3\u30c8\u3092\u898b\u308b');
+        }, _en ? 'Your points \u2192' : '\u30dd\u30a4\u30f3\u30c8\u3092\u898b\u308b \u2192');
         banner.appendChild(ptsLink);
       }
       hero.style.display = 'none';

@@ -697,24 +697,59 @@
     /** 自分の作品一覧。サーバーから取る。 */
     getMyWorks: function() {
       var user = getLS(KEYS.user);
-      if (!user || !user.loggedIn || !(user.roles && user.roles.indexOf('author') >= 0)) {
+      if (!user || !user.loggedIn
+          || !((user.roles && user.roles.indexOf('author') >= 0)
+               || (user.roles && user.roles.indexOf('owner') >= 0))) {
         return Promise.resolve([]);
       }
-      try {
-        return this._drafts().list().then(function(list) {
-          // 呼び出し側は w.title / w.updatedAt / w.id を見る。形はそのまま。
-          return list.map(function(w) {
-            return {
-              id: w.id, title: w.title, description: w.description || '',
-              createdAt: w.createdAt, updatedAt: w.updatedAt,
-              status: w.status, publishedId: w.publishedId || null,
-              pendingChanges: !!w.pendingChanges,
-              reviewNote: w.reviewNote || '', submittedAt: w.submittedAt || null,
-              itemCount: w.itemCount || 0,
-            };
+      var self = this;
+      var drafts;
+      try { drafts = self._drafts().list(); } catch (e) { return Promise.reject(e); }
+
+      // 下書き台帳に無い公開済み作品も拾う。
+      // 下書きの仕組みができる前に公開した作品は drafts:<メール> に
+      // 記録が無く、そのままでは作者の一覧から消えてしまう。
+      var published = fetch('/api/mine', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : { works: [] }; })
+        .catch(function () { return { works: [] }; });
+
+      return Promise.all([drafts, published]).then(function (both) {
+        var list = both[0] || [];
+        var mine = (both[1] && both[1].works) || [];
+
+        // 呼び出し側は w.title / w.updatedAt / w.id を見る。形はそのまま。
+        var out = list.map(function(w) {
+          return {
+            id: w.id, title: w.title, description: w.description || '',
+            createdAt: w.createdAt, updatedAt: w.updatedAt,
+            status: w.status, publishedId: w.publishedId || null,
+            pendingChanges: !!w.pendingChanges,
+            reviewNote: w.reviewNote || '', submittedAt: w.submittedAt || null,
+            itemCount: w.itemCount || 0,
+          };
+        });
+
+        // すでに下書きが受け持っている作品は足さない
+        var covered = {};
+        out.forEach(function (w) {
+          covered[w.id] = true;
+          if (w.publishedId) covered[w.publishedId] = true;
+        });
+
+        mine.forEach(function (w) {
+          if (covered[w.workId]) return;
+          out.push({
+            id: w.workId, title: w.title, description: '',
+            createdAt: w.publishedAt, updatedAt: w.updatedAt,
+            status: w.status || 'published', publishedId: w.workId,
+            pendingChanges: false, reviewNote: '', submittedAt: null,
+            itemCount: 0,
+            // 下書きが無い公開作品。編集や削除の導線を出してはいけない。
+            legacyPublished: true,
           });
         });
-      } catch (e) { return Promise.reject(e); }
+        return out;
+      });
     },
 
     /** 作品を1件、本文つきで取り出す。 */
