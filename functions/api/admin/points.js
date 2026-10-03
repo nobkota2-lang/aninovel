@@ -16,17 +16,34 @@
  *   キャンペーン中の収益が広告である以上、立ち読みも収益を生んで
  *   いるが、会員と同じ重みにはしない、という判断。
  *
+ * ポイントと金額は別物（2026-10-03 決定）
+ *   1ポイント＝1円ではない。1ポイントがいくらになるかは期間ごとに変わる。
+ *
+ *     分配できる額  ＝ その期間の収益 × (1 − 運営者の取り分)
+ *     1ポイントの額 ＝ 分配できる額 ÷ その期間に発生したポイントの総数
+ *
+ *   ポイントは「どれだけ読まれたか」の指標として残し、金額は期間を締める
+ *   ときに確定させて points.amount_yen に持つ。二重に持つことになるが、
+ *   単価が期間ごとに変わる以上、ポイントだけでは後から金額を復元できない。
+ *   その期間の収益・取り分・単価は periods に残す。計算をやり直せるように。
+ *
  * 締め
  *   confirmed=1 にした期間は、以後いくら再集計しても動かない。
  *   支払いの根拠にするので、後から数字が変わってはいけない。
  *
  * 使い方
- *   POST /api/admin/points {"period":"2026-10"}              … 集計する
- *   POST /api/admin/points {"period":"2026-10","dryRun":true} … 計算して見せるだけ
- *   POST /api/admin/points {"backfill":true}                  … 既存作品を works_meta に取り込む
+ *   POST /api/admin/points {"period":"2026-10","dryRun":true}  … 計算して見せるだけ
+ *   POST /api/admin/points {"period":"2026-10"}                … ポイントを集計する
+ *   POST /api/admin/points {"period":"2026-10","revenue":12000,"ownerRate":0.5}
+ *                                                              … 金額まで計算する
+ *   POST /api/admin/points {"period":"2026-10","revenue":12000,"confirm":true}
+ *                                                              … 金額を入れて締める
+ *   POST /api/admin/points {"backfill":true}                   … 既存作品を works_meta に取り込む
  *   POST /api/admin/points {"backfill":true,"defaultOwner":"x@y"} … 持ち主が KV に無い作品だけ x@y のものにする
- *   POST /api/admin/points {"period":"2026-10","confirm":true}… 締める（以後動かない）
- *   GET  /api/admin/points?period=2026-10                     … 結果を見る
+ *   POST /api/admin/points {"payout":{"email":"x@y","amountYen":2000}}
+ *                                                              … 支払った記録を残す
+ *   GET  /api/admin/points?period=2026-10                      … 結果を見る
+ *   GET  /api/admin/points?balances=1                          … 作者ごとの未払い残高
  */
 
 import { requireOwner, json } from '../../_owner.js';
@@ -35,6 +52,62 @@ import { db, jstMonth, SCORE_SQL } from '../../_d1.js';
 // 点数の式は _d1.js にひとつだけ置く。ここで別に書くと、作者が見る
 // 画面(api/points.js)との間でいつか食い違う。
 const SCORE = SCORE_SQL;
+
+// 運営者の取り分。当初は5割。収益を上げる構造になったら見直す。
+// 実際に使った値は期間ごとに periods.owner_rate に残すので、
+// この既定値を変えても、締め済みの期間の計算には影響しない。
+const DEFAULT_OWNER_RATE = 0.5;
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * その期間の収益から1ポイントあたりの金額を出し、各行に金額を入れる。
+ * 締めていない行だけを書き換える。締めた期間の金額は動かさない。
+ */
+async function applyRevenue(d, period, revenue, ownerRate, now) {
+  const rev = Number(revenue);
+  if (!isFinite(rev) || rev < 0) {
+    return { error: json({ error: 'bad_revenue', message: '収益は0以上の数で指定してください。' }, 400) };
+  }
+  let rate = (ownerRate === undefined || ownerRate === null)
+    ? DEFAULT_OWNER_RATE : Number(ownerRate);
+  if (!isFinite(rate) || rate < 0 || rate > 1) {
+    return { error: json({ error: 'bad_rate', message: '運営者の取り分は 0〜1 で指定してください。' }, 400) };
+  }
+
+  const t = await d.prepare(
+    'SELECT SUM(points) AS p FROM points WHERE period = ?1').bind(period).first();
+  const total = Number(t && t.p) || 0;
+  const share = rev * (1 - rate);
+  const perPoint = total > 0 ? share / total : 0;
+
+  await d.prepare(
+    `UPDATE points SET amount_yen = ROUND(points * ?2, 4), computed_at = ?3
+      WHERE period = ?1 AND confirmed = 0`).bind(period, perPoint, now).run();
+
+  await d.prepare(
+    `INSERT INTO periods (period, revenue_yen, owner_rate, total_points, yen_per_point, confirmed, computed_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
+     ON CONFLICT(period) DO UPDATE SET
+       revenue_yen   = ?2,
+       owner_rate    = ?3,
+       total_points  = ?4,
+       yen_per_point = ?5,
+       computed_at   = ?6
+     WHERE periods.confirmed = 0`).bind(period, rev, rate, total, perPoint, now).run();
+
+  return { ok: true, total, share, perPoint, rate, rev };
+}
+
+/** その作者の未払い残高。締めた期間の金額の合計 − 支払った額の合計。 */
+async function balanceOf(d, email) {
+  const a = await d.prepare(
+    'SELECT SUM(amount_yen) AS y FROM points WHERE author_email = ?1 AND confirmed = 1'
+  ).bind(email).first();
+  const b = await d.prepare(
+    'SELECT SUM(amount_yen) AS y FROM payouts WHERE author_email = ?1').bind(email).first();
+  return r2((Number(a && a.y) || 0) - (Number(b && b.y) || 0));
+}
 
 const AGGREGATE = `
 INSERT INTO points (period, author_email, work_id, points, reads_count, confirmed, computed_at)
@@ -151,17 +224,50 @@ export async function onRequestGet(context) {
   const g = await requireOwner(context); if (g.deny) return g.deny;
   const d = db(context.env); if (!d) return noDb();
   const url = new URL(context.request.url);
+
+  // 作者ごとの未払い残高。支払いの判断に使う。
+  if (url.searchParams.get('balances')) {
+    try {
+      const rows = await d.prepare(
+        `SELECT e.author_email,
+                ROUND(COALESCE(e.earned, 0) - COALESCE(pd.paid, 0), 2) AS balance_yen,
+                ROUND(COALESCE(e.earned, 0), 2) AS earned_yen,
+                COALESCE(pd.paid, 0) AS paid_yen
+           FROM (SELECT author_email, SUM(amount_yen) AS earned
+                   FROM points WHERE confirmed = 1 GROUP BY author_email) e
+           LEFT JOIN (SELECT author_email, SUM(amount_yen) AS paid
+                        FROM payouts GROUP BY author_email) pd
+             ON pd.author_email = e.author_email
+          ORDER BY balance_yen DESC`).all();
+      const list = (rows && rows.results) || [];
+      return json({
+        rows: list.map((r) => Object.assign({}, r, {
+          支払える額: Math.floor((Number(r.balance_yen) || 0) / 1000) * 1000,
+        })),
+        注意: '支払えるのは1,000円単位です。端数は次期へ繰り越します。',
+      });
+    } catch (e) {
+      return json({ error: 'query_failed', message: String(e && e.message) }, 500);
+    }
+  }
+
   const period = url.searchParams.get('period') || jstMonth();
   try {
     const rows = await d.prepare(
       `SELECT p.period, p.author_email, p.work_id, w.title, p.points, p.reads_count,
-              p.confirmed, p.computed_at
+              p.amount_yen, p.confirmed, p.computed_at
          FROM points p LEFT JOIN works_meta w ON w.work_id = p.work_id
         WHERE p.period = ?1
         ORDER BY p.points DESC`).bind(period).all();
     const list = (rows && rows.results) || [];
     const total = list.reduce((a, r) => a + (Number(r.points) || 0), 0);
+    const money = list.reduce((a, r) => a + (Number(r.amount_yen) || 0), 0);
+    const pr = await d.prepare('SELECT * FROM periods WHERE period = ?1').bind(period).first();
     return json({ period, 合計ポイント: Math.round(total * 10000) / 10000,
+                  分配額の合計: r2(money),
+                  収益: pr ? pr.revenue_yen : null,
+                  運営者の取り分: pr ? pr.owner_rate : null,
+                  '1ポイントあたり': pr ? pr.yen_per_point : null,
                   作品数: list.length, 締め済み: list.length > 0 && list.every(r => r.confirmed === 1),
                   rows: list });
   } catch (e) {
@@ -184,12 +290,64 @@ export async function onRequestPost(context) {
   }
   const now = new Date().toISOString();
 
-  // 締める
+  // 支払った記録を残す
+  if (body.payout) {
+    const em = String(body.payout.email || '').trim().toLowerCase();
+    const amt = Math.floor(Number(body.payout.amountYen) || 0);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
+      return json({ error: 'bad_email', message: 'email を正しく指定してください。' }, 400);
+    }
+    if (!(amt > 0) || amt % 1000 !== 0) {
+      return json({ error: 'bad_amount', message: '支払いは1,000円単位で指定してください。' }, 400);
+    }
+    try {
+      const before = await balanceOf(d, em);
+      if (amt > before) {
+        return json({ error: 'over_balance',
+          message: '未払い残高(' + before + '円)を超える額は記録できません。' }, 409);
+      }
+      await d.prepare(
+        `INSERT INTO payouts (author_email, amount_yen, paid_at, method, note)
+         VALUES (?1, ?2, ?3, ?4, ?5)`
+      ).bind(em, amt, now, String(body.payout.method || 'giftcard').slice(0, 40),
+             String(body.payout.note || '').slice(0, 200)).run();
+      return json({ ok: true, email: em, 支払った額: amt, 残りの未払い: await balanceOf(d, em) });
+    } catch (e) {
+      return json({ error: 'payout_failed', message: String(e && e.message) }, 500);
+    }
+  }
+
+  // 収益だけ入れて金額を計算する（締めはしない）
+  if (body.revenue !== undefined && !body.confirm) {
+    const r = await applyRevenue(d, period, body.revenue, body.ownerRate, now);
+    if (r.error) return r.error;
+    return json({ ok: true, period,
+                  収益: r.rev, 運営者の取り分: r.rate,
+                  分配できる額: r2(r.share), 合計ポイント: r2(r.total),
+                  '1ポイントあたり': r.perPoint,
+                  注意: 'まだ締めていません。再計算すると変わります。' });
+  }
+
+  // 締める。収益が渡されていれば金額も確定させる。
   if (body.confirm) {
     try {
+      let applied = null;
+      if (body.revenue !== undefined) {
+        const r = await applyRevenue(d, period, body.revenue, body.ownerRate, now);
+        if (r.error) return r.error;
+        applied = r;
+      }
       const r = await d.prepare(
         'UPDATE points SET confirmed = 1 WHERE period = ?1 AND confirmed = 0').bind(period).run();
+      await d.prepare(
+        `INSERT INTO periods (period, confirmed, computed_at) VALUES (?1, 1, ?2)
+         ON CONFLICT(period) DO UPDATE SET confirmed = 1, computed_at = ?2`).bind(period, now).run();
+      const sum = await d.prepare(
+        'SELECT SUM(points) AS p, SUM(amount_yen) AS y FROM points WHERE period = ?1'
+      ).bind(period).first();
       return json({ ok: true, period, 締めた行数: (r && r.meta && r.meta.changes) || 0,
+                    合計ポイント: r2(sum && sum.p), 分配額の合計: r2(sum && sum.y),
+                    '1ポイントあたり': applied ? applied.perPoint : undefined,
                     注意: 'この期間は以後、再集計しても数字が変わりません。' });
     } catch (e) {
       return json({ error: 'confirm_failed', message: String(e && e.message) }, 500);

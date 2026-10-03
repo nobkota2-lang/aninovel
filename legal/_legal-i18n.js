@@ -25,6 +25,7 @@
   var NAV = {
     'アニノベル': 'AniNovel',
     '利用規約': 'Terms of Service',
+    '収益分配': 'Revenue Share',
     'プライバシー': 'Privacy',
     'プライバシーポリシー': 'Privacy Policy',
     '特商法': 'Commercial Disclosure',
@@ -36,6 +37,7 @@
 
   var TITLE = {
     'terms': 'Terms of Service | AniNovel',
+    'revenue': 'Revenue Share and How Points Are Calculated | AniNovel',
     'privacy': 'Privacy Policy | AniNovel',
     'tokushoho': 'Commercial Disclosure | AniNovel',
     'dmca': 'Copyright Contact | AniNovel',

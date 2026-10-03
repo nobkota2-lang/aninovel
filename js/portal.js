@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v5_import_published';
+  window.__ANINOVEL_PORTAL_VER__ = 'v6_points_btn_size';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -566,9 +566,10 @@
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         // ポイントは別の画面なので、ダッシュボードと同じ絵柄にしない。
         // 同じ 📊 にすると、どちらを押したのか分からなくなる。
-        var ptsBtn = h('a', { className: 'btn btn-ghost btn-sm', href: '/points.html',
-          title: _roleEn() ? 'Points' : 'ポイント',
-          style: 'text-decoration:none;display:inline-flex;align-items:center' }, '\u{1F3C5}');
+        // 並びの他と同じ button にする。a にすると字の大きさが揃わない。
+        var ptsBtn = h('button', { className: 'btn btn-ghost btn-sm',
+          title: _roleEn() ? 'Points' : 'ポイント' }, '\u{1F3C5}');
+        ptsBtn.onclick = function() { window.location.href = '/points.html'; };
         badge.appendChild(ptsBtn);
       }
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {

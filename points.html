@@ -227,9 +227,33 @@ details .inner table{margin-top:0}
        + '<h2>' + t('累計', 'All time') + '</h2>'
        + '<p class="big">' + pts(data['累計ポイント']) + '<span class="unit">'
        + t('ポイント', 'points') + '</span></p>'
-       + '<p class="sub">' + t('今月の暫定ぶんを含みます。',
-                               'Includes this month’s provisional total.') + '</p>'
+       + '<p class="sub">' + t('今月の暫定ぶんを含みます。1ポイント＝1円ではありません。',
+                               'Includes this month’s provisional total. One point is not one yen.') + '</p>'
        + '</div>';
+
+    // ---- お支払い ----
+    // 金額は原則として出さない。1,000円に達して実際にお支払いできる
+    // ようになったときだけ、その額を知らせる。まだ確定していない単価を
+    // 当てにされると、あとで食い違う。
+    var po = data.payout || { ready: false, minimumYen: 1000 };
+    var loc = (lang() === 'en') ? 'en-US' : 'ja-JP';
+    var minY = Number(po.minimumYen || 1000).toLocaleString(loc);
+    h += '<div class="card"><h2>' + t('お支払い', 'Payment') + '</h2>';
+    if (po.ready) {
+      h += '<p class="big">' + Number(po.amountYen || 0).toLocaleString(loc)
+         + '<span class="unit">' + t('円', 'yen') + '</span></p>'
+         + '<p class="sub">'
+         + t('お支払いできる分があります。ご登録のメールアドレスへ、デジタルギフト券をお送りします。',
+             'You have a payable balance. A digital gift certificate will be sent to your registered email address.')
+         + '</p>';
+    } else {
+      h += '<p class="empty">'
+         + t('お支払いできる分は、まだありません。' + minY + '円に達すると、ここでお知らせします。',
+             'You do not have a payable balance yet. This page will tell you when it reaches '
+             + minY + ' yen.')
+         + '</p>';
+    }
+    h += '</div>';
 
     // ---- これまでの月 ----
     h += '<div class="card"><h2>' + t('これまでの月', 'Earlier months') + '</h2>';
@@ -256,6 +280,15 @@ details .inner table{margin-top:0}
     h += '<div class="card"><h2>' + t('数え方', 'How points are counted') + '</h2>'
        + '<p class="note">' + esc(lang() === 'en' ? data.howCounted : data['数え方']) + '</p>'
        + '<p class="note">' + esc(lang() === 'en' ? data.note : data['注記']) + '</p>'
+       + '<p class="note">'
+       + esc(lang() === 'en' ? (data.aboutValue || '') : (data['単価について'] || '')) + '</p>'
+       // 細かい決まりと支払いの条件は規程の方にある。ここに全部は書けない。
+       + '<p class="note" style="margin-top:12px"><a href="/legal/revenue.html">'
+       + t('収益分配とポイントの算定方法', 'Revenue Share and How Points Are Calculated')
+       + '</a> '
+       + t('に、上限の決まりと支払いの条件を定めています。',
+           'sets out the caps and the payment conditions in full.')
+       + '</p>'
        + '</div>';
 
     el.innerHTML = h;

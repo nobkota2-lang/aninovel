@@ -19,6 +19,16 @@
  *   ただし締め済み(confirmed=1)の期間は台帳の値をそのまま出す。
  *   支払いの根拠にした数字は、後から動いて見えてはいけない。
  *
+ * ポイントと金額（2026-10-03 決定）
+ *   1ポイント＝1円ではない。1ポイントがいくらになるかは期間ごとに変わり、
+ *   その期間の収益から運営者の取り分を引いた額を、総ポイントで割って決まる。
+ *   ポイントは「どれだけ読まれたか」の指標として見せる。
+ *
+ *   金額そのものは原則として見せない。見せると、まだ確定していない
+ *   単価を当てにされてしまう。1,000円に達して実際にお支払いできる
+ *   ようになったときだけ、その額をお知らせする。
+ *   これより詳しい内訳は、請求があればお見せする（利用規約 第9条）。
+ *
  * 見せる範囲
  *   自分が owner_email になっている作品だけ。他の作者の数字は返さない。
  *   オーナーも、この口では自分の分しか見えない（全体は /api/admin/points）。
@@ -62,6 +72,31 @@ SELECT p.period, p.work_id, w.title, w.title_en, p.points, p.reads_count, p.conf
  ORDER BY p.points DESC`;
 
 const r4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
+
+/** お支払いの最低額。これに満たない分は次の期間へ繰り越す。 */
+const MIN_PAYOUT_YEN = 1000;
+
+/**
+ * お支払いできる分があるか。
+ * 残高そのものは返さない。1,000円に達して初めて、その額を知らせる。
+ */
+async function payoutState(d, me) {
+  try {
+    const a = await d.prepare(
+      'SELECT SUM(amount_yen) AS y FROM points WHERE author_email = ?1 AND confirmed = 1'
+    ).bind(me).first();
+    const b = await d.prepare(
+      'SELECT SUM(amount_yen) AS y FROM payouts WHERE author_email = ?1').bind(me).first();
+    const bal = (Number(a && a.y) || 0) - (Number(b && b.y) || 0);
+    const payable = Math.floor(bal / MIN_PAYOUT_YEN) * MIN_PAYOUT_YEN;
+    if (payable >= MIN_PAYOUT_YEN) {
+      return { ready: true, amountYen: payable, minimumYen: MIN_PAYOUT_YEN };
+    }
+    return { ready: false, amountYen: null, minimumYen: MIN_PAYOUT_YEN };
+  } catch (e) {
+    return { ready: false, amountYen: null, minimumYen: MIN_PAYOUT_YEN };
+  }
+}
 
 /** 12か月前の YYYY-MM */
 function twelveMonthsAgo() {
@@ -173,10 +208,19 @@ export async function onRequestGet(context) {
       current,
       periods,
       累計ポイント: r4(current.points + periods.reduce((a, p) => a + p.points, 0)),
+      payout: await payoutState(d, me),
       数え方: SCORE_NOTE_JA,
       howCounted: SCORE_NOTE_EN,
       注記: '当月は暫定です。月が締まると確定し、以後は変わりません。',
       note: 'The current month is provisional. It is finalised when the month is closed.',
+      単価について: 'ポイントは、どれだけ読まれたかの目安です。1ポイント＝1円ではありません。'
+        + '1ポイントあたりの金額は、その期間の収益から運営者の取り分を引いた額を、'
+        + 'その期間の総ポイントで割って決まるため、期間ごとに変わります。'
+        + 'お支払いできる分が1,000円に達すると、この画面でお知らせします。',
+      aboutValue: 'Points measure how much your work was read. One point is not one yen. '
+        + 'The value of a point is set for each period by dividing the revenue remaining after '
+        + "the operator's share by the total points for that period, so it varies between periods. "
+        + 'When your payable balance reaches 1,000 yen, this page will tell you.',
     });
   } catch (e) {
     return json({ error: 'query_failed', message: String(e && e.message) }, 500);
