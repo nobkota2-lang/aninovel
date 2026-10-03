@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>作品を書く方へ — AniNovel</title>
+<meta name="description" content="アニノベルで作品を公開する作者の方へ。できること、お金のこと、公開までの流れをご案内します。">
+<style>
+:root{
+  --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
+  --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+    --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
+  --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.8;-webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto;padding:32px 20px 72px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:34px}
+h1{font-size:1.9rem;margin:0 0 10px;letter-spacing:.02em;line-height:1.4}
+.lead{color:var(--muted);font-size:1rem;margin:0}
+h2{font-size:1.12rem;margin:0 0 14px;letter-spacing:.02em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px}
+.card+.card{margin-top:16px}
+p{margin:0 0 14px}
+p:last-child{margin-bottom:0}
+ul{margin:0;padding-left:1.25em}
+li{margin-bottom:9px}
+li:last-child{margin-bottom:0}
+li strong{font-weight:700}
+a{color:var(--accent)}
+.btn{display:inline-block;padding:14px 30px;border:0;border-radius:10px;
+  background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:1rem;
+  cursor:pointer;text-decoration:none}
+.btn:hover{background:var(--accent2)}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);
+  padding:8px 16px;font-size:.88rem;white-space:nowrap}
+.btn.ghost:hover{background:rgba(139,94,52,.08)}
+.cta{text-align:center;margin-top:28px}
+.cta .sub{color:var(--muted);font-size:.88rem;margin-top:12px}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding-left:40px;margin-bottom:16px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:2px;
+  width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
+.steps li b{display:block;font-weight:700}
+.steps li span{color:var(--muted);font-size:.92rem}
+.note{color:var(--muted);font-size:.9rem}
+.foot{margin-top:34px;font-size:.88rem;color:var(--muted);text-align:center}
+.foot a{text-decoration:none}
+.foot a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <h1 id="t-h1">作品を書く方へ</h1>
+      <p class="lead" id="t-lead">あなたの物語を、吹き出しと声のある形で読んでもらえます。</p>
+    </div>
+    <button class="btn ghost" id="lang" type="button">English</button>
+  </div>
+
+  <div id="body"></div>
+
+  <p class="foot">
+    <a href="/index.html" id="t-back">トップに戻る</a>
+  </p>
+</div>
+
+<script>
+/* 作者向けの案内  authors.html
+ * ============================================================
+ * 書いてよいのは、利用規約と実装に裏づけのあることだけ。
+ * 「たくさん稼げます」のような、保証できないことは書かない。
+ * 収益の見込みを匂わせる表現も入れない。実績が無いうちに期待を
+ * 作ると、最初に来てくれた作者を裏切ることになる。
+ *
+ * 言語はサイト全体と同じ鍵（aninovel_lang_v1）を読む。
+ */
+(function () {
+  'use strict';
+
+  var KEY = 'aninovel_lang_v1', ALT = 'aninovel_lang';
+  function lang() {
+    try { var v = localStorage.getItem(KEY) || localStorage.getItem(ALT) || 'ja';
+          return v === 'en' ? 'en' : 'ja'; } catch (e) { return 'ja'; }
+  }
+  function t(ja, en) { return lang() === 'en' ? en : ja; }
+
+  function render() {
+    var en = lang() === 'en';
+    document.documentElement.lang = en ? 'en' : 'ja';
+    document.title = t('作品を書く方へ — AniNovel', 'For Writers — AniNovel');
+    document.getElementById('t-h1').textContent = t('作品を書く方へ', 'For writers');
+    document.getElementById('t-lead').textContent =
+      t('あなたの物語を、吹き出しと声のある形で読んでもらえます。',
+        'Have your story read with speech bubbles and voices.');
+    document.getElementById('t-back').textContent = t('トップに戻る', 'Back to top');
+    document.getElementById('lang').textContent = t('English', '日本語');
+
+    var h = '';
+
+    // ---- できること ----
+    h += '<div class="card"><h2>' + t('できること', 'What you can do') + '</h2><ul>'
+      + '<li>' + t('<strong>吹き出しで読ませる。</strong>台詞ごとに話し手を決めると、'
+                + 'アニメのような吹き出しで表示されます。',
+                  '<strong>Speech bubbles.</strong> Assign a speaker to each line and it is '
+                + 'shown in an anime-style bubble.') + '</li>'
+      + '<li>' + t('<strong>登場人物に顔と声を。</strong>キャラクターにアイコンを割り当て、'
+                + '読み上げの声を選べます。口の動きも合わせられます。',
+                  '<strong>Faces and voices.</strong> Give each character an icon and a '
+                + 'reading voice. Their mouths move with the speech.') + '</li>'
+      + '<li>' + t('<strong>英語でも読まれます。</strong>読者が英語を選ぶと、本文が英語で表示されます。',
+                  '<strong>Read in English too.</strong> When a reader chooses English, '
+                + 'the text is shown in English.') + '</li>'
+      + '<li>' + t('<strong>道具はすべて無料です。</strong>編集も、アイコンも、読み上げも、'
+                + '別料金はありません。',
+                  '<strong>All the tools are free.</strong> The editor, the icons and the '
+                + 'narration cost nothing extra.') + '</li>'
+      + '</ul></div>';
+
+    // ---- お金と権利 ----
+    h += '<div class="card"><h2>' + t('お金と権利のこと', 'Money and rights') + '</h2><ul>'
+      + '<li>' + t('<strong>登録は無料です。</strong>キャンペーン期間中は、作者の月額料金もいただきません。',
+                  '<strong>Registration is free.</strong> During the campaign period there is '
+                + 'no monthly fee for writers either.') + '</li>'
+      + '<li>' + t('<strong>読まれた量に応じて分配します。</strong>サービスの収益の一部を、'
+                + '作品が読まれた量に応じてお渡しします。',
+                  '<strong>You share in the revenue.</strong> Part of what the service earns '
+                + 'is passed on according to how much your work was read.') + '</li>'
+      + '<li>' + t('<strong>作品の権利はあなたのものです。</strong>運営者が著作権を譲り受けることも、'
+                + '第三者へ売ることもありません。',
+                  '<strong>Your work stays yours.</strong> The operator never takes over your '
+                + 'copyright and never sells it to anyone.') + '</li>'
+      + '<li>' + t('<strong>いつでも取り下げられます。</strong>公開を止めれば、以後の新たな利用は終わります。',
+                  '<strong>You can withdraw at any time.</strong> Once you unpublish, no new '
+                + 'use is made of the work.') + '</li>'
+      + '</ul>'
+      + '<p class="note" style="margin-top:16px">'
+      + t('分配の計算と支払いの条件は、'
+        + '<a href="/legal/revenue.html">収益分配とポイントの算定方法</a>にすべて書いてあります。'
+        + '読まれた量はご自身の画面でいつでも確認できます。'
+        + 'なお、1ポイント＝1円ではありません。1ポイントあたりの金額は期間ごとに変わります。',
+          'The full calculation and payment conditions are set out in '
+        + '<a href="/legal/revenue.html">Revenue Share and How Points Are Calculated</a>. '
+        + 'You can check how much your work was read at any time on your own page. '
+        + 'Note that one point is not one yen: the value of a point varies by period.')
+      + '</p></div>';
+
+    // ---- 公開までの流れ ----
+    h += '<div class="card"><h2>' + t('公開までの流れ', 'From signing up to publishing') + '</h2>'
+      + '<ol class="steps">'
+      + '<li><b>' + t('作者登録を申請する', 'Apply to become a writer') + '</b><span>'
+      + t('お名前とメールアドレスをお送りください。内容を確認のうえご連絡します。',
+          'Send us your name and email address. We will review it and get back to you.')
+      + '</span></li>'
+      + '<li><b>' + t('書く', 'Write') + '</b><span>'
+      + t('編集画面で本文を書き、話し手とアイコンを決めます。書きかけのまま保存できます。',
+          'Write in the editor, then assign speakers and icons. You can save work in progress.')
+      + '</span></li>'
+      + '<li><b>' + t('公開を依頼する', 'Request publication') + '</b><span>'
+      + t('初回は、AIが内容を確かめたうえで運営者が最終確認します。'
+        + '公開後の手直しは、前の版との差分をAIが見ます。',
+          'For a first publication, an AI checks the content and the operator makes the final '
+        + 'decision. For later edits, an AI reviews what changed from the approved version.')
+      + '</span></li>'
+      + '<li><b>' + t('読まれる', 'Be read') + '</b><span>'
+      + t('公開されると、読まれた量がポイントとして記録されます。'
+        + '作品ごとの内訳も見られます。',
+          'Once published, how much your work is read is recorded as points, '
+        + 'broken down by work.')
+      + '</span></li>'
+      + '</ol>'
+      + '<p class="note" style="margin-top:18px">'
+      + t('公序良俗に反する表現や画像は、初回でも手直しでもお通しできません。'
+        + '差し戻すときは理由をお伝えします。',
+          'Content that offends public decency cannot pass, whether on first publication or '
+        + 'in a later edit. If we send something back, we tell you why.')
+      + '</p></div>';
+
+    // ---- 入口 ----
+    h += '<div class="cta">'
+      + '<a class="btn" href="/author-apply.html">'
+      + t('作者登録を申請する', 'Apply to become a writer') + '</a>'
+      + '<p class="sub">'
+      + t('すでに読者として登録されている方は、同じアカウントに作者の権限が加わります。',
+          'If you already have a reader account, writer access is added to that same account.')
+      + '</p>'
+      + '<p class="sub"><a href="/legal/terms.html">'
+      + t('利用規約', 'Terms of Service') + '</a>　<a href="/legal/revenue.html">'
+      + t('収益分配の算定方法', 'How the revenue share is calculated') + '</a></p>'
+      + '</div>';
+
+    document.getElementById('body').innerHTML = h;
+  }
+
+  document.getElementById('lang').onclick = function () {
+    var next = lang() === 'en' ? 'ja' : 'en';
+    try { localStorage.setItem(KEY, next); localStorage.setItem(ALT, next); } catch (e) {}
+    render();
+  };
+  window.addEventListener('storage', function (e) {
+    if (e.key === KEY || e.key === ALT) render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

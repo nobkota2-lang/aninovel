@@ -60,8 +60,18 @@ const DEFAULT_OWNER_RATE = 0.5;
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+/** 読書ログを集計して points に書く。締めた行は AGGREGATE 側で守られる。 */
+async function aggregate(d, period, now) {
+  await d.prepare(AGGREGATE).bind(period, now).run();
+}
+
 /**
  * その期間の収益から1ポイントあたりの金額を出し、各行に金額を入れる。
+ *
+ * 先に集計を走らせる。集計せずに収益だけ入れると、ポイントの合計が 0 の
+ * まま 0 で割ることになり、黙って「1ポイント0円」になってしまう。
+ * 順番を覚えていないと間違える作りにはしない。
+ *
  * 締めていない行だけを書き換える。締めた期間の金額は動かさない。
  */
 async function applyRevenue(d, period, revenue, ownerRate, now) {
@@ -75,9 +85,23 @@ async function applyRevenue(d, period, revenue, ownerRate, now) {
     return { error: json({ error: 'bad_rate', message: '運営者の取り分は 0〜1 で指定してください。' }, 400) };
   }
 
+  await aggregate(d, period, now);
+
   const t = await d.prepare(
     'SELECT SUM(points) AS p FROM points WHERE period = ?1').bind(period).first();
   const total = Number(t && t.p) || 0;
+  if (total <= 0) {
+    return { error: json({
+      error: 'no_points',
+      period,
+      message: 'この期間にはポイントがありません。1ポイントあたりの金額を決められません。',
+      確かめること: [
+        'その期間に読書ログ(reads)があるか',
+        '読まれた作品の works_meta に持ち主(owner_email)が入っているか',
+        '滞在30秒未満の記録しかない場合、ポイントは発生しません',
+      ],
+    }, 409) };
+  }
   const share = rev * (1 - rate);
   const perPoint = total > 0 ? share / total : 0;
 
@@ -369,7 +393,7 @@ export async function onRequestPost(context) {
 
   // 書き込む
   try {
-    await d.prepare(AGGREGATE).bind(period, now).run();
+    await aggregate(d, period, now);
     const rows = await d.prepare(
       `SELECT p.author_email, p.work_id, w.title, p.points, p.reads_count, p.confirmed
          FROM points p LEFT JOIN works_meta w ON w.work_id = p.work_id
@@ -378,7 +402,12 @@ export async function onRequestPost(context) {
     const total = list.reduce((a, r) => a + (Number(r.points) || 0), 0);
     return json({ ok: true, period, computed_at: now,
                   合計ポイント: Math.round(total * 10000) / 10000,
-                  作品数: list.length, rows: list });
+                  作品数: list.length,
+                  注意: list.length ? undefined
+                    : 'この期間にはポイントがありません。読書ログが無いか、'
+                      + '読まれた作品に持ち主(owner_email)が入っていないか、'
+                      + '滞在30秒未満の記録しかありません。',
+                  rows: list });
   } catch (e) {
     return json({ error: 'aggregate_failed', message: String(e && e.message) }, 500);
   }
