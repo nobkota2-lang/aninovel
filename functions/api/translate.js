@@ -22,6 +22,9 @@
 //      partial: true を立て、キャッシュには書かない。
 //
 // 制限に達したときも必ず JSON を返す、というのがこの版の約束。
+//
+// 点検: POST {probe:true, workId:'pub_xxx'} で、その作品のキャッシュに
+//       原文がどれだけ残っているかを返す。AI は使わないので何度でも呼べる。
 
 import { requireWriter } from '../_owner.js';
 
@@ -103,6 +106,69 @@ export async function onRequestPost(context) {
       const got = await KV2.get(ckey);
       if (!got) return json({ error: 'not_found', part }, 404);
       return new Response(got, { headers: { ...JSON_HEADERS, 'X-Cache': 'HIT-CHUNK' } });
+    }
+
+    // ===== 点検: どの作品のキャッシュが壊れているかを調べる =====
+    // AI は使わない。KV を読んで、原文の文字が残っている件数を数えるだけ。
+    // 作品IDを渡すと、ビューアが送るのと同じ形の本文・人物を KV から
+    // 組み立ててキーを求めるので、呼ぶ側は本文を知らなくてよい。
+    if (body.probe) {
+      const w0 = await requireWriter(context);
+      if (w0.deny) return w0.deny;
+      const KV0 = env.WORKS || env.WORKS_KV;
+      if (!KV0) return json({ error: 'no_kv' }, 500);
+      const wid = String(body.workId || '').slice(0, 100);
+      if (!wid) return json({ error: 'bad_work', message: 'workId を指定してください。' }, 400);
+
+      let work = null;
+      try {
+        const raw = await KV0.get('work:' + wid);
+        work = raw ? JSON.parse(raw) : null;
+      } catch (e) { work = null; }
+      if (!work || !Array.isArray(work.content)) {
+        return json({ error: 'not_found', workId: wid }, 404);
+      }
+
+      // ビューアの translateWork が組み立てるのと同じ形にする。
+      // ここがずれると違う鍵を見ることになり、嘘の結果が出る。
+      const TYPES = ['narration', 'dialogue', 'chapter_break', 'section_break'];
+      const pItems = work.content
+        .filter((it) => it && it.text && TYPES.indexOf(it.type) >= 0)
+        .map((it) => ({ id: it.id, text: it.text }));
+      const pChars = (work.characters || [])
+        .filter((c) => c && c.id !== 'narrator' && c.name)
+        .map((c) => ({ id: c.id, name: c.name }));
+      const pTarget = (body.target || 'en').toLowerCase();
+      const pSource = (work.sourceLang || body.source || 'ja').toLowerCase();
+      const pTitle = (work.novel && work.novel.title) || '';
+
+      const pCanon = JSON.stringify({ v:4, t:pTarget, s:pSource, title: pTitle,
+        items: pItems.map(i => [i.id, i.text]), chars: pChars.map(c => [c.id, c.name]) });
+      const pKey = `worktr7:${pTarget}:${(await sha256hex(pCanon)).slice(0, 40)}`;
+
+      let hit = null;
+      try { const g = await KV0.get(pKey); hit = g ? JSON.parse(g) : null; } catch (e) { hit = null; }
+
+      if (!hit) {
+        return json({ workId: wid, title: pTitle, key: pKey, cached: false,
+          blocks: pItems.length,
+          判定: '未翻訳', 説明: 'キャッシュがありません。まだ訳していないか、本文が変わって鍵が変わりました。' });
+      }
+      const hItems = Array.isArray(hit.items) ? hit.items : [];
+      let bad = 0; const samples = [];
+      for (const it of hItems) {
+        if (hasSourceScript(it && it.text, pSource)) {
+          bad++;
+          if (samples.length < 3) samples.push({ id: it.id, text: String(it.text).slice(0, 60) });
+        }
+      }
+      let badChars = 0;
+      for (const c of (hit.characters || [])) if (hasSourceScript(c && c.name, pSource)) badChars++;
+      return json({ workId: wid, title: pTitle, key: pKey, cached: true,
+        blocks: hItems.length, 原文のまま: bad, 人物名が原文のまま: badChars,
+        割合: hItems.length ? Math.round(bad / hItems.length * 1000) / 10 + '%' : '0%',
+        判定: bad === 0 && badChars === 0 ? '健全' : (bad > hItems.length * 0.1 ? '要修復' : '一部に残存'),
+        例: samples });
     }
 
     const target = (body.target || 'en').toLowerCase();

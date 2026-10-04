@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v192_translate_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v193_gallery_drilldown';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -196,6 +196,28 @@ input[type="color"]{padding:2px;cursor:pointer;height:40px}
 .gallery-tab{padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--panel-bg);transition:all .2s}.gallery-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .gallery-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.gallery-item{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:pointer;transition:all .2s;border:3px solid transparent;background:var(--bg-secondary)}.gallery-item:hover{border-color:var(--accent);transform:scale(1.05)}
 .gallery-cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-height:56vh;overflow-y:auto;padding:4px}
+.gal-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-height:54vh;overflow-y:auto;padding:4px}
+.gal-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border:2px solid var(--border);border-radius:14px;background:var(--panel-bg);cursor:pointer;transition:all .15s}
+.gal-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 14px rgba(0,0,0,.12)}
+.gal-tile-label{font-size:12px;font-weight:700;text-align:center;line-height:1.3;color:var(--text-primary)}
+.gal-tile-count{font-size:10px;color:var(--text-muted)}
+.gal-mont{width:78px;height:78px;border-radius:14px;overflow:hidden;background:var(--bg-secondary);display:grid;gap:1px}
+.gal-mont img{width:100%;height:100%;object-fit:cover;display:block}
+.gal-mont-1{grid-template-columns:1fr}.gal-mont-2{grid-template-columns:1fr 1fr}
+.gal-mont-3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}.gal-mont-3 img:first-child{grid-row:span 2}
+.gal-mont-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.gal-crumb{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:10px;font-size:12px}
+.gal-crumb button{border:none;background:transparent;color:var(--accent);cursor:pointer;font:inherit;padding:3px 7px;border-radius:7px}
+.gal-crumb button:hover{background:var(--bg-secondary)}
+.gal-crumb button.cur{color:var(--text-primary);font-weight:700;background:var(--bg-secondary)}
+.gal-crumb .sep{color:var(--text-muted)}
+.gal-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.gal-chip{border:1px solid var(--border);background:var(--panel-bg);color:var(--text-secondary);cursor:pointer;font:inherit;font-size:11px;padding:5px 11px;border-radius:999px}
+.gal-chip b{font-weight:700;opacity:.65;margin-left:2px}
+.gal-chip:hover{border-color:var(--accent)}
+.gal-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.gal-chip.on b{opacity:.8}
+@media(max-width:768px){.gal-tiles{grid-template-columns:repeat(3,1fr)}.gal-mont{width:64px;height:64px}}
 .gallery-cat-btn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;border:2px solid var(--border);border-radius:12px;background:var(--panel-bg);cursor:pointer;transition:all .15s}
 .gallery-cat-btn:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 10px rgba(0,0,0,.1)}
 .gallery-cat-btn img{width:66px;height:66px;border-radius:50%;object-fit:cover;background:var(--bg-secondary)}
@@ -5830,7 +5852,7 @@ function renderEditModal(){if(!state.editModalOpen||!state.editingItem)return'';
     state.characters.forEach(function(c){if(c.id!=='narrator')h+='<option value="'+c.id+'"'+(data.characterId===c.id?' selected':'')+'>'+esc(c.name)+'（心の声）</option>'});
     h+='</select></div>'}h+='<div><label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">テキスト<span style="font-size:11px;color:var(--text-muted);font-weight:400">（ルビは 漢字《かな》 の形で書けます。例: 怪《け》しからん）</span></label><textarea rows="8" oninput="_markupToItem(this.value,state.editingItem.data)" placeholder="テキストを入力..." style="width:100%;resize:vertical">'+esc(_rubyToMarkup(data))+'</textarea></div></div>'}h+='<div style="display:flex;gap:8px;margin-top:24px"><button onclick="saveEditModal()" class="btn btn-primary" style="flex:1;justify-content:center;padding:10px">💾 保存</button><button onclick="closeEditModal()" class="btn btn-ghost">キャンセル</button></div></div>';if(state.imageGalleryOpen&&type==='character')h+=renderGallery();h+='</div>';return h}
 function openGallery(){
-  state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;
+  state.imageGalleryOpen=true;state.galleryGroup=null;state.galleryPage=0;state.galleryPath=[];state.galleryRace=null;
   if(!state.galleryManifest){
     fetch('data/gallery-manifest.json',{cache:'force-cache'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
@@ -5839,9 +5861,119 @@ function openGallery(){
   }
   render();
 }
+/* ===== キャラクター画像ギャラリー（多段階） =====
+ *
+ * 選び方を3段にする。
+ *   1段目 男性 / 女性 / 動物
+ *   2段目 人は年齢、動物は種類
+ *   3段目 画風（写真・アニメ・漫画）
+ *   そのあと一覧。人種は一覧の上の絞り込みにする。
+ *
+ * 人種を4段目にしなかった理由
+ *   性別×年齢×画風で42区分・各10〜37枚と、一覧としてちょうどよい。
+ *   ここに人種を足すと239区分になり、そのうち116区分は画像が1枚しかない。
+ *   4回たどって1枚しか出てこない区分が半数近くになる。
+ *   人種は「あれば絞る」もので、たどる軸には向かない。
+ */
+var _GAL_AGES=['Baby','Infant','ESchool','MSchool','20-30s','40-60s','70s-'];
+var _GAL_TYPES=['Photo','Anime','Manga'];
+var _GAL_RACES=['Japanese','White','Black','India','Latin','Arab','Micronesia'];
+var _GAL_SPECIES=['Animal','Cat','Dog','Rabbit','Bear','Fox','Wolf','Lion','Tiger','Horse','Cow','Pig','Deer','Monkey','Panda','Koala','Elephant','Penguin','Owl','Chicken','Dolphin'];
+var _GAL_JA={
+  Male:'男性',Female:'女性',Animal:'動物',
+  Baby:'赤ちゃん',Infant:'幼児',ESchool:'小学生',MSchool:'中高生','20-30s':'20〜30代','40-60s':'40〜60代','70s-':'高齢者',Adult:'おとな',
+  Photo:'写真',Anime:'アニメ',Manga:'漫画',
+  Japanese:'日本',White:'欧米',Black:'アフリカ系',India:'インド',Latin:'ラテン',Arab:'中東',Micronesia:'ミクロネシア',Etc:'その他',
+  Animal_sp:'いろいろ',Cat:'猫',Dog:'犬',Rabbit:'うさぎ',Bear:'熊',Fox:'きつね',Wolf:'おおかみ',Lion:'ライオン',Tiger:'とら',
+  Horse:'馬',Cow:'牛',Pig:'ぶた',Deer:'しか',Monkey:'さる',Panda:'パンダ',Koala:'コアラ',Elephant:'ぞう',
+  Penguin:'ペンギン',Owl:'ふくろう',Chicken:'にわとり',Dolphin:'いるか'
+};
+var _GAL_EN={
+  Male:'Men',Female:'Women',Animal:'Animals',
+  Baby:'Babies',Infant:'Toddlers',ESchool:'Primary',MSchool:'Teens','20-30s':'20s–30s','40-60s':'40s–60s','70s-':'Seniors',Adult:'Adult',
+  Photo:'Photo',Anime:'Anime',Manga:'Manga',
+  Japanese:'Japanese',White:'Western',Black:'African',India:'Indian',Latin:'Latin',Arab:'Middle Eastern',Micronesia:'Micronesian',Etc:'Other',
+  Animal_sp:'Assorted',Cat:'Cat',Dog:'Dog',Rabbit:'Rabbit',Bear:'Bear',Fox:'Fox',Wolf:'Wolf',Lion:'Lion',Tiger:'Tiger',
+  Horse:'Horse',Cow:'Cow',Pig:'Pig',Deer:'Deer',Monkey:'Monkey',Panda:'Panda',Koala:'Koala',Elephant:'Elephant',
+  Penguin:'Penguin',Owl:'Owl',Chicken:'Chicken',Dolphin:'Dolphin'
+};
+var _GAL_ICON={Male:'👨',Female:'👩',Animal:'🐾',Photo:'📷',Anime:'🎨',Manga:'📚'};
+
+function _galL(k){ var d=(state.lang==='en')?_GAL_EN:_GAL_JA; return d[k]||k; }
+/** 動物の種類。グループIDは Etc_<種類>_<画風>。 */
+function _galSp(grp){ var p=String(grp.id||'').split('_'); return p.length>1?p[1]:'Etc'; }
+function _galIsAnimal(grp){ return !(grp.gender); }
+
+/** いまの道筋に当てはまるグループを集める */
+function _galGroups(man, path, gen){
+  var out=[];
+  (man.groups||[]).forEach(function(g){
+    var animal=_galIsAnimal(g);
+    var top=animal?'Animal':(String(g.gender||'').toLowerCase()==='male'?'Male':'Female');
+    // 編集中のキャラに性別があるときは、その性別と動物だけ
+    if((gen==='male'&&top==='Female')||(gen==='female'&&top==='Male')) return;
+    if(path.length>0 && path[0]!==top) return;
+    if(path.length>1){
+      var second=animal?_galSp(g):(g.age||'Adult');
+      if(path[1]!==second) return;
+    }
+    if(path.length>2 && path[2]!==(g.type||g.style||'')) return;
+    out.push(g);
+  });
+  return out;
+}
+
+/** その段で選べるものを、並び順つきで返す */
+function _galOptions(man, path, gen){
+  var groups=_galGroups(man,path,gen), seen={}, keys=[];
+  groups.forEach(function(g){
+    var k;
+    if(path.length===0) k=_galIsAnimal(g)?'Animal':(String(g.gender||'').toLowerCase()==='male'?'Male':'Female');
+    else if(path.length===1) k=_galIsAnimal(g)?_galSp(g):(g.age||'Adult');
+    else k=(g.type||g.style||'');
+    if(!k) return;
+    if(!seen[k]){ seen[k]={key:k,count:0,imgs:[]}; keys.push(k); }
+    seen[k].count+=(g.items||[]).length;
+    // 見本は各グループの先頭から。少しずつ散らす。
+    if(seen[k].imgs.length<4 && g.items && g.items.length){
+      seen[k].imgs.push(g.items[Math.floor(g.items.length/2)].p);
+    }
+  });
+  var order = path.length===0 ? ['Male','Female','Animal']
+            : path.length===1 ? (path[0]==='Animal'?_GAL_SPECIES:_GAL_AGES)
+            : _GAL_TYPES;
+  keys.sort(function(a,b){
+    var ia=order.indexOf(a), ib=order.indexOf(b);
+    if(ia<0)ia=999; if(ib<0)ib=999;
+    return ia-ib || String(a).localeCompare(String(b));
+  });
+  return keys.map(function(k){ return seen[k]; });
+}
+
+/** まとめアイコン（最大4枚の寄せ集め） */
+function _galMontage(imgs){
+  if(!imgs||!imgs.length) return '<div class="gal-mont gal-mont-empty"></div>';
+  if(imgs.length===1) return '<div class="gal-mont gal-mont-1"><img src="'+imgs[0]+'" loading="lazy" onerror="this.style.visibility=\'hidden\'"></div>';
+  var n=Math.min(4,imgs.length), h='<div class="gal-mont gal-mont-'+n+'">';
+  for(var i=0;i<n;i++) h+='<img src="'+imgs[i]+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">';
+  return h+'</div>';
+}
+
+function _galGo(key){
+  var p=(state.galleryPath||[]).slice();
+  if(key===null) p=[]; else p.push(key);
+  state.galleryPath=p; state.galleryRace=null; state.galleryPage=0; render();
+}
+function _galUpTo(n){
+  state.galleryPath=(state.galleryPath||[]).slice(0,n);
+  state.galleryRace=null; state.galleryPage=0; render();
+}
+function _galSetRace(r){ state.galleryRace=r||null; state.galleryPage=0; render(); }
+
 function renderGallery(){
   var man=state.galleryManifest;
-  // ★ 性別フィルタ（編集中キャラの性別に応じて）
+  var path=state.galleryPath||[];
+  // 編集中キャラの性別（あればその性別と動物だけを出す）
   var _gen=null;
   if(state.readerCustomOpen&&state.readerCustomCharId){
     var _ch=state.characters.find(function(c){return c.id===state.readerCustomCharId});
@@ -5849,82 +5981,93 @@ function renderGallery(){
   }else if(state.editingItem&&state.editingItem.data){
     _gen=state.editingItem.data.gender;
   }
-  if(man&&man.groups&&(_gen==='male'||_gen==='female')){
-    man={groups:man.groups.filter(function(g){var gl=(g.gender||'').toLowerCase();return gl===_gen||!gl;})};
-  }
-  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:840px">';
-  var _genBadge=(_gen==='male'||_gen==='female')?'<span style="font-size:11px;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:600">'+(_gen==='male'?'👨 '+_trFull('男性のみ'):'👩 '+_trFull('女性のみ'))+'</span>':'';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-weight:700;font-size:16px">🖼️ キャラクター画像ギャラリー'+_genBadge+'</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
-  if(!man){
-    h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">読み込み中...</p>';
-  }else if(man.error){
-    h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">ギャラリーを読み込めませんでした。<br>ローカルサーバー経由で開いているか確認してください。</p>';
-  }else if(!state.galleryGroup){
-    h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">カテゴリーを選択してください（画風 → 民族 → 年齢）</p>';
-    h+='<div style="max-height:60vh;overflow-y:auto;padding-right:4px">';
-    // 画風(type)→民族(race)→年齢(age) の階層グルーピング
-    var _typeIcon={'Anime':'🎨','Manga':'📚','Photo':'📷'};
-    var _typeJa={'Anime':'アニメ','Manga':'漫画','Photo':'写真'};
-    var _typeOrder=['Anime','Manga','Photo'];
-    var _raceJa={'Japanese':'日本','White':'欧米','Black':'アフリカ系','India':'インド','Latin':'ラテン','Arab':'中東','Micronesia':'ミクロネシア','Etc':'その他'};
-    var _ageJa={'Baby':'赤ちゃん','Infant':'幼児','ESchool':'小学生','MSchool':'中高生','20-30s':'20〜30代','40-60s':'40〜60代','70s-':'高齢者','Adult':'その他'};
-    var _ageOrder=['Baby','Infant','ESchool','MSchool','20-30s','40-60s','70s-','Adult'];
-    // type でグループ化
-    var _byType={};
-    man.groups.forEach(function(grp){var t=grp.type||grp.style||'Other';if(!_byType[t])_byType[t]=[];_byType[t].push(grp);});
-    var _types=_typeOrder.filter(function(t){return _byType[t];});
-    Object.keys(_byType).forEach(function(t){if(_types.indexOf(t)<0)_types.push(t);});
-    _types.forEach(function(type){
-      var _ic=_typeIcon[type]||'🎭';var _tja=_trFull(_typeJa[type]||type);
-      h+='<div style="margin:18px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--accent,#8E44AD);font-weight:700;font-size:15px">'+_ic+' '+_tja+' <span style="font-size:12px;color:var(--text-muted);font-weight:400">'+type+'</span></div>';
-      // race でグループ化
-      var _byRace={};
-      _byType[type].forEach(function(grp){var r=grp.race||'';if(!_byRace[r])_byRace[r]=[];_byRace[r].push(grp);});
-      Object.keys(_byRace).sort().forEach(function(race){
-        var _rja=_trFull(_raceJa[race]||race);
-        h+='<div style="margin:10px 0 4px;font-size:12px;font-weight:600;color:var(--text-secondary)">'+_rja+' <span style="font-size:10px;color:var(--text-muted)">'+race+'</span></div>';
-        h+='<div class="gallery-cat-grid">';
-        _byRace[race].sort(function(a,b){return _ageOrder.indexOf(a.age)-_ageOrder.indexOf(b.age);});
-        _byRace[race].forEach(function(grp){
-          var rep=(grp.items&&grp.items.length)?grp.items[0].p:'';
-          var _aja=_trFull(_ageJa[grp.age]||grp.age);
-          h+='<button class="gallery-cat-btn" onclick="state.galleryGroup=\''+grp.id+'\';state.galleryPage=0;render()">'
-            +(rep?'<img src="'+rep+'" loading="lazy" onerror="this.style.visibility=\'hidden\'">':'<div style="width:66px;height:66px;border-radius:50%;background:var(--bg-secondary)"></div>')
-            +'<span class="gallery-cat-label">'+_aja+'</span>'
-            +'<span class="gallery-cat-count">'+(grp.items?grp.items.length:0)+(state.lang==='en'?'':'件')+'</span></button>';
+  if(_gen!=='male'&&_gen!=='female') _gen=null;
+
+  var h='<div class="modal-overlay" style="z-index:55" onclick="if(event.target===this){state.imageGalleryOpen=false;render()}"><div class="modal-content" style="max-width:860px">';
+  var _genBadge=_gen?'<span style="font-size:11px;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:600">'+(_gen==='male'?'👨 '+_trFull('男性のみ'):'👩 '+_trFull('女性のみ'))+'</span>':'';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="font-weight:700;font-size:16px">🖼️ '+(state.lang==='en'?'Character images':'キャラクター画像')+_genBadge+'</h3><button onclick="state.imageGalleryOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+
+  if(!man){ h+='<p style="text-align:center;color:var(--text-muted);padding:48px 0">'+(state.lang==='en'?'Loading…':'読み込み中...')+'</p>'; }
+  else if(man.error){ h+='<p style="text-align:center;color:var(--text-muted);padding:32px 0">'+(state.lang==='en'?'Could not load the gallery.':'ギャラリーを読み込めませんでした。')+'</p>'; }
+  else{
+    // ---- パンくず ----
+    h+='<div class="gal-crumb">';
+    h+='<button onclick="_galUpTo(0)"'+(path.length===0?' class="cur"':'')+'>'+(state.lang==='en'?'All':'すべて')+'</button>';
+    path.forEach(function(k,i){
+      h+='<span class="sep">›</span><button onclick="_galUpTo('+(i+1)+')"'+(i===path.length-1?' class="cur"':'')+'>'+_galL(k==='Animal'&&i===1?'Animal_sp':k)+'</button>';
+    });
+    h+='</div>';
+
+    if(path.length<3){
+      var opts=_galOptions(man,path,_gen);
+      var hint = path.length===0 ? (state.lang==='en'?'Pick who it is':'どんな相手かを選んでください')
+               : path.length===1 ? (path[0]==='Animal'?(state.lang==='en'?'Pick the kind of animal':'動物の種類を選んでください')
+                                                      :(state.lang==='en'?'Pick the age':'年齢を選んでください'))
+               : (state.lang==='en'?'Pick the drawing style':'画風を選んでください');
+      h+='<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px">'+hint+'</p>';
+      h+='<div class="gal-tiles">';
+      opts.forEach(function(o){
+        var lbl=_galL((o.key==='Animal'&&path.length===1)?'Animal_sp':o.key);
+        var ic=_GAL_ICON[o.key]?(_GAL_ICON[o.key]+' '):'';
+        h+='<button class="gal-tile" onclick="_galGo(\''+o.key+'\')">'
+          +_galMontage(o.imgs)
+          +'<span class="gal-tile-label">'+ic+lbl+'</span>'
+          +'<span class="gal-tile-count">'+o.count+(state.lang==='en'?'':'枚')+'</span></button>';
+      });
+      h+='</div>';
+    }else{
+      // ---- 一覧 ----
+      var groups=_galGroups(man,path,_gen);
+      var races={}, raceKeys=[];
+      groups.forEach(function(g){
+        var r=g.race||'Etc';
+        if(!races[r]){races[r]=0;raceKeys.push(r);}
+        races[r]+=(g.items||[]).length;
+      });
+      raceKeys.sort(function(a,b){
+        var ia=_GAL_RACES.indexOf(a), ib=_GAL_RACES.indexOf(b);
+        if(ia<0)ia=999; if(ib<0)ib=999; return ia-ib||a.localeCompare(b);
+      });
+      var sel=state.galleryRace||null;
+      // 人種が2種類以上あるときだけ絞り込みを出す（動物は1種類なので出ない）
+      if(raceKeys.length>1){
+        var total=0; raceKeys.forEach(function(r){total+=races[r];});
+        h+='<div class="gal-chips">';
+        h+='<button class="gal-chip'+(sel?'':' on')+'" onclick="_galSetRace(null)">'+(state.lang==='en'?'All':'すべて')+' <b>'+total+'</b></button>';
+        raceKeys.forEach(function(r){
+          h+='<button class="gal-chip'+(sel===r?' on':'')+'" onclick="_galSetRace(\''+r+'\')">'+_galL(r)+' <b>'+races[r]+'</b></button>';
         });
         h+='</div>';
+      }
+      var items=[];
+      groups.forEach(function(g){
+        if(sel&&(g.race||'Etc')!==sel) return;
+        (g.items||[]).forEach(function(it){ items.push(it); });
       });
-    });
-    h+='</div>';
-  }else{
-    var grp=null,i;
-    for(i=0;i<man.groups.length;i++){if(man.groups[i].id===state.galleryGroup){grp=man.groups[i];break;}}
-    var items=(grp&&grp.items)||[];
-    var PER=30;
-    var pages=Math.max(1,Math.ceil(items.length/PER));
-    var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
-    var slice=items.slice(pg*PER,pg*PER+PER);
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-      +'<button onclick="state.galleryGroup=null;render()" class="btn btn-ghost" style="font-size:12px">← カテゴリー選択</button>'
-      +'<span style="font-weight:600;font-size:14px">'+(grp?grp.label:'')+'</span>'
-      +'<span style="font-size:12px;color:var(--text-muted)">全'+items.length+'件</span></div>';
-    h+='<div class="gallery-grid" style="max-height:48vh;overflow-y:auto;padding:4px">';
-    slice.forEach(function(it){
-      h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
-    });
-    h+='</div>';
-    if(pages>1){
-      h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px">'
-        +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ 前</button>'
-        +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
-        +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>次 ›</button>'
-        +'</div>';
+      var PER=30;
+      var pages=Math.max(1,Math.ceil(items.length/PER));
+      var pg=Math.min(Math.max(0,state.galleryPage||0),pages-1);
+      var slice=items.slice(pg*PER,pg*PER+PER);
+      h+='<div style="font-size:12px;color:var(--text-muted);margin:2px 0 8px">'+(state.lang==='en'?('Showing '+items.length+' images'):('全 '+items.length+' 枚'))+'</div>';
+      h+='<div class="gallery-grid" style="max-height:46vh;overflow-y:auto;padding:4px">';
+      slice.forEach(function(it){
+        h+='<img src="'+it.p+'" loading="lazy" class="gallery-item" data-galimg="'+it.p.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
+      });
+      h+='</div>';
+      if(!items.length) h+='<p style="text-align:center;color:var(--text-muted);padding:24px 0;font-size:13px">'+(state.lang==='en'?'Nothing here.':'該当する画像がありません。')+'</p>';
+      if(pages>1){
+        h+='<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:12px">'
+          +'<button onclick="if((state.galleryPage||0)>0){state.galleryPage=(state.galleryPage||0)-1;render()}" class="btn btn-ghost"'+(pg<=0?' disabled':'')+'>‹ '+(state.lang==='en'?'Prev':'前')+'</button>'
+          +'<span style="font-size:13px;font-weight:600">'+(pg+1)+' / '+pages+'</span>'
+          +'<button onclick="if((state.galleryPage||0)<'+(pages-1)+'){state.galleryPage=(state.galleryPage||0)+1;render()}" class="btn btn-ghost"'+(pg>=pages-1?' disabled':'')+'>'+(state.lang==='en'?'Next':'次')+' ›</button>'
+          +'</div>';
+      }
     }
   }
   h+='</div></div>';
   return h;
 }
+
 function _metaTagStr(){
   var cur=(state.novel&&Array.isArray(state.novel.tags))?state.novel.tags:[];
   return cur.filter(function(s){return s!=='青空文庫'&&s!=='名作';}).join(', ');
