@@ -52,9 +52,23 @@ export async function whoAmI(request, env) {
 }
 
 function denyUnauth(env) {
+  // ログインしていないのだから、返すのは 401 ひとつでよい。
+  //
+  // 以前は Access の環境変数が無いときに 503「Access が未設定です」を
+  // 返していた。しかし Access で守られたパスには、未ログインの要求は
+  // そもそも届かない（Cloudflare が手前で止める）。つまりこの分岐が
+  // 働くのは守られていないパス、すなわち /api/points のように
+  // 「サイトのログインで判断する」口だけで、そこを開いた作者には
+  // 意味の分からない 503 が返っていた。画面側も 401 を見て
+  // 「ログインしてください」を出す作りなので、案内が出なかった。
+  //
+  // 運営者向けの情報は本文に添えるだけにして、状態は 401 に統一する。
   const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
-  if (!accessOn) return json({ error: 'access_disabled', message: 'Access が未設定です。' }, 503);
-  return json({ error: 'unauthorized', message: 'ログインが必要です。' }, 401);
+  return json({
+    error: 'unauthorized',
+    message: 'ログインが必要です。',
+    accessConfigured: accessOn,
+  }, 401);
 }
 
 /** オーナーだけ。 */
