@@ -204,6 +204,79 @@ dl.kv dd{margin:0;word-break:break-word}
     </div>
     <div id="utable" style="margin-top:12px"></div>
   </div>
+
+  <h1 style="margin-top:42px">ポイントと分配</h1>
+  <p class="lead">読まれた量をポイントにし、収益を金額に換えて作者へ配ります。<br>
+    <strong>締めると、その期間は二度と変わりません。</strong>支払いの根拠になるので、締める前に数字を確かめてください。</p>
+
+  <div class="card">
+    <div class="row" style="gap:10px;align-items:flex-end">
+      <div style="flex:0 0 150px">
+        <label for="ptPeriod" style="display:block;margin-bottom:4px">対象の月</label>
+        <input id="ptPeriod" placeholder="2026-10" style="margin:0">
+      </div>
+      <button class="btn sm ghost" id="ptLoad">読まれ方を見る</button>
+    </div>
+    <p class="hint" style="margin-top:8px">日本時間の暦月です。ふつうは前の月を締めます。</p>
+    <div id="ptList" style="margin-top:14px"></div>
+    <div class="msg" id="ptMsg"></div>
+  </div>
+
+  <div class="card">
+    <strong>金額を決める</strong>
+    <p class="hint" style="margin-top:6px">
+      1ポイントの額 ＝ (その月の収益 − 運営者の取り分) ÷ その月の総ポイント<br>
+      まだ締めていなければ、何度でも計算し直せます。
+    </p>
+    <div class="row" style="gap:10px;align-items:flex-end;margin-top:10px">
+      <div style="flex:0 0 160px">
+        <label for="ptRevenue" style="display:block;margin-bottom:4px">その月の収益（円）</label>
+        <input id="ptRevenue" type="number" min="0" step="1" placeholder="0" style="margin:0">
+      </div>
+      <div style="flex:0 0 150px">
+        <label for="ptRate" style="display:block;margin-bottom:4px">運営者の取り分</label>
+        <select id="ptRate" style="margin:0">
+          <option value="0.5" selected>50％</option>
+          <option value="0.4">40％</option>
+          <option value="0.3">30％</option>
+          <option value="0.2">20％</option>
+          <option value="0">0％（全額を作者へ）</option>
+        </select>
+      </div>
+      <button class="btn sm ghost" id="ptCalc">計算する</button>
+    </div>
+    <div id="ptCalcOut" style="margin-top:12px"></div>
+    <div class="msg" id="ptCalcMsg"></div>
+  </div>
+
+  <div class="card">
+    <strong>締める</strong>
+    <p class="hint" style="margin-top:6px">
+      締めると、その月のポイントと金額が確定し、以後どれだけ再計算しても変わりません。<br>
+      <strong>取り消せません。</strong>月が終わってから、数字を確かめたうえで実行してください。
+    </p>
+    <div class="row" style="gap:10px;align-items:flex-end;margin-top:10px">
+      <div style="flex:0 0 200px">
+        <label for="ptConfirmWord" style="display:block;margin-bottom:4px">確認のため対象の月を入力</label>
+        <input id="ptConfirmWord" placeholder="2026-10" style="margin:0">
+      </div>
+      <button class="btn sm" id="ptClose" style="background:#b23a3a">この月を締める</button>
+    </div>
+    <div class="msg" id="ptCloseMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <strong>未払いの残高</strong>
+      <button class="btn sm ghost" id="ptBal">読み込む</button>
+    </div>
+    <p class="hint" style="margin-top:6px">
+      締めた月の金額の合計から、すでに支払ったぶんを引いた額です。
+      支払えるのは1,000円単位で、端数は次の月へ繰り越します。
+    </p>
+    <div id="ptBalList" style="margin-top:12px"></div>
+    <div class="msg" id="ptBalMsg"></div>
+  </div>
 </div>
 
 <script>
@@ -871,6 +944,166 @@ document.addEventListener('click',function(ev){
     objLoad();
   })();
 });
+
+/* ===== ポイントと分配 =====
+ * 締めは取り消せないので、画面の側で止められるようにする。
+ *   ・対象の月を手で打たせる（押し間違いで別の月を締めない）
+ *   ・締める前に、必ず金額の計算結果を見せる
+ *   ・支払いは残高を超えて記録できない（サーバ側でも拒むが、画面でも出さない）
+ */
+function _ptYen(n){ return (Number(n)||0).toLocaleString('ja-JP',{maximumFractionDigits:2}); }
+function _ptLastMonth(){
+  var d=new Date(Date.now()+9*3600*1000);   // 日本時間
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-1);
+  return d.toISOString().slice(0,7);
+}
+function _ptPeriod(){ return ($('ptPeriod').value||'').trim(); }
+
+async function ptLoad(){
+  var p=_ptPeriod();
+  if(!/^\d{4}-\d{2}$/.test(p)){ $('ptMsg').className='msg err'; $('ptMsg').textContent='月は 2026-10 の形で入れてください。'; return; }
+  $('ptMsg').className='msg ok'; $('ptMsg').textContent='読み込んでいます…';
+  var r=await adminFetch('/api/admin/points?period='+encodeURIComponent(p));
+  if(r.authRequired){ needLogin(); $('ptMsg').className='msg'; return; }
+  if(!r.ok){ $('ptMsg').className='msg err'; $('ptMsg').textContent=r.error; return; }
+  var d=r.data||{}, rows=d.rows||[];
+  $('ptMsg').className='msg';
+  if(!rows.length){
+    $('ptList').innerHTML='<p class="hint">この月にはまだ記録がありません。'
+      +'「計算する」を押すと、読書ログから集計します。</p>';
+    return;
+  }
+  var h='<dl class="kv">'
+    +'<dt>合計ポイント</dt><dd>'+_ptYen(d['合計ポイント'])+'</dd>'
+    +'<dt>作品数</dt><dd>'+rows.length+'</dd>'
+    +'<dt>締め</dt><dd>'+(d['締め済み']?'<strong style="color:#b23a3a">済み（変更できません）</strong>':'まだ')+'</dd>';
+  if(d['収益']!=null) h+='<dt>収益</dt><dd>'+_ptYen(d['収益'])+' 円</dd>';
+  if(d['運営者の取り分']!=null) h+='<dt>運営者の取り分</dt><dd>'+Math.round(d['運営者の取り分']*100)+'％</dd>';
+  if(d['1ポイントあたり']!=null) h+='<dt>1ポイントあたり</dt><dd>'+_ptYen(d['1ポイントあたり'])+' 円</dd>';
+  if(d['分配額の合計']!=null) h+='<dt>分配額の合計</dt><dd>'+_ptYen(d['分配額の合計'])+' 円</dd>';
+  h+='</dl>';
+  h+='<table style="width:100%;border-collapse:collapse;margin-top:14px;font-size:.9rem">'
+    +'<thead><tr style="text-align:left;border-bottom:2px solid var(--line);color:var(--muted);font-size:.78rem">'
+    +'<th style="padding:6px 4px">作品</th><th style="padding:6px 4px">作者</th>'
+    +'<th style="padding:6px 4px;text-align:right">ポイント</th>'
+    +'<th style="padding:6px 4px;text-align:right">読まれた回数</th>'
+    +'<th style="padding:6px 4px;text-align:right">金額</th></tr></thead><tbody>';
+  rows.forEach(function(x){
+    h+='<tr style="border-bottom:1px solid var(--line)">'
+      +'<td style="padding:7px 4px">'+esc(x.title||x.work_id)+'</td>'
+      +'<td style="padding:7px 4px;font-size:.84rem;color:var(--muted)">'+esc(x.author_email||'')+'</td>'
+      +'<td style="padding:7px 4px;text-align:right">'+_ptYen(x.points)+'</td>'
+      +'<td style="padding:7px 4px;text-align:right">'+(x.reads_count||0)+'</td>'
+      +'<td style="padding:7px 4px;text-align:right">'+(x.amount_yen?_ptYen(x.amount_yen)+' 円':'—')+'</td></tr>';
+  });
+  $('ptList').innerHTML=h+'</tbody></table>';
+}
+
+async function ptCalc(){
+  var p=_ptPeriod();
+  if(!/^\d{4}-\d{2}$/.test(p)){ $('ptCalcMsg').className='msg err'; $('ptCalcMsg').textContent='先に対象の月を入れてください。'; return; }
+  var rev=Number($('ptRevenue').value);
+  if(!isFinite(rev)||rev<0){ $('ptCalcMsg').className='msg err'; $('ptCalcMsg').textContent='収益は0以上の数で入れてください。'; return; }
+  $('ptCalcMsg').className='msg ok'; $('ptCalcMsg').textContent='計算しています…';
+  var r=await adminFetch('/api/admin/points',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({period:p, revenue:rev, ownerRate:Number($('ptRate').value)})});
+  if(r.authRequired){ needLogin(); $('ptCalcMsg').className='msg'; return; }
+  if(!r.ok){
+    var d0=r.data||{};
+    $('ptCalcMsg').className='msg err';
+    $('ptCalcMsg').textContent=(d0.message||r.error)+(d0['確かめること']?'（'+d0['確かめること'].join(' / ')+'）':'');
+    return;
+  }
+  var d=r.data||{};
+  $('ptCalcMsg').className='msg';
+  $('ptCalcOut').innerHTML='<dl class="kv">'
+    +'<dt>収益</dt><dd>'+_ptYen(d['収益'])+' 円</dd>'
+    +'<dt>運営者の取り分</dt><dd>'+Math.round(d['運営者の取り分']*100)+'％</dd>'
+    +'<dt>作者へ分配</dt><dd><strong>'+_ptYen(d['分配できる額'])+' 円</strong></dd>'
+    +'<dt>合計ポイント</dt><dd>'+_ptYen(d['合計ポイント'])+'</dd>'
+    +'<dt>1ポイントあたり</dt><dd><strong>'+_ptYen(d['1ポイントあたり'])+' 円</strong></dd>'
+    +'</dl><p class="hint" style="margin-top:10px">'+esc(d['注意']||'')+'</p>';
+  ptLoad();
+}
+
+async function ptClose(){
+  var p=_ptPeriod();
+  if(!/^\d{4}-\d{2}$/.test(p)){ $('ptCloseMsg').className='msg err'; $('ptCloseMsg').textContent='先に対象の月を入れてください。'; return; }
+  if(($('ptConfirmWord').value||'').trim()!==p){
+    $('ptCloseMsg').className='msg err';
+    $('ptCloseMsg').textContent='確認のため、対象の月（'+p+'）をそのまま入力してください。';
+    return;
+  }
+  if(!confirm(p+' を締めます。\n\nこの月のポイントと金額が確定し、以後どれだけ再計算しても変わりません。\nこの操作は取り消せません。\n\n続けますか？')) return;
+  $('ptCloseMsg').className='msg ok'; $('ptCloseMsg').textContent='締めています…';
+  var body={period:p, confirm:true};
+  var rev=Number($('ptRevenue').value);
+  if(isFinite(rev)&&rev>=0&&$('ptRevenue').value!==''){ body.revenue=rev; body.ownerRate=Number($('ptRate').value); }
+  var r=await adminFetch('/api/admin/points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.authRequired){ needLogin(); $('ptCloseMsg').className='msg'; return; }
+  if(!r.ok){ $('ptCloseMsg').className='msg err'; $('ptCloseMsg').textContent=(r.data&&r.data.message)||r.error; return; }
+  var d=r.data||{};
+  $('ptCloseMsg').className='msg ok';
+  $('ptCloseMsg').textContent=p+' を締めました。合計 '+_ptYen(d['合計ポイント'])+' ポイント / 分配額 '+_ptYen(d['分配額の合計'])+' 円。';
+  $('ptConfirmWord').value='';
+  ptLoad(); ptBal();
+}
+
+async function ptBal(){
+  $('ptBalMsg').className='msg ok'; $('ptBalMsg').textContent='読み込んでいます…';
+  var r=await adminFetch('/api/admin/points?balances=1');
+  if(r.authRequired){ needLogin(); $('ptBalMsg').className='msg'; return; }
+  if(!r.ok){ $('ptBalMsg').className='msg err'; $('ptBalMsg').textContent=r.error; return; }
+  var rows=(r.data||{}).rows||[];
+  $('ptBalMsg').className='msg';
+  if(!rows.length){ $('ptBalList').innerHTML='<p class="hint">まだ締めた月がないので、残高はありません。</p>'; return; }
+  var h='<table style="width:100%;border-collapse:collapse;font-size:.9rem">'
+    +'<thead><tr style="text-align:left;border-bottom:2px solid var(--line);color:var(--muted);font-size:.78rem">'
+    +'<th style="padding:6px 4px">作者</th>'
+    +'<th style="padding:6px 4px;text-align:right">これまでの分配</th>'
+    +'<th style="padding:6px 4px;text-align:right">支払い済み</th>'
+    +'<th style="padding:6px 4px;text-align:right">未払い</th>'
+    +'<th style="padding:6px 4px;text-align:right">いま払える額</th>'
+    +'<th style="padding:6px 4px"></th></tr></thead><tbody>';
+  rows.forEach(function(x,i){
+    var pay=x['支払える額']||0;
+    h+='<tr style="border-bottom:1px solid var(--line)">'
+      +'<td style="padding:7px 4px">'+esc(x.author_email)+'</td>'
+      +'<td style="padding:7px 4px;text-align:right">'+_ptYen(x.earned_yen)+' 円</td>'
+      +'<td style="padding:7px 4px;text-align:right">'+_ptYen(x.paid_yen)+' 円</td>'
+      +'<td style="padding:7px 4px;text-align:right"><strong>'+_ptYen(x.balance_yen)+' 円</strong></td>'
+      +'<td style="padding:7px 4px;text-align:right">'+(pay>=1000?'<strong style="color:#3a7d44">'+_ptYen(pay)+' 円</strong>':'—')+'</td>'
+      +'<td style="padding:7px 4px;text-align:right">'
+      +(pay>=1000?'<button class="btn sm ghost" data-pay="'+esc(x.author_email)+'" data-amt="'+pay+'">支払いを記録</button>':'')
+      +'</td></tr>';
+  });
+  $('ptBalList').innerHTML=h+'</tbody></table>'
+    +'<p class="hint" style="margin-top:10px">ギフト券を送ってから「支払いを記録」を押してください。'
+    +'記録しただけでは券は送られません。</p>';
+  Array.prototype.forEach.call($('ptBalList').querySelectorAll('[data-pay]'),function(b){
+    b.onclick=function(){ ptPayout(b.getAttribute('data-pay'), Number(b.getAttribute('data-amt'))); };
+  });
+}
+
+async function ptPayout(email, amt){
+  if(!confirm(email+' へ '+_ptYen(amt)+' 円を支払ったものとして記録します。\n\nギフト券は送信済みですか？')) return;
+  $('ptBalMsg').className='msg ok'; $('ptBalMsg').textContent='記録しています…';
+  var r=await adminFetch('/api/admin/points',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({payout:{email:email, amountYen:amt, method:'giftcard'}})});
+  if(r.authRequired){ needLogin(); $('ptBalMsg').className='msg'; return; }
+  if(!r.ok){ $('ptBalMsg').className='msg err'; $('ptBalMsg').textContent=(r.data&&r.data.message)||r.error; return; }
+  var d=r.data||{};
+  $('ptBalMsg').className='msg ok';
+  $('ptBalMsg').textContent=_ptYen(d['支払った額'])+' 円を記録しました。残りの未払いは '+_ptYen(d['残りの未払い'])+' 円です。';
+  ptBal();
+}
+
+$('ptLoad').onclick=ptLoad;
+$('ptCalc').onclick=ptCalc;
+$('ptClose').onclick=ptClose;
+$('ptBal').onclick=ptBal;
+$('ptPeriod').value=_ptLastMonth();
+
 </script>
 </body>
 </html>
