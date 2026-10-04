@@ -28,6 +28,12 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:type" content="image/png">
+  <!-- AdSense 審査用タグの置き場所
+       申し込みの直前に、下の1行のコメントを外して発行者IDを入れる。
+       これはスクリプトを読み込むだけで、広告そのものは出さない。
+       広告枠を描画するかどうかは js/ads.js の ADS_START が決める。
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+  -->
   <meta property="og:locale" content="ja_JP">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
@@ -451,6 +457,28 @@ body.dark .campaign-ribbon {
 <script src="js/portal.js"></script>
 <!-- 広告枠 (PublisherID 設定後に有効化) -->
 <script>
+  /* 広告の設定
+   * ==================================================================
+   * 手順は3段階。順番を守ること。
+   *
+   * 【1】AdSense に申し込むとき (2026年12月上旬の予定)
+   *   審査では「サイトに AdSense のコードがあること」が確かめられる。
+   *   js/ads.js はコードを動的に入れるので、審査する側からは見えない
+   *   おそれがある。申し込みの前に、この下の <head> 用タグを
+   *   index.html の <head> に静的に貼ること (場所は og:image の下に
+   *   コメントで用意してある)。
+   *   審査中は広告が配信されないので、収益は発生しない。
+   *
+   * 【2】承認されたら、すぐに AdSense の管理画面で「自動広告」をオフに
+   *   する。自動広告が入っていると、js/ads.js の開始日ゲートとは無関係
+   *   に Google が広告を差し込み、開業日より前に収益が発生してしまう。
+   *
+   * 【3】2027-01-04 以降に、下の2行のコメントを外して ID を入れる。
+   *   js/ads.js が 2027-01-04 00:00 (日本時間) まで広告枠を描画しない
+   *   ので、先に入れておいても出ない。確かめるには、ブラウザの
+   *   コンソールで AninovelAds.adsStarted() を叩く。
+   *   日付を変えたいときは js/ads.js の ADS_START を直す。
+   */
   // window.ANINOVEL_ADSENSE_PUBLISHER='ca-pub-XXXXXXXXXXXXXXXX';
   // window.ANINOVEL_AD_SLOTS={inline:'XXXXXXXXXX',sidebar:'XXXXXXXXXX',footer:'XXXXXXXXXX'};
 </script>
