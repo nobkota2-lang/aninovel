@@ -17,10 +17,14 @@
     <meta property="og:site_name" content="アニノベル">
     <meta property="og:title" content="アニノベル - 作品ビューワ">
     <meta property="og:description" content="アニメ風吹き出しと音声読み上げで小説を楽しめます。">
-    <meta property="og:image" content="https://aninovel.com/og-image.svg">
+    <meta property="og:image" content="https://aninovel.com/og-image.png">
     <meta property="og:locale" content="ja_JP">
+    <meta property="og:url" content="https://aninovel.com/viewer.html">
+    <meta property="og:image:type" content="image/png">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://aninovel.com/og-image.svg">
+    <meta name="twitter:title" content="アニノベル - 作品ビューワ">
+    <meta name="twitter:description" content="アニメ風吹き出しと音声読み上げで小説を楽しめます。">
+    <meta name="twitter:image" content="https://aninovel.com/og-image.png">
     <!-- 書き込みトークン。fetch を包むので、他のどのスクリプトよりも先に読む -->
     <script src="js/auth-token.js"></script>
     <script>
@@ -6812,6 +6816,21 @@ function _ntitle(){
   return state.novel.title||'無題';
 }
 
+/* タブの題名を、いま開いている作品に合わせる。
+ * 直す前は全作品が「アニノベル - 作品ビューワ」だった。タブを何枚か
+ * 開くと見分けがつかず、履歴にもブックマークにも作品名が残らない。
+ * _ntitle() は表示言語を見てくれるので、英語表示なら英題になる。 */
+var _docTitleLast='';
+function _syncDocTitle(){
+  var t='';
+  try{
+    if(state.currentScreen!=='home'&&state.novel&&state.novel.title)t=_ntitle();
+  }catch(e){}
+  var site=(state.lang==='en')?'AniNovel':'アニノベル';
+  var want=t?(t+' | '+site):(state.lang==='en'?'AniNovel - Viewer':'アニノベル - 作品ビューワ');
+  if(want!==_docTitleLast){document.title=want;_docTitleLast=want;}
+}
+
 // 英語表示時は和文フォントだとラテン文字が間延びするので、英語向けフォント/行間に切替
 function _font(jp){ if(state.lang!=='en') return jp; return state.displaySettings.fontEn||"Georgia,'Times New Roman',serif"; }
 var _JP_FONTS=[["'Shippori Mincho', serif","明朝体（志保里）"],["'Noto Serif JP', serif","明朝体（Noto）"],["'Zen Old Mincho', serif","オールド明朝"],["'BIZ UDPMincho', serif","UD明朝（高可読）"],["'Klee One', cursive","教科書体（クレー）"],["'Noto Sans JP', sans-serif","ゴシック（Noto）"],["'Zen Kaku Gothic New', sans-serif","禅角ゴシック"],["'BIZ UDPGothic', sans-serif","UDゴシック（高可読）"],["'Zen Maru Gothic', sans-serif","丸ゴシック"],["'M PLUS 1p', sans-serif","M PLUS 1p"]];
@@ -7006,6 +7025,7 @@ function render(){
   document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
   document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();applyI18n();_maybeReveal();
+  try{_syncDocTitle();}catch(e){}
   if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}else{var _paEl=document.getElementById('pageArea');if(_paEl){_paEl.scrollTop=_paScroll;if(_paScrollX)_paEl.scrollLeft=_paScrollX;}}
   try{_flowHookRead();}catch(e){}
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動

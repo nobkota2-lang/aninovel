@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  これは控えです。ふだんは functions/_middleware.js が /sitemap.xml を
+  受け取り、KV の __catalog__ から作品を足した完全版を返す。このファイルが
+  表に出るのは、ミドルウェアが落ちたときだけ。
+
+  だから作品は書かない。手で書くとまた必ず古くなる。
+  実際、2026-10-04 までここには存在しない3作品 (summer-adventure /
+  mystery-garden / starlight-cafe) が載ったままだった。
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://aninovel.com/</loc>
@@ -6,24 +15,24 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://aninovel.com/manual.html</loc>
+    <loc>https://aninovel.com/authors.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://aninovel.com/author-apply.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aninovel.com/viewer.html?work=summer-adventure</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://aninovel.com/manual.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://aninovel.com/viewer.html?work=mystery-garden</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://aninovel.com/viewer.html?work=starlight-cafe</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://aninovel.com/legal/revenue.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
   </url>
   <url>
     <loc>https://aninovel.com/legal/terms.html</loc>
@@ -42,6 +51,11 @@
   </url>
   <url>
     <loc>https://aninovel.com/legal/dmca.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
+  </url>
+  <url>
+    <loc>https://aninovel.com/legal/accessibility.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>
