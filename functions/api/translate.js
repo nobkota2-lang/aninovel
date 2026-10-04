@@ -3,6 +3,25 @@
 // 翻訳エンジン: Cloudflare Workers AI  @cf/meta/m2m100-1.2b
 // 劣化検出強化 + llama-3.1-8b-instruct フォールバック + 名前ローマ字化（緩い検証）
 // デバッグ: ?debug=1 で AI レスポンスを返す
+//
+// 2026-10-04 に直したこと
+//
+// 1) 訳せなかった行の日本語が、そのままキャッシュに焼き付いていた
+//    1文ずつ訳し、失敗したら原文(日本語)を入れる作りになっている。
+//    表示を止めないための措置としては正しいが、その結果を 90 日の
+//    キャッシュに書いていたため、一度失敗すると以後ずっと日本語が
+//    返り続けた。雪女と 10階 が壊れたのはこれが原因。
+//    → 訳文に原文の文字が残っているうちは**キャッシュに書かない**。
+//      返しはするので表示は止まらない。次に呼ばれたときやり直せる。
+//
+// 2) 大きい作品で 503 が HTML で返っていた
+//    1リクエストの中で全ブロックを AI に通すので、長編では時間切れになり、
+//    Cloudflare 自身のエラーページ(HTML)が返る。JSON を期待している
+//    呼び出し側はパースに失敗し、何が起きたのか分からなかった。
+//    → 時間の budget を持ち、超えたら**そこまでの結果を JSON で返す**。
+//      partial: true を立て、キャッシュには書かない。
+//
+// 制限に達したときも必ず JSON を返す、というのがこの版の約束。
 
 import { requireWriter } from '../_owner.js';
 
@@ -28,12 +47,25 @@ let _activeFallback = null; // セッション内で生きてるモデルを記�
 const CONCURRENCY = 4;
 const MAX_CHARS_PER_CHUNK = 120;
 
+// 1リクエストで使ってよい時間。これを超えたら、そこまでの結果を返す。
+// Cloudflare に殺されて HTML を返すより、途中までの JSON のほうがよい。
+const TIME_BUDGET_MS = 20000;
+
+/** その言語の文字が残っているか（訳せていない目印） */
+function hasSourceScript(text, srcLangCode) {
+  if (!text) return false;
+  if (srcLangCode === 'ja' || srcLangCode === 'zh') return /[\u3040-\u30ff\u3400-\u9fff]/.test(text);
+  if (srcLangCode === 'ko') return /[\uac00-\ud7af]/.test(text);
+  return false;
+}
+
 export async function onRequestOptions() { return new Response(null, { headers: CORS }); }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   const debug = new URL(request.url).searchParams.get('debug') === '1';
   const dbg = []; // デバッグログ
+  const _startedAt = Date.now();
   try {
     const body = await request.json().catch(() => ({}));
     // ===== 大きい作品向け: 分割して保存・取得する =====
@@ -286,18 +318,48 @@ export async function onRequestPost(context) {
     for (const c of characters) charactersOut.push({ id:c.id, name: _wantRomaji ? await romanizeName(c.name) : c.name });
 
     const results = new Array(items.length);
+    let done = 0;
+    let partial = false;
     for (let i = 0; i < items.length; i += CONCURRENCY) {
+      // 時間切れで殺される前に切り上げる。残りは原文のまま返し、
+      // partial を立てて、キャッシュには書かない。
+      if (Date.now() - _startedAt > TIME_BUDGET_MS) { partial = true; break; }
       const chunk = items.slice(i, i + CONCURRENCY);
       const tr = await Promise.all(chunk.map(it => translateText(it.text)));
       tr.forEach((t, j) => { results[i + j] = { id: chunk[j].id, text: t }; });
+      done += chunk.length;
+    }
+    // 間に合わなかったぶんは原文のまま埋める（空の穴を作らない）
+    for (let i = 0; i < items.length; i++) {
+      if (!results[i]) results[i] = { id: items[i].id, text: items[i].text };
     }
 
     const authorOut = (_wantRomaji && author) ? await romanizeName(author) : author;
     const out = { title: titleTr || title, author: authorOut, items: results, characters: charactersOut };
+
+    // 訳せていないブロックを数える。原文の文字が残っていれば訳せていない。
+    let untranslated = 0;
+    if (target !== source) {
+      for (const r of results) if (hasSourceScript(r.text, source)) untranslated++;
+    }
+    const clean = !partial && untranslated === 0;
+    out.partial = partial || undefined;
+    out.untranslated = untranslated || undefined;
+    out.translatedCount = done;
     if (debug) out._debug = dbg;
     const payload = JSON.stringify(out);
-    if (KV && !debug) await KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
-    return new Response(payload, { headers: { ...JSON_HEADERS, 'X-Cache':'MISS', 'X-KV': KV ? (KV === env.WORKS ? 'WORKS' : 'WORKS_KV') : 'NONE', 'X-AI-Model': _activeFallback || 'none' } });
+
+    // ★訳し切れていないものはキャッシュに書かない。
+    //   書いてしまうと、その日本語混じりが以後ずっと「正解」として返る。
+    if (KV && !debug && clean) {
+      await KV.put(cacheKey, payload, { expirationTtl: 60 * 60 * 24 * 90 }).catch(() => {});
+    }
+    return new Response(payload, { headers: { ...JSON_HEADERS,
+      'X-Cache': clean ? 'MISS' : 'MISS-NOSTORE',
+      'X-Partial': partial ? '1' : '0',
+      'X-Untranslated': String(untranslated),
+      'X-KV': KV ? (KV === env.WORKS ? 'WORKS' : 'WORKS_KV') : 'NONE',
+      'X-AI-Model': _activeFallback || 'none' } });
   } catch (e) {
     return json({ error:'exception', message: String((e && e.message) || e), _debug: debug?dbg:undefined }, 500);
   }

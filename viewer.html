@@ -25,7 +25,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v191_share_i18n';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v192_translate_guard';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -6703,10 +6703,17 @@ function _preloadWorkTrans(){
     if(cached){var c=JSON.parse(cached);state.workTrans=c.items||{};state.workTransMeta={title:c.title,author:c.author};state.workTransHash=hash;state.charTrans=c.chars||{};state.charTransHash=hash;}
   }catch(e){}
 }
+// 翻訳に失敗した作品を覚えておく。
+// これが無いと、失敗しても state.workTransHash が立たないため、
+// 描画のたびに maybeTranslateWork が走って /api/translate を叩き続ける。
+// 英語モードのまま放っておくと延々と呼び続けることになる。
+var _trFail={}, _TR_MAX_TRY=2;
+
 function maybeTranslateWork(){
   if(!_isTranslatedView()) return;
   var hash=state._curHash||_contentHash();
   if(state.workTransHash===hash && state.workTrans) return; // 翻訳済み
+  if((_trFail[hash]||0)>=_TR_MAX_TRY) return;               // 何度やっても駄目だった
   try{
     var cached=localStorage.getItem(_trKey(hash));
     if(cached){ var c=JSON.parse(cached); var _im=c.items||{}; var _tot=Object.keys(_im).length; var _jp=0; if(state.lang!=='en'){_tot=0;} Object.keys(_im).forEach(function(k){if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(_im[k]))_jp++;}); if(_tot>0 && _jp>_tot*0.1){ localStorage.removeItem(_trKey(hash)); }else{ state.workTrans=_im; state.workTransMeta={title:c.title,author:c.author}; state.workTransHash=hash; state.charTrans=c.chars||{}; state.charTransHash=hash; render(); return; } }
@@ -6765,6 +6772,7 @@ function _trChunkLoad(hash){
 }
 function translateWork(hash){
   if(state.translating) return;
+  if((_trFail[hash]||0)>=_TR_MAX_TRY) return;
   var items=state.content.filter(function(it){return it.text && (it.type==='narration'||it.type==='dialogue'||it.type==='chapter_break'||it.type==='section_break');}).map(function(it){return {id:it.id,text:it.text};});
   if(items.length===0) return;
   state.translating=true;
@@ -6776,19 +6784,41 @@ function translateWork(hash){
     state.translating=false;
     if(d&&d.items&&d.items.length){
       var map={}; d.items.forEach(function(x){map[x.id]=x.text;});
-      state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; state.workTransHash=hash; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
-      var _payload={items:map,title:d.title,author:d.author,chars:cmap};
-      // 小さい作品は従来通り localStorage、入らなければ IndexedDB へ。
-      var _saved=false;
-      try{ localStorage.setItem(_trKey(hash), JSON.stringify(_payload)); _saved=true; }catch(e){}
-      if(!_saved){
-        _trCachePut(_trKey(hash),_payload).then(function(ok){
-          console.info('[translate] 大きいため IndexedDB に保存:', ok?'成功':'失敗');
-        });
+      // サーバが訳し切れなかったぶんは原文のまま返ってくる。
+      // それを端末に保存すると、サーバ側で直したあとも古い日本語混じりを
+      // 読み続けることになる。訳し切れているときだけ保存する。
+      var _jp=0; d.items.forEach(function(x){ if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(x.text))_jp++; });
+      var _incomplete = !!d.partial || _jp>0;
+      state.workTrans=map; state.workTransMeta={title:d.title,author:d.author}; var cmap={}; if(d.characters)d.characters.forEach(function(x){cmap[x.id]=x.name;}); state.charTrans=cmap; state.charTransHash=hash;
+      if(_incomplete){
+        // 表示はする（原文でも読めないよりよい）が、翻訳済みとは認めない。
+        _trFail[hash]=(_trFail[hash]||0)+1;
+        console.warn('[translate] 訳し切れていません。未訳', _jp, '件 / partial=', !!d.partial);
+        if((_trFail[hash]||0)>=_TR_MAX_TRY) showToast('Some lines could not be translated');
+      }else{
+        state.workTransHash=hash;
+        delete _trFail[hash];
+        var _payload={items:map,title:d.title,author:d.author,chars:cmap};
+        // 小さい作品は従来通り localStorage、入らなければ IndexedDB へ。
+        var _saved=false;
+        try{ localStorage.setItem(_trKey(hash), JSON.stringify(_payload)); _saved=true; }catch(e){}
+        if(!_saved){
+          _trCachePut(_trKey(hash),_payload).then(function(ok){
+            console.info('[translate] 大きいため IndexedDB に保存:', ok?'成功':'失敗');
+          });
+        }
       }
       _renderSoft();
-    } else { showToast('Translation failed'); }
-  }).catch(function(e){ state.translating=false; console.warn('[translate]',e); showToast('Translation unavailable'); });
+    } else {
+      _trFail[hash]=(_trFail[hash]||0)+1;
+      showToast('Translation failed');
+    }
+  }).catch(function(e){
+    state.translating=false;
+    _trFail[hash]=(_trFail[hash]||0)+1;
+    console.warn('[translate]',e);
+    showToast('Translation unavailable');
+  });
 }
 
 function applyI18n(){
