@@ -22,11 +22,27 @@ const ALLOWED_ORIGINS = [
   'http://localhost:8788', // wrangler dev
 ];
 
+/* 回数の数え方について  (2026-10-06 変更)
+ * ----------------------------------------------------------------------
+ * 以前はすべての /api/* で KV に1回書き込んでいた。これが致命的だった。
+ * KV の書き込みは無料枠で1日1,000回しかない。音声は1ブロック1ファイルなので、
+ * 『吾輩は猫である』を読み上げで通して聞くだけで、読者ひとりで枠を使い切る。
+ * 2026-10-04 に実際に超過して、KV の書き込みが丸一日止まった。
+ *
+ * そこで、数える場所を2つに分けた。
+ *   store:'kv' … 呼ばれる回数が少なく、乱用されると実害が大きい窓口だけ。
+ *                1日に数十回も書かないので、枠を圧迫しない。
+ *   既定       … 辺縁の控え(Cache API)で数える。書き込みは無料で無制限。
+ *
+ * 控えで数える弱点は、拠点ごとに別勘定になることと、同時アクセスで取りこぼす
+ * ことの2つ。ただし KV も結果整合で読み取りが60秒ほど辺縁に残るため、
+ * もともと厳密ではなかった。精度は実質変わらず、枠だけが空く。
+ */
 const RATE_LIMIT = {
-  '/api/newsletter': { max: 5, windowSec: 600 },   // 10分5回まで
-  '/api/reports': { max: 10, windowSec: 600 },     // 10分10回まで
+  '/api/newsletter': { max: 5, windowSec: 600, store: 'kv' },   // 10分5回まで
+  '/api/reports': { max: 10, windowSec: 600, store: 'kv' },     // 10分10回まで
+  '/api/billing': { max: 20, windowSec: 600, store: 'kv' },     // 課金フロー
   '/api/errors': { max: 50, windowSec: 600 },      // 10分50回まで
-  '/api/billing': { max: 20, windowSec: 600 },     // 課金フロー
   // 音声は1ブロック1ファイル。読者は5秒に1件ほどしか要らない (約12回/分)。
   // 40回/分なら読者に3倍の余裕がありつつ、全作品(約7,600件)の一括取得には
   // 1IPあたり3時間以上かかる。ただし複数IPを使う相手には効かない。
@@ -34,6 +50,52 @@ const RATE_LIMIT = {
   '/api/audio': { max: 40, windowSec: 60 },
   default: { max: 60, windowSec: 60 },             // 1分60回
 };
+
+/**
+ * KV で数える。書き込み枠を食うので、低頻度の窓口だけ。
+ * 上限に達した後は書かない。書き続けると、叩いてくる相手に KV の書き込み枠を
+ * 好きなだけ削らせることになる。止めるための仕組みが、止めたい相手の武器に
+ * なってしまう。
+ */
+async function countInKV(env, key, windowSec, max) {
+  if (!env.RATE_LIMIT_KV) return null;             // 未設定なら数えない
+  const cur = parseInt(await env.RATE_LIMIT_KV.get(key) || '0', 10);
+  if (cur < max) {
+    await env.RATE_LIMIT_KV.put(key, String(cur + 1),
+                                { expirationTtl: windowSec + 60 });
+  }
+  return cur;
+}
+
+/**
+ * 辺縁の控えで数える。書き込みは無料。
+ * 鍵は実在しない /_rl/... にする。中身はただの数字なので、万一そのURLが
+ * 読まれても漏れて困るものは無い。
+ */
+async function countInCache(context, key, windowSec, max) {
+  const cache = caches.default;
+  const req = new Request(
+    new URL('/_rl/' + encodeURIComponent(key), context.request.url).toString(),
+    { method: 'GET' });
+
+  let cur = 0;
+  const hit = await cache.match(req);
+  if (hit) cur = parseInt(await hit.text(), 10) || 0;
+
+  // 上限に達したら、もう数えない (KV の側と揃える)
+  if (cur >= max) return cur;
+
+  const putting = cache.put(req, new Response(String(cur + 1), {
+    headers: {
+      'Content-Type': 'text/plain',
+      'Cache-Control': 'max-age=' + (windowSec + 60),
+    },
+  }));
+  if (typeof context.waitUntil === 'function') context.waitUntil(putting);
+  else putting.catch(() => {});
+
+  return cur;
+}
 
 export async function onRequest(context) {
   const { request, env, next } = context;
@@ -79,25 +141,26 @@ export async function onRequest(context) {
     return json({ error: 'forbidden_origin', message: '許可されていないオリジンからのリクエストです' }, 403);
   }
 
-  // ===== レート制限 (KVが設定されている場合のみ) =====
-  if (env.RATE_LIMIT_KV) {
+  // ===== レート制限 =====
+  {
     const limit = pickLimit(url.pathname);
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const key = `rl:${url.pathname}:${ip}:${Math.floor(Date.now() / 1000 / limit.windowSec)}`;
+    const bucket = Math.floor(Date.now() / 1000 / limit.windowSec);
+    const key = `rl:${url.pathname}:${ip}:${bucket}`;
     try {
-      const cur = parseInt(await env.RATE_LIMIT_KV.get(key) || '0', 10);
-      if (cur >= limit.max) {
+      const cur = (limit.store === 'kv')
+        ? await countInKV(env, key, limit.windowSec, limit.max)
+        : await countInCache(context, key, limit.windowSec, limit.max);
+      if (cur !== null && cur >= limit.max) {
         return json({
           error: 'rate_limited',
           message: 'リクエストが多すぎます。しばらくしてから再度お試しください。',
           retryAfter: limit.windowSec
         }, 429, { 'Retry-After': String(limit.windowSec) });
       }
-      // 加算 (TTL=window)
-      await env.RATE_LIMIT_KV.put(key, String(cur + 1), { expirationTtl: limit.windowSec + 60 });
     } catch (e) {
       console.warn('[middleware] rate limit error:', e);
-      // KVエラーでもリクエストは通す (フェイルオープン)
+      // 数えられなくてもリクエストは通す (フェイルオープン)
     }
   }
 
