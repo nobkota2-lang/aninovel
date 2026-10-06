@@ -25,8 +25,8 @@
 !function () {
   "use strict";
 
-  // 2027-01-04 00:00 (日本時間)。UTC では前日の15:00。
-  var ADS_START = Date.UTC(2027, 0, 3, 15, 0, 0);
+  // 2027-01-01 00:00 (日本時間)。UTC では前日の15:00。
+  var ADS_START = Date.UTC(2026, 11, 31, 15, 0, 0);
 
   /** 広告を出してよい日になったか */
   function adsStarted() {

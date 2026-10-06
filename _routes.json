@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/sitemap.xml",
+    "/works",
+    "/works/*",
+    "/work/*",
+    "/viewer.html"
+  ],
+  "exclude": []
+}
