@@ -28,11 +28,18 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:type" content="image/png">
-  <!-- AdSense 審査用タグの置き場所
-       申し込みの直前に、下の1行のコメントを外して発行者IDを入れる。
-       これはスクリプトを読み込むだけで、広告そのものは出さない。
-       広告枠を描画するかどうかは js/ads.js の ADS_START が決める。
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+  <!-- AdSense の所有権確認タグの置き場所
+       ------------------------------------------------------------------
+       申し込むときに、AdSense の画面で確認方法を3つから選べる。
+       必ず「メタタグ」か「ads.txt スニペット」を選ぶこと。
+       「AdSense コードスニペット」は選ばない。あれはスクリプトなので、
+       承認された瞬間に自動広告が広告を出しうる。手で消すまでの間に
+       収益が発生してしまい、開業日より前の収入になる。
+       メタタグと ads.txt は何も実行しない。広告が出る経路が無い。
+
+       下の1行のコメントを外し、AdSense が示した content の値を入れる。
+       承認後もそのままにしてよい。広告は出ない。
+  <meta name="google-adsense-account" content="ca-pub-XXXXXXXXXXXXXXXX">
   -->
   <meta property="og:locale" content="ja_JP">
   <!-- Twitter Card -->
@@ -460,29 +467,37 @@ body.dark .campaign-ribbon {
 <script>
   /* 広告の設定
    * ==================================================================
-   * 手順は3段階。順番を守ること。
+   * 2026年中に1円も収益を出さないための段取り。順番を守ること。
    *
-   * 【1】AdSense に申し込むとき (2026年12月上旬の予定)
-   *   審査では「サイトに AdSense のコードがあること」が確かめられる。
-   *   js/ads.js はコードを動的に入れるので、審査する側からは見えない
-   *   おそれがある。申し込みの前に、この下の <head> 用タグを
-   *   index.html の <head> に静的に貼ること (場所は og:image の下に
-   *   コメントで用意してある)。
-   *   審査中は広告が配信されないので、収益は発生しない。
+   * 大原則: 2027-01-01 まで、AdSense のスクリプトをサイトに置かない。
+   *   広告が表示される経路は二つしかない。
+   *     ・<ins class="adsbygoogle"> を置く  → js/ads.js が日付で止める
+   *     ・自動広告が差し込む                → スクリプトが無ければ動けない
+   *   どちらもスクリプトが前提なので、スクリプトを置かなければ
+   *   承認されようが自動広告が有効だろうが、収益は発生しない。
    *
-   * 【2】承認の通知が来たら、すぐに二つやる。
-   *   (a) <head> の審査用タグを、またコメントに戻して deploy する。
-   *       サイトから AdSense のコードが完全に消えるので、収益が発生
-   *       しようがなくなる。開業日前の収益を確実に防ぐのはこれ。
-   *   (b) AdSense の管理画面で「自動広告」をオフにする。自動広告は
-   *       js/ads.js のゲートを素通りして広告を差し込むため。
-   *   なお (b) はサイトを追加した直後、承認を待つ間に済ませておける。
-   *   先に切っておけば、承認から deploy までの空白も怖くない。
+   * 【1】AdSense に申し込む (2026年12月上旬の予定)
+   *   サイトを追加すると所有権の確認方法を3つから選べる。
+   *   「メタタグ」か「ads.txt スニペット」を選ぶ。
+   *   「AdSense コードスニペット」は絶対に選ばない。
+   *   メタタグなら、この上の <head> にコメントで場所を用意してある。
+   *   ads.txt なら、サイトの一番上に ads.txt を置いて1行書く。
+   *   どちらも何も実行しないので、広告が出ることはない。
+   *   確認が済んだら「審査をリクエスト」。審査は数日〜4週間。
    *
-   * 【3】2027-01-01 以降に、下の2行のコメントを外して ID を入れる。
-   *   js/ads.js が 2027-01-01 00:00 (日本時間) まで広告枠を描画しない
-   *   ので、先に入れておいても出ない。確かめるには、ブラウザの
-   *   コンソールで AninovelAds.adsStarted() を叩く。
+   * 【2】承認の通知が来ても、何もしない。
+   *   スクリプトが無いので広告は出ない。慌てて deploy する必要も、
+   *   タグを消して回る必要もない。年末まで放っておいてよい。
+   *   念のため、管理画面で「自動広告」をオフにしておくと一段安心。
+   *   ただし、これに頼らなくても収益はゼロのまま。
+   *
+   * 【3】2027-01-01 以降に、はじめて広告を入れる。
+   *   (a) <head> に AdSense のスクリプトを貼る。
+   *       <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-..." crossorigin="anonymous"></script>
+   *   (b) 下の2行のコメントを外して ID を入れる。
+   *   js/ads.js は 2027-01-01 00:00 (日本時間) より前なら、ID が
+   *   入っていても広告枠を描かない。二重の歯止めになっている。
+   *   確かめるには、ブラウザのコンソールで AninovelAds.adsStarted()。
    *   日付を変えたいときは js/ads.js の ADS_START を直す。
    */
   // window.ANINOVEL_ADSENSE_PUBLISHER='ca-pub-XXXXXXXXXXXXXXXX';
