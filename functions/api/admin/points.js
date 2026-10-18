@@ -58,7 +58,114 @@ const SCORE = SCORE_SQL;
 // この既定値を変えても、締め済みの期間の計算には影響しない。
 const DEFAULT_OWNER_RATE = 0.5;
 
+// 支払えるようになったことを作者に知らせる。_mail.js は
+// RESEND_API_KEY が未設定ならログに出すだけで落ちない。
+import { sendMail, originOf } from '../../_mail.js';
+
+// 支払いの最低額。利用規約・収益分配ページと揃っていること。
+const PAYOUT_MIN_YEN = 1000;
+
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/** 作者ごとの未払い残高。balances の問い合わせと同じ出し方。 */
+async function unpaidBalances(d) {
+  const rows = await d.prepare(
+    `SELECT e.author_email AS email,
+            ROUND(COALESCE(e.earned, 0) - COALESCE(pd.paid, 0), 2) AS balance
+       FROM (SELECT author_email, SUM(amount_yen) AS earned
+               FROM points WHERE confirmed = 1 GROUP BY author_email) e
+       LEFT JOIN (SELECT author_email, SUM(amount_yen) AS paid
+                    FROM payouts GROUP BY author_email) pd
+         ON pd.author_email = e.author_email`).all();
+  return (rows && rows.results) || [];
+}
+
+const notifyKey = (email) => 'payout_notified:' + String(email).toLowerCase();
+
+/**
+ * 1,000円の節目を新たに越えた作者に知らせる。
+ * 2,000円、3,000円と越えるたびに送る。同じ節目では二度送らない。
+ * 戻り値は締めの応答に載せるための記録。例外は投げない。
+ */
+async function notifyPayable(context, d, origin) {
+  const env = context.env;
+  const kv = env.WORKS || env.WORKS_KV || null;
+  const sent = [], skipped = [], failed = [];
+
+  let rows = [];
+  try { rows = await unpaidBalances(d); }
+  catch (e) { return { error: String(e && e.message) }; }
+
+  for (const r of rows) {
+    const email = r && r.email;
+    const balance = Number(r && r.balance) || 0;
+    if (!email) continue;
+
+    const step = Math.floor(balance / PAYOUT_MIN_YEN);
+    if (step < 1) { skipped.push({ email, 理由: '1,000円に未達' }); continue; }
+
+    let last = 0;
+    if (kv) {
+      try { last = parseInt(await kv.get(notifyKey(email)) || '0', 10) || 0; }
+      catch (e) { last = 0; }          // 読めなければ 0 扱い。送りすぎより送り漏れを避ける
+    }
+    if (step <= last) { skipped.push({ email, 理由: '通知済み' }); continue; }
+
+    const payable = step * PAYOUT_MIN_YEN;
+    const m = mailPayable(email, payable, origin);
+    let res = { ok: false };
+    try { res = await sendMail(env, { to: email, subject: m.subject, text: m.text }); }
+    catch (e) { res = { ok: false, error: String(e && e.message) }; }
+
+    if (res && res.ok) {
+      sent.push({ email, 知らせた額: payable });
+      if (kv) {
+        try { await kv.put(notifyKey(email), String(step)); } catch (e) {}
+      }
+    } else if (res && res.skipped) {
+      // RESEND_API_KEY 未設定。送ったことにはしないので、鍵を入れれば次の締めで届く。
+      skipped.push({ email, 理由: 'メール未設定のためログのみ' });
+    } else {
+      failed.push({ email, 理由: String((res && (res.error || res.status)) || '不明') });
+    }
+  }
+  return { 送信: sent, 見送り: skipped, 失敗: failed };
+}
+
+/**
+ * 文面。金額は本人にだけ伝える。
+ * ポイント数には触れない。1ポイント=1円という誤解の元になるため。
+ */
+function mailPayable(email, yen, origin) {
+  return {
+    subject: '[AniNovel] お支払いできる分がたまりました',
+    text:
+`いつもありがとうございます。
+
+作品が読まれた分の分配が、お支払いの最低額に達しました。
+
+  お支払いできる額 : ${yen.toLocaleString('en-US')} 円
+
+内訳と、これまでの読まれ方は下のページでご確認いただけます。
+
+  ${origin}/points.html
+
+お支払いはデジタルギフト券で、1,000円単位です。
+1,000円に満たない端数は次の期間へ繰り越します。
+こちらから折り返しご連絡いたしますので、お待ちください。
+
+分配の計算方法は下のページに全文を掲載しています。
+なお、1ポイントは1円ではありません。1ポイントあたりの金額は
+期間ごとに変わります。
+
+  ${origin}/legal/revenue.html
+
+——
+AniNovel
+${origin}
+`,
+  };
+}
 
 /** 読書ログを集計して points に書く。締めた行は AGGREGATE 側で守られる。 */
 async function aggregate(d, period, now) {
@@ -369,9 +476,19 @@ export async function onRequestPost(context) {
       const sum = await d.prepare(
         'SELECT SUM(points) AS p, SUM(amount_yen) AS y FROM points WHERE period = ?1'
       ).bind(period).first();
+
+      // ここから先は締めそのものには関係しない。失敗しても締めは有効。
+      let notified = null;
+      try {
+        notified = await notifyPayable(context, d, originOf(context.request, context.env));
+      } catch (e) {
+        notified = { error: String(e && e.message) };
+      }
+
       return json({ ok: true, period, 締めた行数: (r && r.meta && r.meta.changes) || 0,
                     合計ポイント: r2(sum && sum.p), 分配額の合計: r2(sum && sum.y),
                     '1ポイントあたり': applied ? applied.perPoint : undefined,
+                    お知らせ: notified,
                     注意: 'この期間は以後、再集計しても数字が変わりません。' });
     } catch (e) {
       return json({ error: 'confirm_failed', message: String(e && e.message) }, 500);
