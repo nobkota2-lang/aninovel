@@ -14,6 +14,8 @@ import {
 } from '../../../_drafts.js';
 import { upsertWorkMeta } from '../../../_d1.js';
 import { reviewDraft } from '../../../_moderate.js';
+import { ensureCritique, rejectionMessage, PUBLISH_MIN_SCORE }
+  from './critique.js';
 
 export async function onRequestPost(context) {
   const r = await loadForReader(context, context.params.id, { mineOnly: true });
@@ -81,6 +83,35 @@ export async function onRequestPost(context) {
       message: d.reviewNote,
     }, 422);
   }
+
+  // ===== 講評の総合点が下限に届かないものは、ここで返す =====
+  // 作品として読めないものを公開しないための門。出来の良し悪しを
+  // 裁くためのものではないので、下限は 10 点と低くしてある。
+  //
+  // 講評が作れなかったときは素通しする。AI の不調を投稿の拒否に
+  // 化けさせないため。判断できないものは、これまでどおり運営者へ回す。
+  let critique = null;
+  try {
+    critique = await ensureCritique(context, d, { email: r.who && r.who.email });
+  } catch (e) {
+    critique = null;
+  }
+  if (critique && !critique.tooMany && critique.result
+      && typeof critique.result.total === 'number'
+      && critique.result.total < PUBLISH_MIN_SCORE) {
+    const title = (d.data && d.data.novel && d.data.novel.title) || d.title || '';
+    d.status = d.publishedId ? STATUS.PUBLISHED : STATUS.REJECTED;
+    d.reviewNote = rejectionMessage(critique.result, title);
+    if (d.publishedId) d.pendingChanges = true;   // 公開中の版はそのまま
+    await writeDraft(r.store, d);
+    return json({
+      ok: false, belowMinimum: true, id: d.id, status: d.status,
+      総合: critique.result.total, 公開の下限: PUBLISH_MIN_SCORE,
+      critique: critique.result,
+      message: d.reviewNote,
+    }, 422);
+  }
+  if (critique && critique.result) d.critiqueTotal = critique.result.total;
 
   // ===== 編集で、AI が問題なしと判断したものは自動で公開 =====
   if (ai.canAutoPublish && d.publishedId) {
