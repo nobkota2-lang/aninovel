@@ -109,14 +109,30 @@ export async function onRequest(context) {
       try { return await fromCache(context, '/_gen/sitemap', () => sitemapXml(env)); }
       catch (e) { console.warn('[middleware] sitemap:', e); return next(); }
     }
-    if (url.pathname === '/works' || url.pathname === '/works/') {
-      try { return await fromCache(context, '/_gen/works', () => worksIndexPage(env)); }
-      catch (e) { console.warn('[middleware] worksIndex:', e); return next(); }
+    // 作品紹介。日本語は /works/、英語は /en/works/。
+    // 英訳はあるのに英語のURLが無く、英語圏の検索に一切出ていなかった。
+    // 英語の入口。/en/works/ の上に英語のトップが無く、英語圏から来た人の
+    // 着地点が存在しなかった。日本語のトップに落ちても読めない。
+    if (url.pathname === '/en' || url.pathname === '/en/') {
+      try { return await fromCache(context, '/_gen/en-home', () => enHomePage(env)); }
+      catch (e) { console.warn('[middleware] enHome:', e); return next(); }
     }
-    if (url.pathname.startsWith('/works/')) {
+    if (url.pathname === '/en/authors' || url.pathname === '/en/authors/') {
+      try { return await fromCache(context, '/_gen/en-authors', () => enAuthorsPage()); }
+      catch (e) { console.warn('[middleware] enAuthors:', e); return next(); }
+    }
+
+    const intro = introRoute(url.pathname);
+    if (intro) {
+      if (intro.slug === null) {
+        try {
+          return await fromCache(context, '/_gen/works-' + intro.lang,
+            () => worksIndexPage(env, intro.lang));
+        } catch (e) { console.warn('[middleware] worksIndex:', e); return next(); }
+      }
       try {
         return await fromCache(context, '/_gen' + url.pathname,
-          () => workIntroPage(env, url));
+          () => workIntroPage(env, intro.slug, intro.lang));
       } catch (e) { console.warn('[middleware] workIntro:', e); return next(); }
     }
     const workId = viewerWorkId(url);
@@ -342,25 +358,38 @@ async function sitemapXml(env) {
     out.push('  </url>');
   }
 
+  // 英語の入口。英語圏から来た人の着地点なので、紹介ページより高く置く。
+  for (const [path, pri] of [['/en/', '0.9'], ['/en/authors', '0.7']]) {
+    out.push('  <url>');
+    out.push('    <loc>' + SITE + path + '</loc>');
+    out.push('    <changefreq>weekly</changefreq>');
+    out.push('    <priority>' + pri + '</priority>');
+    out.push('  </url>');
+  }
+
   // 作品紹介ページ。本文より先に読まれてよいので、作品ページより高く置く。
-  try {
-    const entries = await introEntries(env);
-    if (entries.length) {
+  // 日英それぞれ別のURLなので、両方載せる。中身が対になっていることは
+  // ページ側の hreflang で伝えている。
+  for (const lang of ['ja', 'en']) {
+    try {
+      const entries = await introEntries(env, lang);
+      if (!entries.length) continue;
+      const base = SITE + (lang === 'en' ? '/en/works/' : '/works/');
       out.push('  <url>');
-      out.push('    <loc>' + SITE + '/works/</loc>');
+      out.push('    <loc>' + base + '</loc>');
       out.push('    <changefreq>weekly</changefreq>');
-      out.push('    <priority>0.8</priority>');
+      out.push('    <priority>' + (lang === 'ja' ? '0.8' : '0.6') + '</priority>');
       out.push('  </url>');
+      for (const { note } of entries) {
+        out.push('  <url>');
+        out.push('    <loc>' + base + xmlEsc(note.slug) + '</loc>');
+        out.push('    <changefreq>monthly</changefreq>');
+        out.push('    <priority>' + (lang === 'ja' ? '0.7' : '0.6') + '</priority>');
+        out.push('  </url>');
+      }
+    } catch (e) {
+      console.warn('[sitemap] intros ' + lang + ':', e);
     }
-    for (const { note } of entries) {
-      out.push('  <url>');
-      out.push('    <loc>' + SITE + '/works/' + xmlEsc(note.slug) + '</loc>');
-      out.push('    <changefreq>monthly</changefreq>');
-      out.push('    <priority>0.7</priority>');
-      out.push('  </url>');
-    }
-  } catch (e) {
-    console.warn('[sitemap] intros:', e);
   }
 
   let works = [];
@@ -494,6 +523,37 @@ async function workCard(context, workId, url) {
  * 書きかけの覚え書きが読者の目に触れると、かえって信用を損なうため。
  */
 
+/**
+ * 紹介ページの振り分け。
+ *   /works/              → {lang:'ja', slug:null}   一覧
+ *   /works/rashomon      → {lang:'ja', slug:'rashomon'}
+ *   /en/works/           → {lang:'en', slug:null}
+ *   /en/works/rashomon   → {lang:'en', slug:'rashomon'}
+ * それ以外は null。
+ */
+function introRoute(pathname) {
+  let lang = 'ja';
+  let rest = pathname;
+  if (rest === '/en/works' || rest.startsWith('/en/works/')) {
+    lang = 'en';
+    rest = rest.slice('/en'.length);
+  }
+  if (rest === '/works' || rest === '/works/') return { lang, slug: null };
+  if (!rest.startsWith('/works/')) return null;
+  const slug = decodeURIComponent(rest.slice('/works/'.length)).split('/')[0];
+  return slug ? { lang, slug } : { lang, slug: null };
+}
+
+/** その言語での表示に使う値を取り出す。英語が無ければ日本語に戻す。 */
+function pick(note, field, lang) {
+  if (lang === 'en') {
+    const v = note[field + 'En'];
+    if (v && String(v).trim()) return v;
+    return '';            // 英語が無いなら出さない。日本語を混ぜない。
+  }
+  return note[field] || '';
+}
+
 function htmlEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -564,26 +624,46 @@ a{color:var(--accent)}
 .list h2{font-size:1.1rem;margin:0 0 4px}
 .list h2 a{text-decoration:none}
 .list .by{margin:0 0 8px;font-size:.86rem}
+ul.plain{list-style:none;padding:0;margin:0 0 14px}
+ul.plain li{padding:7px 0;border-bottom:1px solid var(--line)}
+ul.plain li:last-child{border-bottom:0}
+ul.plain a{text-decoration:none;font-weight:700}
+ul.plain .by{color:var(--muted);font-weight:400;font-size:.88rem}
+.lead{font-size:1.05rem;margin:0 0 22px}
 .list p.ex{margin:0;font-size:.92rem;color:var(--muted)}
 .foot{margin-top:40px;font-size:.86rem;color:var(--muted);text-align:center}
 `.trim();
 
 function page(opts) {
-  return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n'
+  const en = opts.lang === 'en';
+
+  // hreflang。同じ中身の別言語版がどこにあるかを検索エンジンに伝える。
+  // これが無いと、日英が重複した別々のページと見なされかねない。
+  // x-default は、どの言語でもない利用者に見せる版。作者が日本の方なので
+  // 日本語を既定にしている。
+  let alt = '';
+  if (opts.altJa && opts.altEn) {
+    alt = '<link rel="alternate" hreflang="ja" href="' + htmlEsc(opts.altJa) + '">\n'
+        + '<link rel="alternate" hreflang="en" href="' + htmlEsc(opts.altEn) + '">\n'
+        + '<link rel="alternate" hreflang="x-default" href="' + htmlEsc(opts.altJa) + '">\n';
+  }
+
+  return '<!DOCTYPE html>\n<html lang="' + (en ? 'en' : 'ja') + '">\n<head>\n'
     + '<meta charset="UTF-8">\n'
     + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
     + '<title>' + htmlEsc(opts.title) + '</title>\n'
     + '<meta name="description" content="' + htmlEsc(opts.desc) + '">\n'
     + '<link rel="canonical" href="' + htmlEsc(opts.url) + '">\n'
+    + alt
     + '<meta property="og:type" content="' + (opts.ogType || 'website') + '">\n'
-    + '<meta property="og:site_name" content="アニノベル">\n'
+    + '<meta property="og:site_name" content="' + (en ? 'AniNovel' : 'アニノベル') + '">\n'
     + '<meta property="og:title" content="' + htmlEsc(opts.title) + '">\n'
     + '<meta property="og:description" content="' + htmlEsc(opts.desc) + '">\n'
     + '<meta property="og:url" content="' + htmlEsc(opts.url) + '">\n'
     + '<meta property="og:image" content="' + SITE + '/og-image.png">\n'
     + '<meta property="og:image:width" content="1200">\n'
     + '<meta property="og:image:height" content="630">\n'
-    + '<meta property="og:locale" content="ja_JP">\n'
+    + '<meta property="og:locale" content="' + (en ? 'en_US' : 'ja_JP') + '">\n'
     + '<meta name="twitter:card" content="summary_large_image">\n'
     + '<meta name="twitter:title" content="' + htmlEsc(opts.title) + '">\n'
     + '<meta name="twitter:description" content="' + htmlEsc(opts.desc) + '">\n'
@@ -591,6 +671,38 @@ function page(opts) {
     + '<style>' + PAGE_CSS + '</style>\n'
     + '</head>\n<body>\n<div class="wrap">\n' + opts.body + '\n</div>\n</body>\n</html>\n';
 }
+
+/** 画面に出す文言。日英で持ち替える。 */
+const UI = {
+  ja: {
+    site: 'アニノベル', intros: '作品紹介',
+    lead: 'アニメ風の吹き出しと読み上げで読める作品を、一編ずつご紹介します。',
+    indexDesc: 'アニノベルで公開している作品の紹介です。どんな話で、どこが読みどころかをまとめています。',
+    read: 'この作品を読む', others: 'ほかの作品', toList: '作品紹介の一覧へ',
+    toTop: 'トップへ', works: '作品一覧へ', writers: '作品を書く方へ',
+    notFound: '見つかりませんでした',
+    notFoundBody: 'お探しの作品紹介はありません。',
+    notPublished: 'この作品はいま公開されていません。',
+    preparing: 'ただいま準備中です。',
+    source: '出典: ', pd: '。著作権の保護期間が満了した作品です。',
+    chars: (n) => '約' + n + '字', other: 'English',
+  },
+  en: {
+    site: 'AniNovel', intros: 'The works',
+    lead: 'Each work on AniNovel, introduced one at a time. Read with '
+        + 'anime-style speech bubbles and narration.',
+    indexDesc: 'Introductions to the works published on AniNovel: what each one '
+        + 'is, and what to look out for.',
+    read: 'Read this work', others: 'Other works', toList: 'All introductions',
+    toTop: 'Home', works: 'Browse the works', writers: 'For writers',
+    notFound: 'Not found',
+    notFoundBody: 'There is no introduction at this address.',
+    notPublished: 'This work is not currently published.',
+    preparing: 'Coming soon.',
+    source: 'Source: ', pd: '. The copyright on this work has expired.',
+    chars: (n) => n + ' characters', other: '日本語',
+  },
+};
 
 function htmlResponse(html, status) {
   return new Response(html, {
@@ -602,12 +714,16 @@ function htmlResponse(html, status) {
   });
 }
 
-/** カタログに載っていて、かつ解説が書けている作品だけを並べる。 */
-async function introEntries(env) {
+/**
+ * カタログに載っていて、かつその言語の解説が書けている作品だけを並べる。
+ * 英語の解説が無い作品は英語の一覧に出さない。日本語を混ぜて出すと、
+ * 英語で来た人に半分日本語のページを見せることになる。
+ */
+async function introEntries(env, lang) {
   const works = await readCatalog(env);
   const out = [];
   for (const n of readyNotes()) {
-    if (!publicText(n.intro)) continue;       // 下書きの印しかない行は出さない
+    if (!publicText(pick(n, 'intro', lang))) continue;
     const w = works.find((x) => x && (
       (n.id && x.id === n.id) || (x.title === n.title)
     ));
@@ -617,53 +733,77 @@ async function introEntries(env) {
   return out;
 }
 
-async function worksIndexPage(env) {
-  const entries = await introEntries(env);
+/** その作品の日英それぞれのURL。hreflang と言語切替に使う。 */
+function introUrls(slug) {
+  const s = encodeURIComponent(slug);
+  return { ja: SITE + '/works/' + s, en: SITE + '/en/works/' + s };
+}
+
+/** 反対の言語の版があるか。無ければ hreflang も切替リンクも出さない。 */
+function hasBoth(note) {
+  return !!(publicText(note.intro) && publicText(note.introEn));
+}
+
+function introHome(lang) { return lang === 'en' ? '/en/works/' : '/works/'; }
+
+async function worksIndexPage(env, lang) {
+  const t = UI[lang];
+  const entries = await introEntries(env, lang);
+  const urls = { ja: SITE + '/works/', en: SITE + '/en/works/' };
+
   if (!entries.length) return htmlResponse(page({
-    title: '作品紹介 — アニノベル',
-    desc: '作品の紹介ページを準備しています。',
-    url: SITE + '/works/',
-    body: '<p class="crumb"><a href="/">アニノベル</a> › 作品紹介</p>'
-        + '<h1>作品紹介</h1><p>ただいま準備中です。</p>'
-        + '<p class="foot"><a href="/">作品一覧へ</a></p>',
+    lang: lang,
+    title: t.intros + ' — ' + t.site,
+    desc: t.preparing,
+    url: urls[lang],
+    body: '<p class="crumb"><a href="/">' + t.site + '</a> › ' + t.intros + '</p>'
+        + '<h1>' + t.intros + '</h1><p>' + t.preparing + '</p>'
+        + '<p class="foot"><a href="/">' + t.works + '</a></p>',
   }));
 
   let li = '';
   for (const { note, work } of entries) {
-    const intro = publicText(note.intro).replace(/\s+/g, ' ');
-    li += '<li><h2><a href="/works/' + htmlEsc(note.slug) + '">'
-        + htmlEsc(note.title) + '</a></h2>'
-        + '<p class="by">' + htmlEsc(note.author || work.author || '') + '</p>'
+    const intro = publicText(pick(note, 'intro', lang)).replace(/\s+/g, ' ');
+    const title = pick(note, 'title', lang) || note.title;
+    const author = pick(note, 'author', lang) || note.author || work.author || '';
+    li += '<li><h2><a href="' + introHome(lang) + htmlEsc(note.slug) + '">'
+        + htmlEsc(title) + '</a></h2>'
+        + '<p class="by">' + htmlEsc(author) + '</p>'
         + '<p class="ex">' + htmlEsc(intro.slice(0, 110))
         + (intro.length > 110 ? '…' : '') + '</p></li>\n';
   }
 
   return htmlResponse(page({
-    title: '作品紹介 — アニノベル',
-    desc: 'アニノベルで公開している作品の紹介です。'
-        + 'どんな話で、どこが読みどころかをまとめています。',
-    url: SITE + '/works/',
-    body: '<p class="crumb"><a href="/">アニノベル</a> › 作品紹介</p>\n'
-        + '<h1>作品紹介</h1>\n'
-        + '<p class="facts">アニメ風の吹き出しと読み上げで読める作品を、'
-        + '一編ずつご紹介します。</p>\n'
+    lang: lang,
+    title: t.intros + ' — ' + t.site,
+    desc: t.indexDesc,
+    url: urls[lang],
+    altJa: urls.ja, altEn: urls.en,
+    body: '<p class="crumb"><a href="/">' + t.site + '</a> › ' + t.intros
+        + '　<a href="' + introHome(lang === 'en' ? 'ja' : 'en') + '">'
+        + t.other + '</a></p>\n'
+        + '<h1>' + t.intros + '</h1>\n'
+        + '<p class="facts">' + t.lead + '</p>\n'
         + '<ul class="list">\n' + li + '</ul>\n'
-        + '<p class="foot"><a href="/">作品一覧へ</a>　'
-        + '<a href="/authors.html">作品を書く方へ</a></p>',
+        + '<p class="foot"><a href="/">' + t.works + '</a>　'
+        + '<a href="/authors.html">' + t.writers + '</a></p>',
   }));
 }
 
-async function workIntroPage(env, url) {
-  const slug = decodeURIComponent(url.pathname.slice('/works/'.length)).split('/')[0];
+async function workIntroPage(env, slug, lang) {
+  const t = UI[lang];
   const note = noteBySlug(slug);
-  if (!note || !publicText(note.intro)) return htmlResponse(page({
-    title: '見つかりませんでした — アニノベル',
-    desc: 'お探しの作品紹介は見つかりませんでした。',
-    url: SITE + '/works/',
-    body: '<h1>見つかりませんでした</h1>'
-        + '<p>お探しの作品紹介はありません。</p>'
-        + '<p class="foot"><a href="/works/">作品紹介の一覧へ</a>　'
-        + '<a href="/">トップへ</a></p>',
+  const intro = note ? publicText(pick(note, 'intro', lang)) : '';
+
+  if (!note || !intro) return htmlResponse(page({
+    lang: lang,
+    title: t.notFound + ' — ' + t.site,
+    desc: t.notFoundBody,
+    url: SITE + introHome(lang),
+    body: '<h1>' + t.notFound + '</h1>'
+        + '<p>' + t.notFoundBody + '</p>'
+        + '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
+        + '<a href="/">' + t.toTop + '</a></p>',
   }), 404);
 
   const works = await readCatalog(env);
@@ -671,60 +811,197 @@ async function workIntroPage(env, url) {
     (note.id && x.id === note.id) || (x.title === note.title)
   ));
   if (!work) return htmlResponse(page({
-    title: '見つかりませんでした — アニノベル',
-    desc: 'お探しの作品紹介は見つかりませんでした。',
-    url: SITE + '/works/',
-    body: '<h1>見つかりませんでした</h1>'
-        + '<p>この作品はいま公開されていません。</p>'
-        + '<p class="foot"><a href="/works/">作品紹介の一覧へ</a></p>',
+    lang: lang,
+    title: t.notFound + ' — ' + t.site,
+    desc: t.notFoundBody,
+    url: SITE + introHome(lang),
+    body: '<h1>' + t.notFound + '</h1>'
+        + '<p>' + t.notPublished + '</p>'
+        + '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a></p>',
   }), 404);
 
-  const intro = publicText(note.intro);
-  const author = note.author || work.author || '';
+  const title = pick(note, 'title', lang) || note.title;
+  const author = pick(note, 'author', lang) || note.author || work.author || '';
+  const lead = pick(note, 'lead', lang);
+  const urls = introUrls(note.slug);
+  const both = hasBoth(note);
+
   const facts = [];
   if (note.year) facts.push(htmlEsc(note.year));
-  if (work.charCount) facts.push('約' + Number(work.charCount).toLocaleString('ja-JP') + '字');
+  if (work.charCount) {
+    facts.push(t.chars(Number(work.charCount).toLocaleString('en-US')));
+  }
   const src = publicSource(note.source);
 
-  let body = '<p class="crumb"><a href="/">アニノベル</a> › '
-    + '<a href="/works/">作品紹介</a> › ' + htmlEsc(note.title) + '</p>\n'
-    + '<h1>' + htmlEsc(note.title) + '</h1>\n'
+  let body = '<p class="crumb"><a href="/">' + t.site + '</a> › '
+    + '<a href="' + introHome(lang) + '">' + t.intros + '</a> › ' + htmlEsc(title)
+    + (both ? '　<a href="' + (lang === 'en' ? urls.ja : urls.en) + '">'
+              + t.other + '</a>' : '')
+    + '</p>\n'
+    + '<h1>' + htmlEsc(title) + '</h1>\n'
     + (author ? '<p class="by">' + htmlEsc(author) + '</p>\n' : '')
     + (facts.length ? '<p class="facts">' + facts.join('　·　') + '</p>\n' : '');
 
-  if (note.lead) {
-    body += '<blockquote><p>' + htmlEsc(note.lead) + '</p></blockquote>\n';
-  }
+  if (lead) body += '<blockquote><p>' + htmlEsc(lead) + '</p></blockquote>\n';
   body += '<div class="body">\n' + paragraphs(intro) + '\n</div>\n';
   body += '<p class="cta"><a class="btn" href="/viewer.html?work='
-        + encodeURIComponent(work.id) + '">この作品を読む</a></p>\n';
-  if (src) {
-    body += '<p class="src">出典: ' + htmlEsc(src)
-          + '。著作権の保護期間が満了した作品です。</p>\n';
+        + encodeURIComponent(work.id) + '">' + t.read + '</a></p>\n';
+  if (src && lang === 'ja') {
+    body += '<p class="src">' + t.source + htmlEsc(src) + t.pd + '</p>\n';
+  } else if (lang === 'en') {
+    body += '<p class="src">' + t.source + 'Aozora Bunko' + t.pd + '</p>\n';
   }
 
   // 内部リンク。孤立したページを作らないため、他の紹介へも必ず繋ぐ。
-  const others = (await introEntries(env))
+  const others = (await introEntries(env, lang))
     .filter((e) => e.note.slug !== note.slug).slice(0, 5);
   if (others.length) {
-    body += '<div class="more"><h2>ほかの作品</h2><ul>\n';
+    body += '<div class="more"><h2>' + t.others + '</h2><ul>\n';
     for (const o of others) {
-      body += '<li><a href="/works/' + htmlEsc(o.note.slug) + '">'
-            + htmlEsc(o.note.title) + '</a>'
-            + (o.note.author ? '（' + htmlEsc(o.note.author) + '）' : '')
+      const ot = pick(o.note, 'title', lang) || o.note.title;
+      const oa = pick(o.note, 'author', lang) || o.note.author || '';
+      body += '<li><a href="' + introHome(lang) + htmlEsc(o.note.slug) + '">'
+            + htmlEsc(ot) + '</a>'
+            + (oa ? (lang === 'en' ? ' (' + htmlEsc(oa) + ')'
+                                   : '（' + htmlEsc(oa) + '）') : '')
             + '</li>\n';
     }
     body += '</ul></div>\n';
   }
-  body += '<p class="foot"><a href="/works/">作品紹介の一覧へ</a>　'
-        + '<a href="/">トップへ</a></p>';
+  body += '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
+        + '<a href="/">' + t.toTop + '</a></p>';
 
-  const desc = intro.replace(/\s+/g, ' ').slice(0, 120);
-  return htmlResponse(page({
-    title: note.title + '｜' + author + '｜アニノベル',
-    desc: desc,
-    url: SITE + '/works/' + encodeURIComponent(note.slug),
+  const opts = {
+    lang: lang,
+    title: title + (lang === 'en' ? ' | ' : '｜') + author
+         + (lang === 'en' ? ' | ' : '｜') + t.site,
+    desc: intro.replace(/\s+/g, ' ').slice(0, 120),
+    url: urls[lang],
     ogType: 'article',
+    body: body,
+  };
+  if (both) { opts.altJa = urls.ja; opts.altEn = urls.en; }
+  return htmlResponse(page(opts));
+}
+
+/* =====================================================================
+ * 英語圏に向けた入口  /en/ と /en/authors
+ * =====================================================================
+ * 2026-10-18 追加。
+ *
+ * なぜ要るのか
+ *   作品の英訳も、英語の作品紹介 (/en/works/) もあるのに、英語のトップが
+ *   無かった。サイトの言語切替は localStorage なので、英語圏の人が
+ *   aninovel.com を開いても日本語のページが出る。つまり
+ *   「英語で検索 → 着地 → 読めずに離脱」という道しか無かった。
+ *
+ *   /en/ を置くと、英語の紹介ページ群に親ができる。検索エンジンから見て
+ *   「英語版のあるサイト」になり、hreflang も日英で対になる。
+ *
+ * 中身について
+ *   日本語トップの直訳にはしない。英語で探している人が知りたいのは
+ *   「何が読めるのか」と「なぜ他と違うのか」なので、そこを先に書く。
+ *   日本語学習者にも効くはずなので、その一文も入れてある。
+ */
+
+async function enHomePage(env) {
+  const t = UI.en;
+  const entries = await introEntries(env, 'en');
+
+  let list = '';
+  for (const { note } of entries) {
+    const title = pick(note, 'title', 'en') || note.title;
+    const author = pick(note, 'author', 'en') || note.author || '';
+    list += '<li><a href="/en/works/' + htmlEsc(note.slug) + '">'
+          + htmlEsc(title) + '</a>'
+          + (author ? ' <span class="by">' + htmlEsc(author) + '</span>' : '')
+          + '</li>\n';
+  }
+
+  const body =
+      '<p class="crumb">AniNovel　<a href="/">日本語</a></p>\n'
+    + '<h1>Japanese classics, read in speech bubbles</h1>\n'
+    + '<p class="lead">AniNovel shows a novel the way an anime would: every '
+    + 'line of dialogue in its own speech bubble, with a face and a colour for '
+    + 'the character who says it. Each character can be read aloud in a voice '
+    + 'of their own, and their mouths move while they speak.</p>\n'
+    + '<div class="body">\n'
+    + '<p>Open <em>I Am a Cat</em> anywhere else and the long conversations '
+    + 'blur together — Kushami, Meitei and Kangetsu all arguing, and no way to '
+    + 'tell who is talking. That is the problem this site was built to solve.</p>\n'
+    + '<p>Everything here is out of copyright. Read up to five works a day '
+    + 'without an account.</p>\n'
+    + '<p>If you are learning Japanese, the same page can be read in either '
+    + 'language, and hearing a line in one character’s voice while seeing '
+    + 'who says it makes the dialogue far easier to follow.</p>\n'
+    + '</div>\n';
+
+  const works = entries.length
+    ? '<div class="more"><h2>What you can read</h2><ul class="plain">\n'
+      + list + '</ul>\n'
+      + '<p><a href="/en/works/">All introductions</a></p></div>\n'
+    : '';
+
+  const writers =
+      '<div class="more"><h2>Writing your own</h2>\n'
+    + '<p>AniNovel also publishes original fiction. The editor, the character '
+    + 'art and the narration are free to use, and part of what the site earns '
+    + 'is shared with writers according to how much their work is read.</p>\n'
+    + '<p><a href="/en/authors">For writers</a></p></div>\n'
+    + '<p class="foot"><a href="/">日本語のトップページ</a></p>';
+
+  return htmlResponse(page({
+    lang: 'en',
+    title: 'AniNovel | Japanese classics read in anime-style speech bubbles',
+    desc: 'Read Soseki, Miyazawa, Akutagawa and other Japanese classics with '
+        + 'anime-style speech bubbles and a separate reading voice for every '
+        + 'character. Free, no account needed.',
+    url: SITE + '/en/',
+    altJa: SITE + '/', altEn: SITE + '/en/',
+    body: body + works + writers,
+  }));
+}
+
+function enAuthorsPage() {
+  const body =
+      '<p class="crumb"><a href="/en/">AniNovel</a> › For writers'
+    + '　<a href="/authors.html">日本語</a></p>\n'
+    + '<h1>For writers</h1>\n'
+    + '<p class="lead">Have your story read with speech bubbles and voices.</p>\n'
+    + '<div class="body">\n'
+    + '<p><strong>Speech bubbles.</strong> Assign a speaker to each line and it '
+    + 'appears in an anime-style bubble, with that character’s icon and colour.</p>\n'
+    + '<p><strong>Faces and voices.</strong> Give each character an icon and a '
+    + 'reading voice. Their mouths move with the speech.</p>\n'
+    + '<p><strong>Read in Japanese too.</strong> Readers can switch languages on '
+    + 'the same page.</p>\n'
+    + '<p><strong>The tools are free.</strong> The editor, the character art and '
+    + 'the narration cost nothing, and there is no monthly fee for writers '
+    + 'during the campaign period.</p>\n'
+    + '<p><strong>You share in what the site earns.</strong> Part of the revenue '
+    + 'is passed on according to how much your work was read. One point is not '
+    + 'one yen: what a point is worth changes from period to period, and the '
+    + 'full calculation is published.</p>\n'
+    + '<p><strong>Your work stays yours.</strong> The operator never takes over '
+    + 'your copyright and never sells it on. Unpublish whenever you like and no '
+    + 'new use is made of it.</p>\n'
+    + '</div>\n'
+    + '<div class="more"><h2>Before you write to us</h2>\n'
+    + '<p>The site is run from Japan and the editorial correspondence is in '
+    + 'Japanese. Write to us in English if that is easier for you — we will '
+    + 'manage — but reviews and notices may reach you in Japanese.</p></div>\n'
+    + '<p class="cta"><a class="btn" href="/author-apply.html">Apply to become a writer</a></p>\n'
+    + '<p class="foot"><a href="/en/">English home</a>　'
+    + '<a href="/legal/revenue.html">How the revenue share is calculated</a></p>';
+
+  return htmlResponse(page({
+    lang: 'en',
+    title: 'For writers | AniNovel',
+    desc: 'Publish your fiction with anime-style speech bubbles and a voice for '
+        + 'every character. The tools are free, and part of what the site earns '
+        + 'is shared according to how much your work is read.',
+    url: SITE + '/en/authors',
+    altJa: SITE + '/authors.html', altEn: SITE + '/en/authors',
     body: body,
   }));
 }

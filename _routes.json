@@ -6,7 +6,9 @@
     "/works",
     "/works/*",
     "/work/*",
-    "/viewer.html"
+    "/viewer.html",
+    "/en",
+    "/en/*"
   ],
   "exclude": []
 }
