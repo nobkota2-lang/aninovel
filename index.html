@@ -496,8 +496,11 @@ body.dark .campaign-ribbon {
    *   ただし、これに頼らなくても収益はゼロのまま。
    *
    * 【3】2027-01-01 以降に、はじめて広告を入れる。
-   *   (a) <head> に AdSense のスクリプトを貼る。
-   *       <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-..." crossorigin="anonymous"></script>
+   *   (a) <head> に AdSense のスクリプトを貼る。貼る1行は AdSense の
+   *       画面に出るものをそのまま使う。ここには書き写さない。
+   *       この注記の中に script の終了タグを書くと、HTML の解析器が
+   *       そこで script を終わらせてしまい、以降のコメントが本文として
+   *       画面に出てしまう (2026-10-19 に実際そうなっていた)。
    *   (b) 下の2行のコメントを外して ID を入れる。
    *   js/ads.js は 2027-01-01 00:00 (日本時間) より前なら、ID が
    *   入っていても広告枠を描かない。二重の歯止めになっている。

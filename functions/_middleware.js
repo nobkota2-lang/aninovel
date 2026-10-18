@@ -11,7 +11,7 @@
 
 /* 作品紹介ページ (/works/) の中身。本文ではなく、どこにも存在しない
  * 解説文を置くための場所。中身の書き方は _worknotes.js の冒頭に書いた。 */
-import { readyNotes, noteBySlug } from './_worknotes.js';
+import { readyNotes, noteBySlug } from './_worknotes.mjs';
 
 // 本サイト以外からのfetchをブロックする (CSRF対策の一部)
 const ALLOWED_ORIGINS = [
@@ -111,15 +111,15 @@ export async function onRequest(context) {
     }
     // 作品紹介。日本語は /works/、英語は /en/works/。
     // 英訳はあるのに英語のURLが無く、英語圏の検索に一切出ていなかった。
-    // 英語の入口。/en/works/ の上に英語のトップが無く、英語圏から来た人の
-    // 着地点が存在しなかった。日本語のトップに落ちても読めない。
-    if (url.pathname === '/en' || url.pathname === '/en/') {
-      try { return await fromCache(context, '/_gen/en-home', () => enHomePage(env)); }
-      catch (e) { console.warn('[middleware] enHome:', e); return next(); }
-    }
-    if (url.pathname === '/en/authors' || url.pathname === '/en/authors/') {
-      try { return await fromCache(context, '/_gen/en-authors', () => enAuthorsPage()); }
-      catch (e) { console.warn('[middleware] enAuthors:', e); return next(); }
+    // 英語の入口。/en/ は日本語トップそのものを英語で出す。
+    // 手書きの英語ページは置かない (下の enMirror の注記を参照)。
+    const enConf = enMirrorRoute(url.pathname);
+    if (enConf) {
+      try { return await enMirror(context, enConf); }
+      catch (e) {
+        console.warn('[middleware] enMirror:', e);
+        return new Response(null, { status: 302, headers: { Location: '/?lang=en' } });
+      }
     }
 
     const intro = introRoute(url.pathname);
@@ -884,124 +884,379 @@ async function workIntroPage(env, slug, lang) {
   return htmlResponse(page(opts));
 }
 
+
 /* =====================================================================
- * 英語圏に向けた入口  /en/ と /en/authors
+ * 英語の入口  /en/ と /en/authors
  * =====================================================================
- * 2026-10-18 追加。
+ * 2026-10-19 作り直し。前の版は捨てた。
  *
- * なぜ要るのか
- *   作品の英訳も、英語の作品紹介 (/en/works/) もあるのに、英語のトップが
- *   無かった。サイトの言語切替は localStorage なので、英語圏の人が
- *   aninovel.com を開いても日本語のページが出る。つまり
- *   「英語で検索 → 着地 → 読めずに離脱」という道しか無かった。
+ * 前の版が間違っていた点
+ *   英語のトップを手で書き起こしてしまった。しかしこのサイトの本体
+ *   (index.html) には作品一覧も検索も順位も全部入っていて、しかも
+ *   js/i18n.js で丸ごと英語になる。そこへ案内文だけの薄いページを
+ *   置いたので、英語で来た人は本物より貧しいところに着地していた。
+ *   言語切替のために日本語のリンクを残していたのも、英語だけで
+ *   読みたい人には雑音だった。
  *
- *   /en/ を置くと、英語の紹介ページ群に親ができる。検索エンジンから見て
- *   「英語版のあるサイト」になり、hreflang も日英で対になる。
+ * 作り直した形
+ *   /en/        は index.html を、そのまま英語で出す。
+ *   /en/authors は authors.html を、そのまま英語で出す。
+ *   つまり「/ で English を選んだ状態」そのものが英語版になる。
+ *   手書きのページは無くなったので、日本語版に機能が増えれば
+ *   英語版にも同時に増える。二重管理が起きない。
  *
- * 中身について
- *   日本語トップの直訳にはしない。英語で探している人が知りたいのは
- *   「何が読めるのか」と「なぜ他と違うのか」なので、そこを先に書く。
- *   日本語学習者にも効くはずなので、その一文も入れてある。
+ * どうやって英語で出すか
+ *   言語は localStorage の aninovel_lang_v1 で決まる。そこで head の
+ *   いちばん先頭に script を差し込んで 'en' を入れておく。index.html の
+ *   目隠し script も authors.html の描画も同じ鍵を読むので、最初の
+ *   一描画目から英語になる。日本語が一瞬見えることはない。
+ *
+ *   ただし JavaScript を実行しない相手 — 検索結果の見出しや SNS の
+ *   カードを作る側 — には、それだけでは何も届かない。だから
+ *   title・description・og・canonical は HTMLRewriter で英語に
+ *   差し替える。ここが英語圏の検索に出るかどうかを決める部分。
+ *
+ *   サイト内のリンクも張り替える。英語で着地した人が一歩進んだ先で
+ *   日本語に落ちるなら、英語版があるとは言えない。
+ *
+ * 控え (fromCache) は使わない
+ *   このページは KV を読まないので、控えても節約にならない。それより、
+ *   Nobby さんが index.html を直して deploy したのに /en/ だけ古い、
+ *   という事故のほうが高くつく。静的ファイルの配信は Cloudflare が
+ *   すでに辺縁で持っているので、ここで二重に持つ必要がない。
  */
 
-async function enHomePage(env) {
-  const t = UI.en;
-  const entries = await introEntries(env, 'en');
+/* ---------------------------------------------------------------------
+ * 日本語 → 英語の対応表を、js/i18n.js から借りてくる
+ * ---------------------------------------------------------------------
+ * js/i18n.js の JA2EN は「日本語の一文 → 英語の一文」という素直な表で、
+ * 読み込んだあと DOM を歩いて差し替えている。同じことは辺縁でもできる。
+ *
+ * なぜやるか
+ *   localStorage を仕込むだけでは、JavaScript を動かさない相手 —
+ *   検索結果の抜粋や SNS のカードを作る側 — には日本語のままの本文が
+ *   届く。/en/ の中身が日本語に見える、という状態が残ってしまう。
+ *
+ * なぜ写さずに借りるか
+ *   表をこちらに写すと二つになる。日本語版の文言を直したときに
+ *   英語版だけ古いまま、という形で必ず食い違う。読む側を一つに保つ。
+ *
+ * 失敗したときの振る舞い
+ *   読めない・解釈できない・数が少なすぎるときは、表を使わない。
+ *   半分だけ英語になったページを出すのがいちばん悪い。
+ */
 
-  let list = '';
-  for (const { note } of entries) {
-    const title = pick(note, 'title', 'en') || note.title;
-    const author = pick(note, 'author', 'en') || note.author || '';
-    list += '<li><a href="/en/works/' + htmlEsc(note.slug) + '">'
-          + htmlEsc(title) + '</a>'
-          + (author ? ' <span class="by">' + htmlEsc(author) + '</span>' : '')
-          + '</li>\n';
-  }
+/* ---------------------------------------------------------------------
+ * HTML の実体参照をほどく
+ * ---------------------------------------------------------------------
+ * HTMLRewriter が渡してくる文字は、実体参照がほどけていない。
+ * 画面では「💎 プラン」でも、ここには "&#x1F48E; プラン" として届く。
+ * 一方 js/i18n.js はブラウザの DOM を見るので、ほどけた文字で表を
+ * 引いている。だから、ほどかずに引くと表に当たらない。
+ * (2026-10-19 これで33箇所を訳し落としていた。)
+ *
+ * 表に無い名前の実体参照はそのまま残す。残れば表に当たらず、元の文字が
+ * そのまま出るだけで済む。壊すより当たらないほうがよい。
+ */
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  middot: '·', bull: '•', hellip: '…',
+  mdash: '—', ndash: '–', minus: '−',
+  copy: '©', reg: '®', trade: '™', sect: '§', para: '¶',
+  laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›',
+  ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’',
+  prime: '′', Prime: '″', deg: '°', plusmn: '±',
+  times: '×', divide: '÷', micro: 'µ',
+  yen: '¥', euro: '€', pound: '£', cent: '¢',
+  larr: '←', rarr: '→', uarr: '↑', darr: '↓', harr: '↔',
+  hearts: '♥', diams: '♦', clubs: '♣', spades: '♠',
+  star: '☆', dagger: '†', Dagger: '‡',
+  thinsp: ' ', ensp: ' ', emsp: ' ',
+  sup2: '²', sup3: '³', frac12: '½', frac14: '¼',
+};
 
-  const body =
-      '<p class="crumb">AniNovel　<a href="/">日本語</a></p>\n'
-    + '<h1>Japanese classics, read in speech bubbles</h1>\n'
-    + '<p class="lead">AniNovel shows a novel the way an anime would: every '
-    + 'line of dialogue in its own speech bubble, with a face and a colour for '
-    + 'the character who says it. Each character can be read aloud in a voice '
-    + 'of their own, and their mouths move while they speak.</p>\n'
-    + '<div class="body">\n'
-    + '<p>Open <em>I Am a Cat</em> anywhere else and the long conversations '
-    + 'blur together — Kushami, Meitei and Kangetsu all arguing, and no way to '
-    + 'tell who is talking. That is the problem this site was built to solve.</p>\n'
-    + '<p>Everything here is out of copyright. Read up to five works a day '
-    + 'without an account.</p>\n'
-    + '<p>If you are learning Japanese, the same page can be read in either '
-    + 'language, and hearing a line in one character’s voice while seeing '
-    + 'who says it makes the dialogue far easier to follow.</p>\n'
-    + '</div>\n';
-
-  const works = entries.length
-    ? '<div class="more"><h2>What you can read</h2><ul class="plain">\n'
-      + list + '</ul>\n'
-      + '<p><a href="/en/works/">All introductions</a></p></div>\n'
-    : '';
-
-  const writers =
-      '<div class="more"><h2>Writing your own</h2>\n'
-    + '<p>AniNovel also publishes original fiction. The editor, the character '
-    + 'art and the narration are free to use, and part of what the site earns '
-    + 'is shared with writers according to how much their work is read.</p>\n'
-    + '<p><a href="/en/authors">For writers</a></p></div>\n'
-    + '<p class="foot"><a href="/">日本語のトップページ</a></p>';
-
-  return htmlResponse(page({
-    lang: 'en',
-    title: 'AniNovel | Japanese classics read in anime-style speech bubbles',
-    desc: 'Read Soseki, Miyazawa, Akutagawa and other Japanese classics with '
-        + 'anime-style speech bubbles and a separate reading voice for every '
-        + 'character. Free, no account needed.',
-    url: SITE + '/en/',
-    altJa: SITE + '/', altEn: SITE + '/en/',
-    body: body + works + writers,
-  }));
+function decodeEntities(s) {
+  if (s.indexOf('&') < 0) return s;
+  return s.replace(/&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, g) => {
+    if (g[0] === '#') {
+      const n = g[1] === 'x' || g[1] === 'X'
+        ? parseInt(g.slice(2), 16) : parseInt(g.slice(1), 10);
+      if (!Number.isFinite(n) || n < 0 || n > 0x10ffff) return m;
+      try { return String.fromCodePoint(n); } catch (e) { return m; }
+    }
+    return Object.prototype.hasOwnProperty.call(ENTITIES, g) ? ENTITIES[g] : m;
+  });
 }
 
-function enAuthorsPage() {
-  const body =
-      '<p class="crumb"><a href="/en/">AniNovel</a> › For writers'
-    + '　<a href="/authors.html">日本語</a></p>\n'
-    + '<h1>For writers</h1>\n'
-    + '<p class="lead">Have your story read with speech bubbles and voices.</p>\n'
-    + '<div class="body">\n'
-    + '<p><strong>Speech bubbles.</strong> Assign a speaker to each line and it '
-    + 'appears in an anime-style bubble, with that character’s icon and colour.</p>\n'
-    + '<p><strong>Faces and voices.</strong> Give each character an icon and a '
-    + 'reading voice. Their mouths move with the speech.</p>\n'
-    + '<p><strong>Read in Japanese too.</strong> Readers can switch languages on '
-    + 'the same page.</p>\n'
-    + '<p><strong>The tools are free.</strong> The editor, the character art and '
-    + 'the narration cost nothing, and there is no monthly fee for writers '
-    + 'during the campaign period.</p>\n'
-    + '<p><strong>You share in what the site earns.</strong> Part of the revenue '
-    + 'is passed on according to how much your work was read. One point is not '
-    + 'one yen: what a point is worth changes from period to period, and the '
-    + 'full calculation is published.</p>\n'
-    + '<p><strong>Your work stays yours.</strong> The operator never takes over '
-    + 'your copyright and never sells it on. Unpublish whenever you like and no '
-    + 'new use is made of it.</p>\n'
-    + '</div>\n'
-    + '<div class="more"><h2>Before you write to us</h2>\n'
-    + '<p>The site is run from Japan and the editorial correspondence is in '
-    + 'Japanese. Write to us in English if that is easier for you — we will '
-    + 'manage — but reviews and notices may reach you in Japanese.</p></div>\n'
-    + '<p class="cta"><a class="btn" href="/author-apply.html">Apply to become a writer</a></p>\n'
-    + '<p class="foot"><a href="/en/">English home</a>　'
-    + '<a href="/legal/revenue.html">How the revenue share is calculated</a></p>';
+let JA2EN_CACHE = null;
+let JA2EN_AT = 0;
+const JA2EN_TTL_MS = 10 * 60 * 1000;
 
-  return htmlResponse(page({
-    lang: 'en',
+/** 'a\'b' のような JavaScript の文字列から、退避を外して中身を取る。 */
+function unquoteJs(s) {
+  return String(s).replace(/\\(u[0-9a-fA-F]{4}|.)/g, (m, g) => {
+    if (g[0] === 'u') return String.fromCharCode(parseInt(g.slice(1), 16));
+    if (g === 'n') return '\n';
+    if (g === 't') return '\t';
+    if (g === 'r') return '\r';
+    return g;
+  });
+}
+
+async function loadJa2En(context) {
+  const now = Date.now();
+  if (JA2EN_CACHE && now - JA2EN_AT < JA2EN_TTL_MS) return JA2EN_CACHE;
+
+  let src = null;
+  try {
+    const req = new Request(
+      new URL('/js/i18n.js', context.request.url).toString(), { method: 'GET' });
+    const res = await context.next(req);
+    if (res && res.status === 200) src = await res.text();
+  } catch (e) {
+    console.warn('[en] i18n.js を読めませんでした:', e);
+  }
+  if (!src) return null;
+
+  // var JA2EN={...} の、対応する閉じ括弧までを取り出す。
+  // 引用符の中の { } を数えないよう、文字列の中は読み飛ばす。
+  const head = src.match(/JA2EN\s*=\s*\{/);
+  if (!head) { console.warn('[en] JA2EN が見つかりません'); return null; }
+  const start = head.index + head[0].length - 1;
+  let depth = 0, quote = null, end = -1;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end < 0) { console.warn('[en] JA2EN の終わりが見つかりません'); return null; }
+
+  const lit = src.slice(start, end + 1);
+  const dict = {};
+  const pair = /(['"])((?:[^\\]|\\.)*?)\1\s*:\s*(['"])((?:[^\\]|\\.)*?)\3/g;
+  let m, n = 0;
+  while ((m = pair.exec(lit)) !== null) {
+    const k = unquoteJs(m[2]), v = unquoteJs(m[4]);
+    if (k && v) { dict[k] = v; n++; }
+  }
+  // 解釈が崩れたまま使うと、半分だけ英語のページになる。それは出さない。
+  if (n < 50) { console.warn('[en] JA2EN の解釈が少なすぎます: ' + n); return null; }
+
+  JA2EN_CACHE = dict;
+  JA2EN_AT = now;
+  return dict;
+}
+
+const EN_MIRROR = {
+  '/en/': {
+    src: '/index.html',
+    url: SITE + '/en/',
+    jaUrl: '/',
+    title: 'AniNovel | Japanese classics read in anime-style speech bubbles',
+    ogTitle: 'AniNovel | Japanese classics, in speech bubbles and read aloud',
+    desc: 'Read Sōseki, Miyazawa, Akutagawa and other Japanese classics with '
+        + 'anime-style speech bubbles and a separate reading voice for every '
+        + 'character. Free, and no account needed for five works a day.',
+    ogDesc: 'Every line of dialogue in its own speech bubble, with a face and a '
+          + 'voice for the character who says it.',
+  },
+  '/en/authors': {
+    src: '/authors.html',
+    url: SITE + '/en/authors',
+    jaUrl: '/authors.html',
     title: 'For writers | AniNovel',
+    ogTitle: 'For writers | AniNovel',
     desc: 'Publish your fiction with anime-style speech bubbles and a voice for '
         + 'every character. The tools are free, and part of what the site earns '
         + 'is shared according to how much your work is read.',
-    url: SITE + '/en/authors',
-    altJa: SITE + '/authors.html', altEn: SITE + '/en/authors',
-    body: body,
-  }));
+    ogDesc: 'Have your story read with speech bubbles and voices. The tools are '
+          + 'free, and you share in what the site earns.',
+  },
+};
+
+/** /en/... から、元になる日本語ページの設定を引く。末尾のスラッシュは許す。 */
+function enMirrorRoute(pathname) {
+  if (pathname === '/en' || pathname === '/en/') return EN_MIRROR['/en/'];
+  if (pathname === '/en/authors' || pathname === '/en/authors/') {
+    return EN_MIRROR['/en/authors'];
+  }
+  return null;
 }
+
+/**
+ * 英語で着地した人を英語のまま歩かせるための、リンクの張り替え表。
+ * 英語版が無いもの (応募フォーム、規約、ログイン) はそのままにする。
+ * 無いものを英語のふりをしたURLに向けると 404 になるだけで、害のほうが大きい。
+ */
+const EN_LINKS = {
+  '/': '/en/',
+  '/index.html': '/en/',
+  '/works': '/en/works/',
+  '/works/': '/en/works/',
+  '/authors.html': '/en/authors',
+};
+
+/**
+ * 日本語のページを、英語の入口として出し直す。
+ */
+async function enMirror(context, conf) {
+  const { request, next } = context;
+
+  let res;
+  try {
+    const src = new Request(new URL(conf.src, request.url).toString(), request);
+    res = await next(src);
+  } catch (e) {
+    console.warn('[en] 元のページを取れませんでした:', e);
+    res = null;
+  }
+
+  const ct = res ? (res.headers.get('Content-Type') || '') : '';
+  if (!res || res.status !== 200 || !ct.includes('text/html')) {
+    // 元のページに辿り着けないとき。英語で来た人を日本語のまま放り出さない
+    // ための最後の逃げ道。?lang=en は js/i18n.js が解釈する。
+    console.warn('[en] 元のページが HTML 200 で返りませんでした:',
+                 conf.src, res && res.status);
+    return new Response(null, { status: 302, headers: { Location: '/?lang=en' } });
+  }
+
+  // いちばん最初に走らせる。index.html の目隠し script より前に置く必要がある。
+  //
+  // 言語を en にするだけでは、日本語に戻れなくなる。ページの中の切替は
+  // 「localStorage を書いて再読み込み」なので、再読み込みでこの script が
+  // また en に戻してしまう。だから「日本語へ」の操作は、言語を ja にして
+  // 日本語のURLへ送る形に差し替える。URL と言語が食い違わないようにもなる。
+  const BOOT = '<script>(function(){try{'
+    + "localStorage.setItem('aninovel_lang_v1','en');"
+    + "localStorage.setItem('aninovel_lang','en');"
+    + 'var JA=' + JSON.stringify(conf.jaUrl) + ';'
+    + 'document.addEventListener("click",function(e){'
+    + 'var n=e.target;if(!n||!n.closest)return;'
+    + 'var b=n.closest("[data-lang],#lang");if(!b)return;'
+    + 'var d=b.getAttribute("data-lang");'
+    + 'if(d&&d!=="ja")return;'
+    + 'e.preventDefault();e.stopPropagation();'
+    + 'try{localStorage.setItem("aninovel_lang_v1","ja");'
+    + 'localStorage.setItem("aninovel_lang","ja");}catch(_){}'
+    + 'location.href=JA;},true);'
+    + '}catch(e){}})();</script>';
+
+  const meta = (sel, val) => ({
+    element(el) { el.setAttribute('content', attrSafe(val)); },
+  });
+
+  // 本文の差し替え。表が借りられなかったときは何もしない。
+  // その場合でも title / description / og は英語になり、読者の画面も
+  // js/i18n.js が英語にする。届かないのはクローラの本文だけ。
+  const dict = await loadJa2En(context);
+
+  // script と style と title の中は触らない。中の文字を書き戻すと
+  // JavaScript の && が &amp;&amp; になりうる。title は別に入れ替えている。
+  const SKIP = ['script', 'style', 'title', 'textarea'];
+  let skipDepth = 0;
+  let buf = '';
+
+  let rw = new HTMLRewriter()
+    .on('html', { element(el) { el.setAttribute('lang', 'en'); } })
+    .on('head', { element(el) { el.prepend(BOOT, { html: true }); } })
+    // 検索結果に出る文字。setInnerContent を使う。text ハンドラだと
+    // 分割されて届いたときに題名が二重になる。
+    .on('title', { element(el) { el.setInnerContent(conf.title); } })
+    .on('meta[name="description"]', meta('desc', conf.desc))
+    .on('meta[name="keywords"]', { element(el) { el.remove(); } })
+    .on('meta[name="author"]', meta('author', 'AniNovel'))
+    .on('meta[property="og:title"]', meta('ogt', conf.ogTitle))
+    .on('meta[property="og:description"]', meta('ogd', conf.ogDesc))
+    .on('meta[property="og:url"]', meta('ogu', conf.url))
+    .on('meta[property="og:site_name"]', meta('ogs', 'AniNovel'))
+    .on('meta[property="og:locale"]', meta('ogl', 'en_US'))
+    .on('meta[property="og:locale:alternate"]', meta('ogla', 'ja_JP'))
+    .on('meta[name="twitter:title"]', meta('twt', conf.ogTitle))
+    .on('meta[name="twitter:description"]', meta('twd', conf.ogDesc))
+    // canonical は自分自身 (/en/) を指さなければならない。元の値 (/) を
+    // そのまま残すと、英語版は日本語版の重複として扱われて検索に出ない。
+    .on('link[rel="canonical"]', {
+      element(el) { el.setAttribute('href', attrSafe(conf.url)); },
+    })
+    // hreflang は元の HTML が ja=/ , en=/en/ , x-default=/ を持っている。
+    // / から見ても /en/ から見ても正しい組なので触らない。
+    .on('a[href]', {
+      element(el) {
+        const h = el.getAttribute('href');
+        if (h && Object.prototype.hasOwnProperty.call(EN_LINKS, h)) {
+          el.setAttribute('href', attrSafe(EN_LINKS[h]));
+        }
+      },
+    });
+
+  if (dict) {
+    for (const tag of SKIP) {
+      rw = rw.on(tag, {
+        element(el) {
+          skipDepth++;
+          // 終了タグで戻す。onEndTag が無い環境では戻せないので、
+          // そのときは以降の差し替えを諦める (安全側に倒す)。
+          if (typeof el.onEndTag === 'function') {
+            // 迷子の終了タグで負に落ちると、script の中まで差し替えに
+            // 行ってしまう。0 より下げない。
+            el.onEndTag(() => { if (skipDepth > 0) skipDepth--; });
+          }
+        },
+      });
+    }
+    // placeholder と title も訳す。js/i18n.js も同じことをしているので、
+    // ここで揃えておかないと JavaScript の有無で見え方が変わる。
+    for (const attr of ['placeholder', 'title']) {
+      rw = rw.on('[' + attr + ']', {
+        element(el) {
+          const v = el.getAttribute(attr);
+          if (v == null) return;
+          const k = decodeEntities(v).trim();
+          const hit = k ? dict[k] : null;
+          if (hit && hit !== k) {
+            el.setAttribute(attr, attrSafe(decodeEntities(v).replace(k, hit)));
+          }
+        },
+      });
+    }
+    rw = rw.on('*', {
+      text(t) {
+        if (skipDepth > 0) return;
+        buf += t.text;
+        // 一つの文字列が分割されて届くことがある。最後まで溜めてから見る。
+        if (!t.lastInTextNode) { t.remove(); return; }
+        const raw = buf;
+        buf = '';
+        // 表を引くときは実体参照をほどく。ブラウザ側と同じものを見るため。
+        const decoded = decodeEntities(raw);
+        const key = decoded.trim();
+        const hit = key ? dict[key] : null;
+        if (hit && hit !== key) {
+          // 英語に差し替える。html:false なので & < > は正しく逃がされる。
+          t.replace(decoded.replace(key, hit));
+        } else {
+          // 当たらなかったものは、元の形のまま返す。ここで html:false に
+          // すると "&#x1F48E;" が "&amp;#x1F48E;" になり、絵文字が壊れる。
+          t.replace(raw, { html: true });
+        }
+      },
+    });
+  }
+
+  const out = rw.transform(res);
+
+  const headers = new Headers(out.headers);
+  headers.set('Content-Type', 'text/html; charset=utf-8');
+  headers.set('Cache-Control', 'public, max-age=300');
+  headers.set('X-Robots-Tag', 'all');
+  return new Response(out.body, { status: 200, headers: headers });
+}
+
+// 試験のためだけの口。本番の経路からは呼ばれない。
+export const __loadJa2EnForTest = (c) => { JA2EN_CACHE = null; return loadJa2En(c); };
