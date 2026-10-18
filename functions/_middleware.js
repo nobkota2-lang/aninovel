@@ -1257,6 +1257,3 @@ async function enMirror(context, conf) {
   headers.set('X-Robots-Tag', 'all');
   return new Response(out.body, { status: 200, headers: headers });
 }
-
-// 試験のためだけの口。本番の経路からは呼ばれない。
-export const __loadJa2EnForTest = (c) => { JA2EN_CACHE = null; return loadJa2En(c); };
