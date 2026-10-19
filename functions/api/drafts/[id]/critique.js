@@ -29,7 +29,7 @@
  *   POST { publish: false }   … 引っ込める
  */
 
-import { json, loadForReader, STATUS } from '../../../_drafts.js';
+import { json, loadForReader, requireAuthorOrOwner, STATUS } from '../../../_drafts.js';
 
 // 記録の版。形を変えたら上げる。古い記録は作り直す。
 const REC_VERSION = 2;
@@ -65,6 +65,65 @@ const AXES = [
 
 const kvOf = (env) => env.WORKS || env.WORKS_KV || null;
 const critiqueKey = (id) => 'critique:' + id;
+
+/* ---------------------------------------------------------------------
+ * 公開済みの作品も対象にする
+ * ---------------------------------------------------------------------
+ * 2026-10-19 追加。
+ *
+ * もとは下書き (draft_…) だけを見ていた。しかし作者が講評を見たいのは
+ * たいてい公開済みの作品で、しかも古い作品にはもとになる下書きが
+ * 残っていないものがある。下書きが無いという理由で断るのは、
+ * 作者から見れば「使えない」のと同じ。
+ *
+ * 公開作品の本体は work:<pubId> に入っていて、中身は下書きの data に
+ * ownerEmail を足したものなので、本文の取り出しはそのまま使える。
+ *
+ * 一度つけた講評は critique:<pubId> に残る。本文が変わっていなければ
+ * 読み直さずにそれを返す (ensureCritique の isFresh)。AIを何度も
+ * 走らせない。
+ */
+const PUB_ID_RE = /^pub_[A-Za-z0-9_-]{1,80}$/;
+
+async function loadPublished(context, id) {
+  const kv = kvOf(context.env);
+  if (!kv) return { deny: json({ error: 'kv_unbound', message: 'KV が未設定です。' }, 500) };
+
+  const gate = await requireAuthorOrOwner(context);
+  if (gate.deny) return gate;
+
+  let data = null;
+  try {
+    const raw = await kv.get('work:' + id);
+    data = raw ? JSON.parse(raw) : null;
+  } catch (e) { data = null; }
+  if (!data) {
+    return { deny: json({ error: 'not_found',
+                          message: 'この作品の本体が見つかりません。' }, 404) };
+  }
+
+  const owner = String(data.ownerEmail || '').toLowerCase();
+  const email = String((gate.who && gate.who.email) || '').toLowerCase();
+  const mine = !!owner && owner === email;
+
+  // 自分の作品か、サイトの持ち主か。持ち主を許すのは、持ち主の名前が
+  // 入っていない古い作品 (ownerEmail が空) を救うため。
+  if (!mine && !gate.isOwner) {
+    return { deny: json({ error: 'forbidden',
+                          message: '自分の作品だけが対象です。' }, 403) };
+  }
+
+  return {
+    who: gate.who, isOwner: gate.isOwner, mine: mine || gate.isOwner,
+    draft: { id, data, title: (data.novel && data.novel.title) || '' },
+  };
+}
+
+/** draft_ なら下書きを、pub_ なら公開作品を読む。 */
+async function loadAny(context, id, opts) {
+  if (PUB_ID_RE.test(String(id || ''))) return loadPublished(context, id);
+  return loadForReader(context, id, opts);
+}
 const runsKey = (email, day) => 'critique_runs:' + String(email).toLowerCase() + ':' + day;
 
 /** 日本時間の日付。枠の数え直しは日本時間の0時に揃える。 */
@@ -350,10 +409,11 @@ export async function publicCritique(env, draftId) {
 
 export async function onRequestGet(context) {
   // mineOnly を外す。オーナーが審査のために読む場合があるため。
-  const r = await loadForReader(context, context.params.id);
+  const r = await loadAny(context, context.params.id);
   if (r.deny) return r.deny;
 
-  if (!r.mine) {
+  // 公開済みの作品は、読めた時点で持ち主の確認が済んでいる。
+  if (!r.mine && !PUB_ID_RE.test(String(context.params.id || ''))) {
     // 他人の下書き。オーナーが、公開を依頼されたものを見る場合だけ許す。
     // まだ下書きのうちは、オーナーであっても開けない。
     const st = r.draft.status;
@@ -373,7 +433,7 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   // 作り直しと公開の切り替えは本人だけ。
-  const r = await loadForReader(context, context.params.id, { mineOnly: true });
+  const r = await loadAny(context, context.params.id, { mineOnly: true });
   if (r.deny) return r.deny;
 
   const env = context.env;
