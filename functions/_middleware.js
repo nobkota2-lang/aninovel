@@ -1104,6 +1104,7 @@ const EN_MIRROR = {
   '/en/': {
     src: '/index.html',
     url: SITE + '/en/',
+    path: '/en/',
     jaUrl: '/',
     title: 'AniNovel | Japanese classics read in anime-style speech bubbles',
     ogTitle: 'AniNovel | Japanese classics, in speech bubbles and read aloud',
@@ -1116,6 +1117,7 @@ const EN_MIRROR = {
   '/en/authors': {
     src: '/authors.html',
     url: SITE + '/en/authors',
+    path: '/en/authors',
     jaUrl: '/authors.html',
     title: 'For writers | AniNovel',
     ogTitle: 'For writers | AniNovel',
@@ -1171,6 +1173,22 @@ async function enMirror(context, conf) {
   // 「localStorage を書いて再読み込み」なので、再読み込みでこの script が
   // また en に戻してしまう。だから「日本語へ」の操作は、言語を ja にして
   // 日本語のURLへ送る形に差し替える。URL と言語が食い違わないようにもなる。
+  // 2026-10-19 追記。これが無いと英語版は抜け殻になる。
+  //
+  //   index.html の <script src> は "js/portal.js" のような相対の書き方。
+  //   / で出す限り /js/portal.js になるが、/en/ で出すと /en/js/portal.js
+  //   になり、一つも読み込まれない。実際そうなっていて、英語のトップは
+  //   作品一覧も検索も言語切替も動かない、文字だけのページだった。
+  //   (文字が英語だったのは、ここで差し替えていたからに過ぎない。)
+  //
+  //   <base href="/"> を先頭に置くと、相対の指定が / を起点に解決される。
+  //   属性を一つずつ書き換えるより確実で、実行時に JavaScript が組み立てる
+  //   相対URL (fetch('api/...') など) にも効く。
+  //
+  //   代わりに、ページ内の #見出し へのリンクが / に飛んでしまうので、
+  //   そこだけ下で自分のパスに直している。
+  const BASE = '<base href="/">';
+
   const BOOT = '<script>(function(){try{'
     + "localStorage.setItem('aninovel_lang_v1','en');"
     + "localStorage.setItem('aninovel_lang','en');"
@@ -1203,7 +1221,7 @@ async function enMirror(context, conf) {
 
   let rw = new HTMLRewriter()
     .on('html', { element(el) { el.setAttribute('lang', 'en'); } })
-    .on('head', { element(el) { el.prepend(BOOT, { html: true }); } })
+    .on('head', { element(el) { el.prepend(BASE + BOOT, { html: true }); } })
     // 検索結果に出る文字。setInnerContent を使う。text ハンドラだと
     // 分割されて届いたときに題名が二重になる。
     .on('title', { element(el) { el.setInnerContent(conf.title); } })
@@ -1228,8 +1246,20 @@ async function enMirror(context, conf) {
     .on('a[href]', {
       element(el) {
         const h = el.getAttribute('href');
-        if (h && Object.prototype.hasOwnProperty.call(EN_LINKS, h)) {
-          el.setAttribute('href', attrSafe(EN_LINKS[h]));
+        if (!h) return;
+        // ページ内の見出しへ。<base> があると / に飛んでしまうので直す。
+        if (h.charAt(0) === '#') {
+          el.setAttribute('href', attrSafe(conf.path + h));
+          return;
+        }
+        // 外部サイトと mailto: などはそのまま。
+        if (h.indexOf('//') === 0 || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(h)) return;
+        // 相対の書き方 ("authors.html") は / 起点に直してから引く。
+        const key = h.charAt(0) === '/' ? h : '/' + h;
+        if (Object.prototype.hasOwnProperty.call(EN_LINKS, key)) {
+          el.setAttribute('href', attrSafe(EN_LINKS[key]));
+        } else if (h.charAt(0) !== '/') {
+          el.setAttribute('href', attrSafe(key));
         }
       },
     });
