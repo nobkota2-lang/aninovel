@@ -86,6 +86,11 @@ dl.kv dd{margin:0;word-break:break-word}
   </div>
 </div>
 <script>
+  // 画面に出す直前に、いまの言語へ直す。後から訳すと一瞬だけ日本語が
+  // 見えてしまう (2026-10-19 ログイン直後の案内で実際にそうなっていた)。
+  function L(ja){ try{ return (window.AninovelI18n&&window.AninovelI18n.text)
+    ? window.AninovelI18n.text(ja) : ja; }catch(e){ return ja; } }
+
 /* パスワード欄に目玉マークを付ける。押すと表示・非表示を切り替える。
    ページ内の input[type=password] を自動で探して付けるので、各欄に何か書く必要はない。 */
 (function(){
@@ -127,11 +132,11 @@ function show(el,kind,text){ el.className='msg '+kind; el.textContent=text; }
     var r=await fetch('/api/auth/verify',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})});
     var j=await r.json();
-    $('state').textContent = r.ok ? (j.message||'確認が完了しました。') : (j.error||('エラー ('+r.status+')'));
+    $('state').textContent = r.ok ? L(j.message||'確認が完了しました。') : (j.error||(L('エラー (')+r.status+')'));
     if(r.ok){
       $('go').style.display='block';
       // 確認できたら、そのままログイン画面へ進む（ボタンは押せなかったとき用に残す）
-      $('state').textContent=(j.message||'確認が完了しました。')+' ログイン画面へ移動します…';
+      $('state').textContent=L(j.message||'確認が完了しました。')+' '+L('ログイン画面へ移動します…');
       setTimeout(function(){ location.replace('/login.html'); }, 1200);
     }
   }catch(e){ $('state').textContent='通信に失敗しました。時間をおいてお試しください。'; }

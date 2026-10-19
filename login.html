@@ -123,6 +123,11 @@ dl.kv dd{margin:0;word-break:break-word}
   </p>
 </div>
 <script>
+  // 画面に出す直前に、いまの言語へ直す。後から訳すと一瞬だけ日本語が
+  // 見えてしまう (2026-10-19 ログイン直後の案内で実際にそうなっていた)。
+  function L(ja){ try{ return (window.AninovelI18n&&window.AninovelI18n.text)
+    ? window.AninovelI18n.text(ja) : ja; }catch(e){ return ja; } }
+
 /* パスワード欄に目玉マークを付ける。押すと表示・非表示を切り替える。
    ページ内の input[type=password] を自動で探して付けるので、各欄に何か書く必要はない。 */
 (function(){
@@ -176,7 +181,7 @@ async function refresh(justLoggedIn){
       $('box').style.display='none'; $('me').style.display='block';
       document.querySelector('h1').textContent='アカウント';
       document.querySelector('.lead').textContent='ログイン中です。パスワードの変更やログアウトができます。';
-      $('meText').textContent=j.nickname+' さんとしてログインしています';
+      $('meText').textContent=L('%s さんとしてログインしています').replace('%s',j.nickname);
       $('meRole').textContent=j.email+' ／ '+(j.isAuthor?'作者・読者':'読者');
     }else{
       $('box').style.display='block'; $('me').style.display='none'; $('pwbox').style.display='none';
@@ -192,7 +197,7 @@ $('go').onclick=async function(){
       body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
     var j=await r.json();
     if(r.ok){ $('password').value=''; show($('msg'),'ok','ログインしました。移動します…'); await refresh(true); btn.disabled=false; return; }
-    show($('msg'),'err',j.error||('エラー ('+r.status+')'));
+    show($('msg'),'err',j.error||(L('エラー (')+r.status+')'));
   }catch(e){ show($('msg'),'err','通信に失敗しました。'); }
   btn.disabled=false;
 };
@@ -208,7 +213,7 @@ $('pwgo').onclick=async function(){
       body:JSON.stringify({current:$('cur').value,next:$('next').value})});
     var j=await r.json();
     if(r.ok){ show($('pwmsg'),'ok','パスワードを変更しました。'); $('cur').value=''; $('next').value=''; }
-    else show($('pwmsg'),'err',j.error||('エラー ('+r.status+')'));
+    else show($('pwmsg'),'err',j.error||(L('エラー (')+r.status+')'));
   }catch(e){ show($('pwmsg'),'err','通信に失敗しました。'); }
   btn.disabled=false;
 };
@@ -222,7 +227,7 @@ $('forgot').onclick=async function(e){
     var r=await fetch('/api/auth/reset-request',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:em})});
     var j=await r.json();
-    show($('msg'),'ok',(j.message||'ご案内をお送りしました。')+' 迷惑メールフォルダもご確認ください。');
+    show($('msg'),'ok',L(j.message||'ご案内をお送りしました。')+' '+L('迷惑メールフォルダもご確認ください。'));
   }catch(e2){ show($('msg'),'err','通信に失敗しました。'); }
 };
 </script>
