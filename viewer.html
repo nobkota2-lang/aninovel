@@ -7837,6 +7837,16 @@ async function _openAiCritique(){
   }
   if(j){
     _hideProgress(pg);
+    // 古い版の講評は見せない。指示文を直したあとは付け直す。
+    if(j.stale){
+      if(confirm('この作品には前の版の講評があります。\n\n'
+        + '採点の仕方を直したので、付け直しますか？\n'
+        + '(前の版は、全作品が同じ点になる不具合がありました)')){
+        await _critiqueRun(true);
+        return;
+      }
+      if(j.critique && j.critique.result){ _critiqueRender(j.critique); return; }
+    }
     if(j.critique && j.critique.result){ _critiqueRender(j.critique); return; }
   }
   _hideProgress(pg);

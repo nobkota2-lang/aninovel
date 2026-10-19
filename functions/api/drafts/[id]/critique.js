@@ -32,7 +32,7 @@
 import { json, loadForReader, requireAuthorOrOwner, STATUS } from '../../../_drafts.js';
 
 // 記録の版。形を変えたら上げる。古い記録は作り直す。
-const REC_VERSION = 2;
+const REC_VERSION = 3;   // 2026-10-20 指示文を直したので上げる(古い記録は作り直す)
 
 // これ未満は公開を認めない。作品として読めないものを止めるための下限。
 export const PUBLISH_MIN_SCORE = 10;
@@ -185,6 +185,9 @@ export function buildPrompt(meta, body) {
 4. 批判的な言い回し、見下した言い回しは使わない。
    「稚拙」「ありきたり」「物足りない」のような語は使わない。
 5. 日本語で、ですます調で書く。
+6. summary は、観点ごとの講評の繰り返しにしない。全体として何が
+   良くて、何を直すとさらに良くなるのかを、短くまとめる。2〜3文。
+   strengths と suggestions も、観点ごとの講評と同じ話を繰り返さない。
 
 【点数のつけ方】観点ごとに 0〜100 点の整数。
   90〜100 : 商業出版の水準にある
@@ -196,7 +199,12 @@ export function buildPrompt(meta, body) {
             本文がほとんど無い、など）
   ※ 9点以下は、本当に作品として読めない場合にだけ付けてください。
      努力して書かれたものには付けません。迷ったら 30 以上にしてください。
-  ※ 点数は 5 の倍数に丸めず、35 や 68 のように細かく付けてください。
+  ※ 点数は 5 の倍数に丸めず、1点きざみで細かく付けてください。
+  ※ 5つの観点に、はっきり差をつけてください。この作品がどの観点で
+     抜きん出ていて、どの観点に伸びしろがあるのかが、点を見ただけで
+     分かるようにしてください。同じような点を並べないでください。
+  ※ この指示文に書かれた数字や例文を、そのまま写さないでください。
+     必ず、いま渡された本文を読んで決めてください。
 
 【評価の観点】
 ${axisList}
@@ -211,18 +219,19 @@ ${body}
 
 【出力】
 次のJSONだけを返してください。前後に説明を付けないでください。
+山かっこの中は、この作品を読んで決めた中身に置き換えてください。
 {
   "axes": [
-    {"name": "時代背景", "score": 62, "comment": "..."},
-    {"name": "表現力", "score": 71, "comment": "..."},
-    {"name": "登場人物", "score": 55, "comment": "..."},
-    {"name": "独自性", "score": 48, "comment": "..."},
-    {"name": "読みごたえ", "score": 64, "comment": "..."}
+    {"name": "時代背景", "score": <整数>, "comment": "<この作品の、どの箇所がそうなのか>"},
+    {"name": "表現力", "score": <整数>, "comment": "<同上>"},
+    {"name": "登場人物", "score": <整数>, "comment": "<同上>"},
+    {"name": "独自性", "score": <整数>, "comment": "<同上>"},
+    {"name": "読みごたえ", "score": <整数>, "comment": "<同上>"}
   ],
-  "strengths": ["具体的な長所", "具体的な長所"],
-  "suggestions": ["ここをこうすると、さらにこうなる", "..."],
-  "nextStep": "次に手を付けるならどこか。一点だけ、具体的に。",
-  "summary": "読者にとってこの作品がどういう読み物なのかを3〜4文で"
+  "strengths": ["<具体的な長所>", "<具体的な長所>"],
+  "suggestions": ["<ここをこうすると、さらにこうなる>"],
+  "nextStep": "<次に手を付けるなら、一点だけ、具体的に>",
+  "summary": "<全体として良いところと、直すとさらに良くなるところ。2〜3文>"
 }
 各 comment は80〜160字。strengths と suggestions は各2〜3件、1件100〜180字。
 nextStep は60〜120字。`;
@@ -291,6 +300,26 @@ export function rejectionMessage(result, title) {
     + `手を入れたうえで、もう一度お送りください。お待ちしています。`;
 }
 
+/**
+ * 作品を読まずに返していないかを見る。
+ * ----------------------------------------------------------------------
+ * 2026-10-20。全作品がきっちり 60 点になった。原因は指示文の記入例に
+ * 書いた数字 (62/71/55/48/64、平均ちょうど 60) を、モデルがそのまま
+ * 写していたこと。例から数字は消したが、写しは他の形でも起こりうる。
+ * 点に差が無いものは、読んでいない印として扱い、次の型に回す。
+ */
+const OLD_EXAMPLE = [62, 71, 55, 48, 64];
+
+function echoed(parsed) {
+  const scores = (parsed.axes || []).map((a) => a.score);
+  if (scores.length < 2) return null;
+  if (scores.every((v, i) => v === OLD_EXAMPLE[i])) return '記入例の数字をそのまま返しています';
+  if (new Set(scores).size === 1) return '5つの観点が全部同じ点です';
+  const hi = Math.max.apply(null, scores), lo = Math.min.apply(null, scores);
+  if (hi - lo < 4) return '観点ごとの差がほとんどありません (' + lo + '〜' + hi + ')';
+  return null;
+}
+
 async function runAI(env, prompt) {
   let lastErr = null;
   for (const m of MODELS) {
@@ -302,8 +331,15 @@ async function runAI(env, prompt) {
       });
       const text = (r && (r.response || r.result || r.output_text)) || '';
       const parsed = parseResult(text);
-      if (parsed) return { ok: true, model: m, result: parsed };
-      lastErr = new Error('JSONとして読めない返事: ' + String(text).slice(0, 120));
+      if (parsed) {
+        const bad = echoed(parsed);
+        if (!bad) return { ok: true, model: m, result: parsed };
+        // 作品を読まずに返している。次の型に回す。
+        console.warn('[critique] ' + m + ' が読まずに答えました: ' + bad);
+        lastErr = new Error(bad);
+      } else {
+        lastErr = new Error('JSONとして読めない返事: ' + String(text).slice(0, 120));
+      }
     } catch (e) {
       lastErr = e;
     }
@@ -373,7 +409,12 @@ export async function ensureCritique(context, draft, opts) {
   };
 
   const ai = await runAI(env, buildPrompt(meta, s.text));
-  if (!ai.ok) return null;
+  if (!ai.ok) {
+    // 理由を捨てない。502 だけ返されても、作者にも私にも何も分からない。
+    // (2026-10-20 実際に 502 が出て、原因が追えなかった。)
+    console.warn('[critique] AIが応えませんでした:', ai.error);
+    return { aiFailed: true, reason: ai.error, tried: MODELS.length };
+  }
 
   if (kv && email) {
     let runs = 0;
@@ -426,7 +467,10 @@ export async function onRequestGet(context) {
   }
 
   const rec = await loadStored(context.env, r.draft.id);
-  return json({ ok: true, id: r.draft.id, critique: rec,
+  // 指示文を直した後は、古い版の講評をそのまま見せない。
+  // (2026-10-20 全作品 60 点だった分は、これで作り直しの対象になる。)
+  const stale = !!(rec && rec.v !== REC_VERSION);
+  return json({ ok: true, id: r.draft.id, critique: rec, stale: stale,
                 読んでいるのは: r.mine ? '作者本人' : '運営者',
                 公開の下限: PUBLISH_MIN_SCORE, 注意: NOTE });
 }
@@ -467,6 +511,13 @@ export async function onRequestPost(context) {
   const rec = await ensureCritique(context, draft,
     { force: !!body.force, email: r.who && r.who.email });
 
+  if (rec && rec.aiFailed) {
+    return json({ error: 'ai_failed',
+                  message: 'AIが講評を返しませんでした。\n\n' + rec.reason
+                         + '\n\n時間をおくと通ることがあります。'
+                         + '何度も続くようなら、この文面をそのままお伝えください。',
+                  理由: rec.reason, 試した型: rec.tried }, 502);
+  }
   if (rec && rec.tooMany) {
     return json({ error: 'too_many_runs',
                   message: '本日の講評の作成回数の上限に達しました。'
