@@ -119,9 +119,14 @@
   // 英語モードのときは題も英語にし、日本語に戻したら元の題に戻す。
   // 元の題は body の data-title-ja に控えておく（legal/_legal-i18n.js と同じやり方）。
   var DOC_TITLE_EN = {
+    // 題名を変えたら、ここにも足すこと。足し忘れるとタブだけ日本語で残る。
+    // (2026-10-19 トップページの題名を変えたのに足しておらず、実際そうなっていた。)
+    'アニノベル｜青空文庫の名作を、アニメ風の吹き出しと朗読で読む':
+      'AniNovel | Japanese classics read in anime-style speech bubbles',
     'アニノベル - アニメ風吹き出しで読むオリジナル小説プラットフォーム':
       'AniNovel — Original fiction read in anime-style speech bubbles',
     'アニノベル - 作品ビューワ': 'AniNovel — Reader',
+    '作品を書く方へ — AniNovel': 'For writers — AniNovel',
     'アニノベル': 'AniNovel'
   };
   function applyDocTitle(){

@@ -988,6 +988,55 @@ function decodeEntities(s) {
   });
 }
 
+/* ---------------------------------------------------------------------
+ * 静的ファイルを取ってくる
+ * ---------------------------------------------------------------------
+ * 2026-10-19。ここを next(別のRequest) でやろうとして失敗した。
+ * Pages の next() は「この経路の続き」を表すもので、別のパスの中身を
+ * 取る道具ではない。/en/ が本体を取れず、逃げ道の転送 (/?lang=en) に
+ * 落ち続けていた。URLが / になり、canonical もタブの題名も日本語のまま
+ * になる、という形で表に出た。
+ *
+ * 正しいのは env.ASSETS。Pages が静的ファイルを配るための口で、
+ * 外に出ないので速く、Functions の経路も通らない。
+ * 念のため三段構えにする。どれかが通ればよい。
+ *   1. env.ASSETS.fetch   … 本来の道
+ *   2. next(Request)      … 環境によっては効く
+ *   3. 絶対URLで fetch    … 最後の手段。_routes.json に入っていない
+ *                           パスなので、ここを叩いても Functions には
+ *                           戻ってこない (無限に回らない)。
+ */
+async function fetchAsset(context, path) {
+  const { env, request, next } = context;
+  const url = new URL(path, request.url).toString();
+
+  if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+    try {
+      const r = await env.ASSETS.fetch(new Request(url, { method: 'GET' }));
+      if (r && r.status === 200) return r;
+    } catch (e) { console.warn('[asset] ASSETS:', e); }
+  }
+
+  try {
+    const r = await next(new Request(url, request));
+    // next() が引数を無視すると、頼んだ覚えのない中身が返る。
+    // 自分自身 (/en/...) が返ってきたら、それは効いていない証拠。
+    if (r && r.status === 200) {
+      const u = new URL(request.url);
+      if (!u.pathname.startsWith('/en')) return r;
+      const ct = r.headers.get('Content-Type') || '';
+      if (ct.includes('text/html') || ct.includes('javascript')) return r;
+    }
+  } catch (e) { console.warn('[asset] next:', e); }
+
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': 'aninovel-edge' } });
+    if (r && r.status === 200) return r;
+  } catch (e) { console.warn('[asset] fetch:', e); }
+
+  return null;
+}
+
 let JA2EN_CACHE = null;
 let JA2EN_AT = 0;
 const JA2EN_TTL_MS = 10 * 60 * 1000;
@@ -1009,10 +1058,8 @@ async function loadJa2En(context) {
 
   let src = null;
   try {
-    const req = new Request(
-      new URL('/js/i18n.js', context.request.url).toString(), { method: 'GET' });
-    const res = await context.next(req);
-    if (res && res.status === 200) src = await res.text();
+    const res = await fetchAsset(context, '/js/i18n.js');
+    if (res) src = await res.text();
   } catch (e) {
     console.warn('[en] i18n.js を読めませんでした:', e);
   }
@@ -1106,16 +1153,8 @@ const EN_LINKS = {
  * 日本語のページを、英語の入口として出し直す。
  */
 async function enMirror(context, conf) {
-  const { request, next } = context;
 
-  let res;
-  try {
-    const src = new Request(new URL(conf.src, request.url).toString(), request);
-    res = await next(src);
-  } catch (e) {
-    console.warn('[en] 元のページを取れませんでした:', e);
-    res = null;
-  }
+  const res = await fetchAsset(context, conf.src);
 
   const ct = res ? (res.headers.get('Content-Type') || '') : '';
   if (!res || res.status !== 200 || !ct.includes('text/html')) {
