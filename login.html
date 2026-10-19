@@ -179,10 +179,10 @@ async function refresh(justLoggedIn){
       var back=new URLSearchParams(location.search).get('back');
       if(justLoggedIn || (back && /^\/[^\/]/.test(back))){ location.replace(dest()); return; }
       $('box').style.display='none'; $('me').style.display='block';
-      document.querySelector('h1').textContent='アカウント';
-      document.querySelector('.lead').textContent='ログイン中です。パスワードの変更やログアウトができます。';
+      document.querySelector('h1').textContent=L('アカウント');
+      document.querySelector('.lead').textContent=L('ログイン中です。パスワードの変更やログアウトができます。');
       $('meText').textContent=L('%s さんとしてログインしています').replace('%s',j.nickname);
-      $('meRole').textContent=j.email+' ／ '+(j.isAuthor?'作者・読者':'読者');
+      $('meRole').textContent=j.email+' / '+L(j.isAuthor?'作者・読者':'読者');
     }else{
       $('box').style.display='block'; $('me').style.display='none'; $('pwbox').style.display='none';
     }

@@ -146,6 +146,16 @@
     }catch(e){}
   }
 
+  // requestAnimationFrame は、背面のタブなどで実行されないことがある。
+  // それに任せきりだと _scheduled が立ったままになり、監視が永久に死ぬ。
+  // (2026-10-19 実際にそうなり、ログイン画面の案内が日本語のまま残った。)
+  // どちらか早い方で必ず一度だけ走らせる。
+  function _soon(fn){
+    var done=false;
+    var run=function(){ if(done)return; done=true; fn(); };
+    try{ requestAnimationFrame(run); }catch(e){}
+    setTimeout(run,50);
+  }
   var _applying=false;
   var _dirty=false;   // 変換している間に届いた描画があるか
   function applyToDOM(){
@@ -173,7 +183,7 @@
         // 変換している間にポータルが描き直した分は、監視側で捨てられている。
         // 印が立っていたら、もう一度だけ走らせて拾い直す。これが無いと
         // 描画と変換が重なったときに日本語が残り続ける。
-        if(_dirty){_dirty=false;requestAnimationFrame(applyToDOM);}
+        if(_dirty){_dirty=false;_soon(applyToDOM);}
       },0);
     }
   }
@@ -223,7 +233,7 @@
       });
       if(!hasI18n)return;
       _scheduled=true;
-      requestAnimationFrame(function(){_scheduled=false;applyToDOM();});
+      _soon(function(){_scheduled=false;applyToDOM();});
     });
     obs.observe(document.body||document.documentElement,{childList:true,subtree:true,characterData:true});
   }
