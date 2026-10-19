@@ -7723,6 +7723,10 @@ function _critiqueHTML(rec){
 }
 
 function _critiqueRender(rec){
+  if(!rec || !rec.result || !(rec.result.axes||[]).length){
+    alert('講評の中身を受け取れませんでした。\n\nもう一度お試しください。');
+    return;
+  }
   var p = _critiqueShell();
   p.innerHTML = _critiqueHTML(rec);
   p.querySelector('#critClose').onclick = _critiqueClose;
@@ -7747,18 +7751,36 @@ function _critiqueRender(rec){
 /* 講評のAPIは draft_ で始まるIDだけを受け取る。
  * 画面が扱うIDは三通りある。
  *   draft_…  サーバーの下書き            → そのまま
- *   pub_…    公開済み (下書きから公開)   → draft_ に読み替える
+ *   pub_…    公開済み                    → もとの下書きを探す
  *   my_…     この端末だけにある下書き    → サーバーに無いので対象外
- * (2026-10-19 読み替えをしておらず「下書きIDの形式が違います」が出ていた。) */
-function _critiqueId(){
+ *
+ * 公開時のIDは draft_X → pub_X とは限らない。publishedId が別に
+ * 入っている作品があるため、規則で読み替えると外れる。
+ * (2026-10-19 読み替えで外し「下書きがサーバーにありません」が出ていた。)
+ * 一覧には publishedId が入っているので、そこから正しく引く。 */
+var _critiqueTarget = null;
+
+async function _critiqueResolveId(){
   var id = String(_workParam || '');
   if (id.indexOf('draft_') === 0) return id;
-  if (id.indexOf('pub_') === 0) return 'draft_' + id.slice(4);
+  if (id.indexOf('pub_') !== 0) return null;      // my_… は対象外
+
+  // 一覧から、この公開作品のもとになった下書きを探す
+  try{
+    var list = await window.AninovelDrafts.list();
+    for (var i = 0; i < (list || []).length; i++) {
+      if (list[i] && list[i].publishedId === id) return list[i].id;
+    }
+    var guess = 'draft_' + id.slice(4);
+    for (var k = 0; k < (list || []).length; k++) {
+      if (list[k] && list[k].id === guess) return guess;
+    }
+  }catch(e){ console.warn('[AI講評] 一覧を引けませんでした:', e); }
   return null;
 }
 
 async function _critiqueFetch(method, body){
-  var cid = _critiqueId();
+  var cid = _critiqueTarget;
   var r = await fetch('/api/drafts/' + encodeURIComponent(cid) + '/critique', {
     method: method,
     credentials: 'same-origin',
@@ -7787,16 +7809,38 @@ async function _critiqueRun(force){
   }
 }
 
-/** ツールバーの「AI講評」から呼ばれる。 */
+/** ツールバーの「AI講評」から呼ばれる。
+ *
+ * 2026-10-19: 押しても何も起きない、という報告があった。どこで止まったかが
+ * 分からないのがいちばん困るので、最後まで来なかったときは必ず理由を出す。 */
 async function openAiCritique(){
+  try{ await _openAiCritique(); }
+  catch(e){
+    try{ console.error('[AI講評]', e); }catch(_){}
+    alert('AI講評でつまずきました。\n\n'
+      + ((e && (e.message || e.name)) || String(e))
+      + '\n\nこの文面をそのまま伝えていただければ原因を追えます。');
+  }
+}
+async function _openAiCritique(){
   if(!_workParam){ alert('先に作品を開いてください。'); return; }
   if(!window.AninovelDrafts){
     alert('保存機能を読み込めませんでした。ページを再読み込みしてください。'); return;
   }
-  if(!_critiqueId()){
-    alert('AI講評は、サーバーに保存した作品が対象です。\n\n'
-      + 'この作品はまだこの端末の中にだけあります。\n'
-      + '先に「公開保存」で保存してから、もう一度お試しください。');
+  var _pg0 = _showProgress('\uD83E\uDDEA 作品を確かめています');
+  _critiqueTarget = await _critiqueResolveId();
+  _hideProgress(_pg0);
+  if(!_critiqueTarget){
+    if(String(_workParam).indexOf('my_') === 0){
+      alert('AI講評は、サーバーに保存した作品が対象です。\n\n'
+        + 'この作品はまだこの端末の中にだけあります。\n'
+        + '先に「公開保存」で保存してから、もう一度お試しください。');
+    }else{
+      alert('この作品のもとになった下書きが見つかりませんでした。\n\n'
+        + 'AI講評は、エディタで書いて保存した作品が対象です。\n'
+        + '青空文庫の作品や、エディタを通さずに置いた作品は対象外です。\n\n'
+        + '作品ID: ' + _workParam);
+    }
     return;
   }
   // まず、すでに作ってある講評があるかを見る。無ければ作る。
@@ -7824,9 +7868,12 @@ async function openAiCritique(){
   }
   _hideProgress(pg);
   if(!confirm('この作品をAIに読んでもらい、講評を作りますか？\n\n'
-    + '5つの観点で点数と講評がつきます。\n'
-    + '見られるのはあなただけで、公開するかどうかは後で選べます。')) return;
-  _critiqueRun(false);
+    + '5つの観点で点数と講評がつきます。読み終わるまで少しかかります。\n'
+    + '見られるのはあなただけで、公開するかどうかは後で選べます。')){
+    alert('作成を取りやめました。\n\nもう一度「🧪 AI講評」を押せば、いつでも作れます。');
+    return;
+  }
+  await _critiqueRun(false);
 }
 
 window.openAiCritique = openAiCritique;
