@@ -5774,7 +5774,7 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
       var _dc={draft:'#6366F1',review:'#F59E0B',published:(_dp?'#B45309':'#059669'),rejected:'#DC2626'}[_ds]||'#6366F1';
       var _dt={draft:'運営者の確認を経て公開されます',review:'運営者の確認をお待ちください',published:(_dp?'直したぶんはまだ読者に届いていません。押すと運営者が確認します':'公開中です'),rejected:'差し戻されています。直してから再度依頼してください'}[_ds]||'';
       h+='<button onclick="publishMyWork()" class="btn" style="background:'+_dc+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+_dt+'">'+_dl+'</button>';
-    }else if(_workParam&&_isMyDraftId(_workParam)){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_canAuthorThisWork()){var _mineP=_isMyPubWork();h+='<button onclick="publishMyWork()" class="btn" style="background:'+(_mineP?'#6366F1':'#0E7490')+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+(_mineP?'この作品の変更を読者に公開する':'オーナー権限で他の人の作品を上書き公開')+'">'+(_mineP?'📤 公開保存':'📢 上書き公開')+'</button>';}h+='<button onclick="openClassifyReview()" class="btn" style="background:#8B5CF6;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="地の文・独白・会話を自動判定し、確信の持てないものだけ確認します">🔎 文の種別</button><button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button>'+(_showChars?'<button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="'+(state.isAuthorMode?'登場人物（追加・削除・編集）':'登場人物の一覧（作者モードで追加・削除）')+'">👥</button>':'')+'<button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span>'+_readerSaveButtonsHTML()+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button><button onclick="aiRefineSpeakers()" class="tool-chip" title="規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。">🎭 AI話者判定</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
+    }else if(_workParam&&_isMyDraftId(_workParam)){h+='<button onclick="publishMyWork()" class="btn" style="background:#6366F1;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品を投稿して読者に公開">📤 公開保存</button>';}else if(_workParam&&_canAuthorThisWork()){var _mineP=_isMyPubWork();h+='<button onclick="publishMyWork()" class="btn" style="background:'+(_mineP?'#6366F1':'#0E7490')+';color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="'+(_mineP?'この作品の変更を読者に公開する':'オーナー権限で他の人の作品を上書き公開')+'">'+(_mineP?'📤 公開保存':'📢 上書き公開')+'</button>';}h+='<button onclick="openClassifyReview()" class="btn" style="background:#8B5CF6;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="地の文・独白・会話を自動判定し、確信の持てないものだけ確認します">🔎 文の種別</button><button onclick="generateVoices()" class="btn" style="background:#0EA5E9;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）">🎤 音声生成</button>';h+='<button onclick="openDupModal()" class="btn" style="background:#F59E0B;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px" title="重複したコンテンツを検出して削除">🔍 重複検出</button>';h+='</span>';h+='<span class="tb-fold"><button onclick="showExportMenu(this)" class="btn-icon" title="エクスポート（形式を選択）">📥▾</button><label class="btn-icon" title="インポート（.txt / .docx / .pdf / .epub / .aninovel）" style="cursor:pointer">📂<input type="file" accept=".txt,.docx,.pdf,.epub,.aninovel" onchange="handleFileImport(event)" style="display:none"></label></span>';}h+='<span class="tb-fold"><button onclick="state.searchOpen=!state.searchOpen;render()" class="btn-icon" title="検索">🔍</button>'+(_showChars?'<button onclick="state.sidebarOpen=!state.sidebarOpen;render()" class="btn-icon" title="'+(state.isAuthorMode?'登場人物（追加・削除・編集）':'登場人物の一覧（作者モードで追加・削除）')+'">👥</button>':'')+'<button onclick="state.settingsOpen=!state.settingsOpen;render()" class="btn-icon" title="表示設定">⚙️</button><button onclick="state.tocOpen=!state.tocOpen;render()" class="btn-icon" title="目次">📑</button><button onclick="openBookmarks()" class="btn-icon" title="しおり">🔖</button></span>'+_readerSaveButtonsHTML()+'<button onclick="'+(state.tts.active?'stopTTS()':'startTTS()')+'" class="btn-icon'+(state.tts.active?' tts-active':'')+'" title="'+(state.tts.active?'読み上げ停止':'作品を読み上げる')+'">🔊</button><span class="tb-fold">'+(_mayAuthor?'<button onclick="toggleAuthorMode()" class="btn" title="'+(state.isAuthorMode?'読者モードに切替（閲覧専用）':'作者モードに切替（作品を編集）')+'" style="padding:6px 14px;font-size:12px;border-radius:6px;'+(state.isAuthorMode?'background:rgba(255,255,255,.15)':'background:var(--accent-author)')+';color:#fff">'+(state.isAuthorMode?'📖 読者モード':'✏️ 作者モード')+'</button>':'')+'</span><button class="btn-icon author-more-btn" onclick="showAuthorMore(this)" title="メニュー" style="font-size:22px;line-height:1">⋮</button></div></div>';h+='<div class="progress-bar"><div class="progress-fill" style="width:'+prog+'%"></div></div>';if(state.searchOpen)h+='<div class="anim-slide-down" style="background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0"><span>🔍</span><input type="text" value="'+esc(state.searchQuery)+'" placeholder="テキストを検索..." oncompositionstart="_isComposing=true" oncompositionend="_isComposing=false;performSearch(this.value)" oninput="if(!_isComposing)performSearch(this.value)" class="search-input-field" style="flex:1;padding:6px 12px;font-size:14px" autofocus><span class="search-counter" style="display:inline-flex;align-items:center;gap:4px">'+(state.searchResults.length>0?'<span style="font-size:12px;color:var(--text-muted)">'+(state.searchCurrentIdx+1)+'/'+state.searchResults.length+'</span><button onclick="navSearch(state.searchCurrentIdx-1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▲</button><button onclick="navSearch(state.searchCurrentIdx+1)" class="btn-icon" style="width:28px;height:28px;font-size:12px">▼</button>':(state.searchQuery?'<span style="font-size:12px;color:var(--text-muted)">見つかりません</span>':''))+'</span><button onclick="state.searchOpen=false;state.searchQuery=\'\';state.searchResults=[];state.searchCurrentIdx=-1;render()" class="btn-icon" style="width:28px;height:28px">✕</button></div>';if(state.isAuthorMode)h+='<div class="tool-palette"><div class="tool-chip" draggable="true" data-dragtool="narration">📝 ナレーション</div><div class="tool-chip" draggable="true" data-dragtool="dialogue">💬 セリフ</div><button onclick="addChapter()" class="tool-chip">＋章</button><button onclick="addSection()" class="tool-chip">＋節</button><button onclick="addPageBreak()" class="tool-chip">📄 改ページ</button><button onclick="aiRefineSpeakers()" class="tool-chip" title="規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。">🎭 AI話者判定</button><button onclick="openAiCritique()" class="tool-chip" title="AIが5つの観点で講評します。見られるのは作者だけで、公開するかは後で選べます。">🧪 AI講評</button></div>';h+='<div style="display:flex;flex:1;min-height:0"><div class="page-area '+(isV?'vertical-scroll-container':'')+'" id="pageArea"><div class="'+(isV?'vertical-content-wrapper':'')+'" style="'+(isV?'':'max-width:780px;margin:0 auto;padding:40px 32px;position:relative;z-index:1')+'">';if(pc.length===0){h+='<div style="text-align:center;color:var(--text-muted);padding:80px 20px"><p style="font-size:18px;margin-bottom:16px" class="font-serif-jp">コンテンツがありません</p>'+(state.isAuthorMode?'<button onclick="addFirst()" class="btn btn-author">最初のコンテンツを追加</button>':'')+'</div>'}else{h+=insertRow(pc[0].order);pc.forEach(function(item,i){if(item.type==='image'){h+=renderImageBlock(item)}else if(item.type==='video'){h+=renderVideoBlock(item)}else if(item.type==='dialogue'){h+=renderDialogue(item,i)}else if(item.type==='chapter_break'||item.type==='section_break'){h+=renderHeading(item)}else{h+=renderNarration(item)}h+=insertRow(item.order+1)})}h+='</div></div>';
     // Sidebar（登場人物）
     // 立ち読み・登録読者・他の人の作品を読んでいる作者には出さない。
     // その人たちは本文のアイコンを押して、自分用の見た目だけを変える。
@@ -7599,6 +7599,212 @@ window.toggleAuthorMode=toggleAuthorMode;
 window.toggleFullscreen=toggleFullscreen;
 window.publishMyWork=publishMyWork;
 window.unpublishMyWork=unpublishMyWork;
+
+/* =====================================================================
+ * AI講評 (作者だけが見る)
+ * =====================================================================
+ * 2026-10-19 追加。
+ *
+ * 裏側 (functions/api/drafts/[id]/critique.js) は先にできていたが、
+ * それを呼ぶボタンが無く、作者はいつまでも講評を見られなかった。
+ *
+ * ここは viewer.html の描画 (render) には一切関わらない。自前で要素を
+ * 作って body に足すだけにしてある。編集画面は大きく、壊したときの
+ * 影響が広いので、既存の仕組みには触れない。
+ *
+ * 決まりごと
+ *   ・見られるのは作者本人だけ。
+ *   ・公開するかどうかは作者が決める。既定では公開しない。
+ *   ・公開を選んだときだけ、オーナーも読める。
+ *   ・10点未満は公開を認可しない。その判定は投稿時に裏側が行う。
+ */
+var _critiqueBox = null;
+
+function _critiqueClose(){
+  if(_critiqueBox && _critiqueBox.parentNode) _critiqueBox.parentNode.removeChild(_critiqueBox);
+  _critiqueBox = null;
+  document.removeEventListener('keydown', _critiqueEsc);
+}
+function _critiqueEsc(e){ if(e.key === 'Escape') _critiqueClose(); }
+
+function _critiqueShell(){
+  _critiqueClose();
+  var w = document.createElement('div');
+  w.setAttribute('role','dialog');
+  w.setAttribute('aria-modal','true');
+  w.setAttribute('aria-label','AI講評');
+  w.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);'
+    + 'display:flex;align-items:center;justify-content:center;padding:16px';
+  var p = document.createElement('div');
+  p.style.cssText = 'background:var(--bg-primary,#fff);color:var(--text-primary,#222);'
+    + 'max-width:680px;width:100%;max-height:86vh;overflow:auto;border-radius:12px;'
+    + 'padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);'
+    + 'font-size:14px;line-height:1.75';
+  w.appendChild(p);
+  w.addEventListener('click', function(e){ if(e.target === w) _critiqueClose(); });
+  document.addEventListener('keydown', _critiqueEsc);
+  document.body.appendChild(w);
+  _critiqueBox = w;
+  return p;
+}
+
+function _critiqueBar(score){
+  var s = Math.max(0, Math.min(100, Number(score) || 0));
+  var col = s >= 70 ? '#059669' : (s >= 40 ? '#F59E0B' : '#DC2626');
+  return '<span style="display:inline-block;vertical-align:middle;width:120px;height:8px;'
+    + 'background:rgba(127,127,127,.22);border-radius:4px;overflow:hidden;margin:0 8px">'
+    + '<span style="display:block;width:' + s + '%;height:100%;background:' + col + '"></span></span>';
+}
+
+function _critiqueHTML(rec){
+  var r = (rec && rec.result) || {};
+  var axes = r.axes || [];
+  var h = '';
+  h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">'
+     + '<h2 style="margin:0;font-size:19px">AI講評</h2>'
+     + '<button id="critClose" class="btn" style="padding:4px 10px;font-size:12px">閉じる</button></div>';
+  h += '<p style="margin:6px 0 14px;color:var(--text-muted,#777);font-size:12px">'
+     + 'これは機械による一つの読み方です。作品の値打ちを決めるものではありません。'
+     + '見られるのはあなただけです。</p>';
+
+  h += '<div style="font-size:28px;font-weight:700;margin:0 0 4px">'
+     + (typeof r.total === 'number' ? r.total : '—')
+     + '<span style="font-size:14px;font-weight:400;color:var(--text-muted,#777)"> / 100</span></div>';
+  if (rec && rec.partial) {
+    h += '<p style="margin:0 0 10px;font-size:12px;color:var(--text-muted,#777)">'
+       + '長い作品のため、冒頭・中ほど・終わりを抜き出して読んでいます。</p>';
+  }
+
+  h += '<table style="width:100%;border-collapse:collapse;margin:14px 0">';
+  for (var i = 0; i < axes.length; i++) {
+    var a = axes[i];
+    h += '<tr><td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:5.5em">'
+       + esc(a.name) + '</td>'
+       + '<td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:170px">'
+       + _critiqueBar(a.score)
+       + '<span style="font-variant-numeric:tabular-nums">' + (Number(a.score) || 0) + '</span></td>'
+       + '<td style="padding:6px 0 6px 10px">' + esc(a.comment || '') + '</td></tr>';
+  }
+  h += '</table>';
+
+  function block(title, items){
+    if (!items || !items.length) return '';
+    var s = '<h3 style="margin:16px 0 6px;font-size:15px">' + title + '</h3><ul style="margin:0;padding-left:1.2em">';
+    for (var i = 0; i < items.length; i++) s += '<li style="margin:4px 0">' + esc(items[i]) + '</li>';
+    return s + '</ul>';
+  }
+  h += block('良かったところ', r.strengths);
+  h += block('こうするともっと良くなります', r.suggestions);
+  if (r.nextStep) {
+    h += '<h3 style="margin:16px 0 6px;font-size:15px">次に手を付けるなら</h3>'
+       + '<p style="margin:0">' + esc(r.nextStep) + '</p>';
+  }
+  if (r.summary) {
+    h += '<h3 style="margin:16px 0 6px;font-size:15px">読者に向けた紹介文</h3>'
+       + '<p style="margin:0">' + esc(r.summary) + '</p>';
+  }
+
+  var pub = !!(rec && rec.published);
+  h += '<div style="margin:20px 0 0;padding:12px 14px;border:1px solid var(--border,#ddd);border-radius:8px">'
+     + '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'
+     + '<input type="checkbox" id="critPublish"' + (pub ? ' checked' : '') + ' style="margin-top:3px">'
+     + '<span>この講評を読者にも見せる<br>'
+     + '<span style="font-size:12px;color:var(--text-muted,#777)">'
+     + '既定では公開しません。公開を選ぶと、運営者も読めるようになります。'
+     + 'いつでも外せます。</span></span></label>'
+     + '<p id="critPubMsg" style="margin:8px 0 0;font-size:12px;min-height:1.2em"></p></div>';
+
+  h += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
+     + '<button id="critRedo" class="btn" style="padding:6px 12px;font-size:12px">もう一度みてもらう</button>'
+     + '<span style="flex:1"></span>'
+     + '<span style="font-size:11px;color:var(--text-muted,#777);align-self:center">'
+     + (rec && rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '') + '</span></div>';
+  return h;
+}
+
+function _critiqueRender(rec){
+  var p = _critiqueShell();
+  p.innerHTML = _critiqueHTML(rec);
+  p.querySelector('#critClose').onclick = _critiqueClose;
+  p.querySelector('#critRedo').onclick = function(){ _critiqueRun(true); };
+  var cb = p.querySelector('#critPublish');
+  var msg = p.querySelector('#critPubMsg');
+  cb.onchange = async function(){
+    var want = cb.checked;
+    cb.disabled = true;
+    msg.textContent = '切り替えています…';
+    try{
+      var r = await _critiqueFetch('POST', { publish: want });
+      msg.textContent = r.published ? 'この講評は読者にも見えます。' : '公開していません。';
+    }catch(e){
+      cb.checked = !want;
+      msg.textContent = (e && e.message) || '切り替えに失敗しました。';
+    }
+    cb.disabled = false;
+  };
+}
+
+async function _critiqueFetch(method, body){
+  var r = await fetch('/api/drafts/' + encodeURIComponent(_workParam) + '/critique', {
+    method: method,
+    credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  var j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok) {
+    var m = j.message || j.error || ('エラー (' + r.status + ')');
+    var err = new Error(m); err.code = j.error; throw err;
+  }
+  return j;
+}
+
+async function _critiqueRun(force){
+  var pg = _showProgress('🧪 AIが読んでいます');
+  try{
+    var j = await _critiqueFetch('POST', force ? { force: true } : null);
+    _hideProgress(pg);
+    _critiqueRender(j.critique);
+  }catch(e){
+    _hideProgress(pg);
+    _critiqueClose();
+    alert((e && e.message) || '講評を作れませんでした。');
+  }
+}
+
+/** ツールバーの「AI講評」から呼ばれる。 */
+async function openAiCritique(){
+  if(!_workParam){ alert('先に作品を開いてください。'); return; }
+  if(!window.AninovelDrafts){
+    alert('保存機能を読み込めませんでした。ページを再読み込みしてください。'); return;
+  }
+  // まず、すでに作ってある講評があるかを見る。無ければ作る。
+  var pg = _showProgress('🧪 講評を確認中');
+  var j = null;
+  try{
+    j = await _critiqueFetch('GET');
+  }catch(e){
+    _hideProgress(pg);
+    if(e && (e.code === 'forbidden' || e.code === 'not_found')){
+      alert((e && e.message) || 'この作品の講評は見られません。');
+      return;
+    }
+    j = null;
+  }
+  if(j){
+    _hideProgress(pg);
+    if(j.critique && j.critique.result){ _critiqueRender(j.critique); return; }
+  }
+  _hideProgress(pg);
+  if(!confirm('この作品をAIに読んでもらい、講評を作りますか？\n\n'
+    + '5つの観点で点数と講評がつきます。\n'
+    + '見られるのはあなただけで、公開するかどうかは後で選べます。')) return;
+  _critiqueRun(false);
+}
+
+window.openAiCritique = openAiCritique;
+
 // ===== APP INITIALIZATION =====
 window.onload=function(){
     loadData();
