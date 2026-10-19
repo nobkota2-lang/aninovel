@@ -7744,8 +7744,22 @@ function _critiqueRender(rec){
   };
 }
 
+/* 講評のAPIは draft_ で始まるIDだけを受け取る。
+ * 画面が扱うIDは三通りある。
+ *   draft_…  サーバーの下書き            → そのまま
+ *   pub_…    公開済み (下書きから公開)   → draft_ に読み替える
+ *   my_…     この端末だけにある下書き    → サーバーに無いので対象外
+ * (2026-10-19 読み替えをしておらず「下書きIDの形式が違います」が出ていた。) */
+function _critiqueId(){
+  var id = String(_workParam || '');
+  if (id.indexOf('draft_') === 0) return id;
+  if (id.indexOf('pub_') === 0) return 'draft_' + id.slice(4);
+  return null;
+}
+
 async function _critiqueFetch(method, body){
-  var r = await fetch('/api/drafts/' + encodeURIComponent(_workParam) + '/critique', {
+  var cid = _critiqueId();
+  var r = await fetch('/api/drafts/' + encodeURIComponent(cid) + '/critique', {
     method: method,
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -7779,6 +7793,12 @@ async function openAiCritique(){
   if(!window.AninovelDrafts){
     alert('保存機能を読み込めませんでした。ページを再読み込みしてください。'); return;
   }
+  if(!_critiqueId()){
+    alert('AI講評は、サーバーに保存した作品が対象です。\n\n'
+      + 'この作品はまだこの端末の中にだけあります。\n'
+      + '先に「公開保存」で保存してから、もう一度お試しください。');
+    return;
+  }
   // まず、すでに作ってある講評があるかを見る。無ければ作る。
   var pg = _showProgress('🧪 講評を確認中');
   var j = null;
@@ -7786,7 +7806,13 @@ async function openAiCritique(){
     j = await _critiqueFetch('GET');
   }catch(e){
     _hideProgress(pg);
-    if(e && (e.code === 'forbidden' || e.code === 'not_found')){
+    if(e && e.code === 'not_found'){
+      // 青空文庫の作品など、エディタを通さずに置いた作品はここに来る。
+      alert('この作品には、もとになる下書きがサーバーにありません。\n\n'
+        + 'AI講評は、エディタで書いて保存した作品が対象です。');
+      return;
+    }
+    if(e && e.code === 'forbidden'){
       alert((e && e.message) || 'この作品の講評は見られません。');
       return;
     }
