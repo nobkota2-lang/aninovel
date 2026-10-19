@@ -11,7 +11,7 @@
 
 /* 作品紹介ページ (/works/) の中身。本文ではなく、どこにも存在しない
  * 解説文を置くための場所。中身の書き方は _worknotes.js の冒頭に書いた。 */
-import { readyNotes, noteBySlug } from './_worknotes.mjs';
+import { readyNotes, noteBySlug } from './_worknotes.js';
 
 // 本サイト以外からのfetchをブロックする (CSRF対策の一部)
 const ALLOWED_ORIGINS = [
