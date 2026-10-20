@@ -5,8 +5,47 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>404 - ページが見つかりません | アニノベル</title>
+<!-- ------------------------------------------------------------------
+     このページの言葉について
+     ------------------------------------------------------------------
+     404 は何よりも速く出たい。だから js/i18n.js (31KB) は読まない。
+     差し替えるのは5語だけなので、このページの中に置いている。
+     日本語は本文にそのまま書いてある。JavaScript が動かない人にも
+     読めるように。英語のときだけ、描く前に隠して、入れ替えてから
+     見せる。index.html と同じやり方。
+     ------------------------------------------------------------------ -->
+<script>(function(){try{
+  var l=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+  if(l!=='en')return;
+  var d=document.documentElement;
+  d.lang='en';
+  d.className=(d.className?d.className+' ':'')+'i18n-pending';
+  var reveal=function(){try{d.className=d.className.replace(/\bi18n-pending\b/g,'').trim();}catch(e){}};
+  setTimeout(reveal,3000);          // 何かあっても、白い画面のままにはしない
+  document.addEventListener('DOMContentLoaded',function(){
+    try{
+      document.title='404 - Page not found | AniNovel';
+      var EN={
+        'h2':'Page not found',
+        'p':'The story you are looking for has moved on, or does not exist yet.<br>Shall we go back to the top page and look for a new one?',
+        'a':'\uD83D\uDCD6 Back to the top page',
+        'deco':'\u2014\u2014 AniNovel \u2014\u2014'
+      };
+      var b=document.querySelector('.box');
+      if(b){
+        var h2=b.querySelector('h2'); if(h2)h2.textContent=EN.h2;
+        var ps=b.querySelectorAll('p');
+        if(ps[0])ps[0].innerHTML=EN.p;
+        var a=b.querySelector('a'); if(a)a.textContent=EN.a;
+        var dc=b.querySelector('.deco'); if(dc)dc.textContent=EN.deco;
+      }
+    }catch(e){}
+    reveal();
+  });
+}catch(e){}})();</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap');
+html.i18n-pending body{visibility:hidden}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:linear-gradient(160deg,#2D2A26,#6B4423);color:#FAF6F0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center}
 .box{max-width:520px;padding:40px}

@@ -30,6 +30,7 @@
  */
 
 import { json, loadForReader, requireAuthorOrOwner, STATUS } from '../../../_drafts.js';
+import { db } from '../../../_d1.js';
 
 // 記録の版。形を変えたら上げる。古い記録は作り直す。
 const REC_VERSION = 3;   // 2026-10-20 指示文を直したので上げる(古い記録は作り直す)
@@ -102,12 +103,26 @@ async function loadPublished(context, id) {
                           message: 'この作品の本体が見つかりません。' }, 404) };
   }
 
-  const owner = String(data.ownerEmail || '').toLowerCase();
+  // 持ち主の正は D1 の works_meta。作品の中身に入っている ownerEmail は、
+  // 下書きの仕組みができる前に公開した作品にしか無い。
+  // 2026-10-20: ここは中身の ownerEmail だけを見ていた。いまある15作品の
+  // うち13作品にその欄が無く、サイトの持ち主以外の作者は自分の作品でも
+  // 断られる状態だった（持ち主だけが gate.isOwner で通れていた）。
   const email = String((gate.who && gate.who.email) || '').toLowerCase();
+  let owner = '';
+  try {
+    const d = db(context.env);
+    if (d) {
+      const row = await d.prepare('SELECT owner_email FROM works_meta WHERE work_id = ?1')
+        .bind(id).first();
+      if (row && row.owner_email) owner = String(row.owner_email).toLowerCase();
+    }
+  } catch (e) { /* D1 が無い・引けないときは中身の欄を見る */ }
+  if (!owner) owner = String(data.ownerEmail || '').toLowerCase();
   const mine = !!owner && owner === email;
 
-  // 自分の作品か、サイトの持ち主か。持ち主を許すのは、持ち主の名前が
-  // 入っていない古い作品 (ownerEmail が空) を救うため。
+  // 自分の作品か、サイトの持ち主か。持ち主を許すのは、どちらにも
+  // 持ち主の名前が入っていない古い作品を救うため。
   if (!mine && !gate.isOwner) {
     return { deny: json({ error: 'forbidden',
                           message: '自分の作品だけが対象です。' }, 403) };

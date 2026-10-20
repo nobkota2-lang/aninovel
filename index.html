@@ -543,6 +543,23 @@ body.dark .campaign-ribbon {
   'use strict';
   
   var PHASE1_VERSION = '1.3.0';
+
+  /* ------------------------------------------------------------------
+   * この区画の文言について
+   * ------------------------------------------------------------------
+   * ここで出す文は、数を挟んで組み立てている。「全 12 作品」のように。
+   * js/i18n.js の置き換え表は一文まるごとで引くので、こういう文は
+   * どう並べても当たらない。だから画面に出す前に、こちら側で英語の
+   * 文を組み立てる。言語を切り替えると画面を読み直すので、後から
+   * 書き換わる心配はない。
+   */
+  function _p1t(ja, en) {
+    try {
+      var g = window.AninovelI18n;
+      if (g && typeof g.getLang === 'function' && g.getLang() === 'en') return en;
+    } catch (e) {}
+    return ja;
+  }
   console.log('[Phase 1] Enhancement script loaded, version ' + PHASE1_VERSION);
   
   // ========== ユーティリティ ==========
@@ -575,29 +592,40 @@ body.dark .campaign-ribbon {
       // 既に追加されているか確認
       if (card.querySelector('.phase1-read-time-badge')) return;
       
-      // 文字数を取得（例: "2754字" のパターン）
-      var text = card.textContent;
-      var match = text.match(/([0-9,]+)字/);
-      if (!match) return;
-      
-      var chars = parseInt(match[1].replace(/,/g, ''));
-      if (isNaN(chars) || chars === 0) return;
+      // 文字数は、カード自身が data-chars として持っている。
+      //
+      // 2026-10-20: ここは表示文字列から /([0-9,]+)字/ を拾っていた。
+      // 英語モードのカードは「424 chars」と出るので一つも当たらず、
+      // 英語では読了時間バッジが出ていなかった。
+      // portal.js が同じ理由で data-chars を持たせてある（297行）ので、
+      // 表示の言葉ではなく、そちらの数を使う。
+      var chars = parseInt(card.dataset ? (card.dataset.chars || '') : '', 10);
+      if (isNaN(chars) || chars <= 0) {
+        // 古いカード（data-chars が無い）への備え。日本語・英語の両方を見る。
+        var m2 = (card.textContent || '').match(/([0-9,]+)\s*(?:字|chars)/);
+        if (!m2) return;
+        chars = parseInt(m2[1].replace(/,/g, ''), 10);
+      }
+      if (isNaN(chars) || chars <= 0) return;
       
       var readTimeMin = Math.ceil(chars / 450); // 450文字/分が日本語の平均読書速度
       
       var badge = document.createElement('span');
       badge.className = 'phase1-read-time-badge';
-      badge.textContent = '⏱️ 約' + readTimeMin + '分';
+      badge.textContent = _p1t('⏱️ 約' + readTimeMin + '分',
+                                 '⏱️ ~' + readTimeMin + ' min');
       
-      // 適切な挿入位置を探す
-      var insertTarget = card.querySelector('.work-stats, .work-meta, .card-meta');
+      // 差し込み先。portal.js が作っているのは .card-stats。
+      // 2026-10-20: ここは .work-stats / .work-meta / .card-meta を
+      // 探していたが、どれも実在しないクラス名だった。
+      var insertTarget = card.querySelector('.card-stats, .work-stats, .work-meta, .card-meta');
       if (insertTarget) {
         insertTarget.appendChild(badge);
       } else {
-        // フォールバック: 字数表記の近くに挿入
-        var charSpan = Array.from(card.querySelectorAll('*')).find(function(el) {
-          return /[0-9,]+字/.test(el.textContent) && el.children.length === 0;
-        });
+        // 備え: 字数のバッジの隣に置く。日本語・英語の両方を見る。
+        var charSpan = Array.prototype.slice.call(card.querySelectorAll('*')).filter(function(el) {
+          return el.children.length === 0 && /[0-9,]+\s*(?:字|chars)/.test(el.textContent || '');
+        })[0];
         if (charSpan && charSpan.parentNode) {
           charSpan.parentNode.appendChild(badge);
         }
@@ -690,10 +718,21 @@ body.dark .campaign-ribbon {
       var statsEl = document.getElementById('phase1-filter-stats');
       if (statsEl && r) {
         statsEl.textContent = active
-          ? (r.matched + ' / ' + r.total + ' 作品が該当'
-             + (r.aozora ? '（うち青空文庫 ' + r.aozora + ' 作品）' : '')
-             + (r.unknownLength ? ' ／ 字数が記録されていない ' + r.unknownLength + ' 作品は長さで絞れません' : ''))
-          : ('全 ' + r.total + ' 作品');
+          ? _p1t(
+              r.matched + ' / ' + r.total + ' 作品が該当'
+                + (r.aozora ? '（うち青空文庫 ' + r.aozora + ' 作品）' : '')
+                + (r.unknownLength ? ' ／ 字数が記録されていない ' + r.unknownLength + ' 作品は長さで絞れません' : '')
+            , r.matched + ' of ' + r.total + (r.total === 1 ? ' work' : ' works')
+                + (r.matched === 1 ? ' matches' : ' match')
+                + (r.aozora ? ' (' + r.aozora + ' from Aozora Bunko)' : '')
+                + (r.unknownLength
+                     ? ' / ' + r.unknownLength + (r.unknownLength === 1 ? ' work has' : ' works have')
+                       + ' no character count, so the length filter skips '
+                       + (r.unknownLength === 1 ? 'it' : 'them')
+                     : '')
+            )
+          : _p1t('全 ' + r.total + ' 作品',
+                 'All ' + r.total + (r.total === 1 ? ' work' : ' works'));
       }
 
       var noRes = document.getElementById('phase1-no-results');

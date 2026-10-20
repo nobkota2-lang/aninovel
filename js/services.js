@@ -75,9 +75,17 @@
 
     /** 作品カタログを取得（静的JSON＋投稿済み作品をマージ） */
     getCatalog: function() {
+      // 静的カタログは土台にすぎない。中身はサーバー(KV)から来る。
+      // 2026-10-20: ここで throw していたため、このファイルが無い・壊れている
+      // だけで Promise.all が落ち、作品一覧がまるごと出なくなっていた。
+      // 土台が無いときは空の土台として続ける。
       var staticP = fetch('data/catalog.json').then(function(r) {
-        if (!r.ok) throw new Error('カタログの読み込みに失敗しました');
-        return r.json();
+        return r.ok ? r.json() : { version: '1.0', works: [] };
+      }).catch(function() {
+        return { version: '1.0', works: [] };
+      }).then(function(d) {
+        if (!d || !Array.isArray(d.works)) d = { version: '1.0', works: [] };
+        return d;
       });
       // サーバー(KV)の投稿作品カタログ — 他ユーザー/他端末の投稿もここから取得
       // キャッシュ回避は必須。これが無いと公開直後にブラウザキャッシュの古いカタログが返り、
@@ -132,7 +140,23 @@
       // 投稿作品(pub_)はサーバー(KV)から取得 — 他のブラウザ/ユーザーでも閲覧可能
       if (workId && workId.indexOf('pub_') === 0) {
         return fetch('/api/works/' + encodeURIComponent(workId)).then(function(r) {
-          if (r.ok) return r.json();
+          if (r.ok) {
+            // 「これは自分の作品か」はサーバーが答える。
+            // 2026-10-20: 以前は作品データに入っていた ownerEmail を
+            // 画面側で見比べていた。そのために、ログインしていない
+            // 読者にまで作者のメールアドレスが渡っていた。
+            // いまは答えだけが見出し (X-Work-Is-Mine) で来る。
+            var mine = null;
+            try {
+              var hv = r.headers.get('X-Work-Is-Mine');
+              if (hv === '1') mine = true;
+              else if (hv === '0') mine = false;
+            } catch (e) {}
+            return r.json().then(function(j) {
+              if (j && typeof j === 'object' && mine !== null) j.isMine = mine;
+              return j;
+            });
+          }
           if (pub[workId]) return pub[workId].data;
           throw new Error('投稿作品が見つかりません: ' + workId);
         }).catch(function(e) {

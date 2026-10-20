@@ -20,6 +20,7 @@
 
 import { sameSite, denyHotlink } from '../../_origin.js';
 import { currentUser } from '../../_authlib.js';
+import { db } from '../../_d1.js';
 
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -83,6 +84,115 @@ async function readVersionList(kv, id) {
   }
 }
 
+/* ------------------------------------------------------------------
+ * 作品の中身からメールアドレスを外す
+ * ------------------------------------------------------------------
+ * 2026-10-20 追加。
+ *
+ * この口はログインの要らない読み取り口で、保存されている JSON を
+ * そのまま返していた。その JSON には ownerEmail が入っているものが
+ * あり、作者のメールアドレスが誰にでも読める状態だった。
+ * （mystery-garden と pub_owner_bizwoman で実際に出ていた。）
+ *
+ * 作品の中身に、人の連絡先が混ざっていてよい理由はない。
+ * 末尾が Email / email の鍵は、上の階層から取り除いて返す。
+ *
+ * 速さについて
+ *   作品は 10MB まで許している。読むたびに読み直して組み直すのは
+ *   重いので、まず文字として「Email"」があるかだけ見る。無ければ
+ *   そのまま返す。いまの作品は、ほとんどがこの道を通る。
+ *
+ *   あるときだけ読み直して、上の階層の鍵を落として組み直す。
+ *   読み直せないときは文字として切るが、その場合も必ず JSON として
+ *   読めることを確かめてから返す。確かめられないときは返さない。
+ *   漏らすより、返さない方がよい。
+ *
+ *   なお、本当の直し方は「作品の中身に ownerEmail を書かない」こと。
+ *   持ち主は D1 の works_meta と KV の別の鍵が持っている。
+ *   書き込み側（api/author/works/[id].js と api/drafts/[id]/submit.js）
+ *   から外すのが次の仕事。ここはそれまでの蓋。
+ */
+const EMAIL_KEY_RE = /email$/i;
+
+function looksLikeEmailKey(blob) {
+  return blob.indexOf('Email"') >= 0 || blob.indexOf('email"') >= 0;
+}
+
+/** 文字のまま、"…email": "…" の一組を消す。鍵の位置を問わない。 */
+function cutEmailPairs(blob) {
+  return blob.replace(/\s*"[A-Za-z0-9_]*[Ee]mail"\s*:\s*(?:"(?:[^"\\]|\\.)*"|null)\s*,?/g, function (m) {
+    // 後ろに , が無い（最後の鍵だった）場合は、前の , を落とす必要がある。
+    return /,\s*$/.test(m) ? '' : '\u0000CUT\u0000';
+  }).replace(/,\s*\u0000CUT\u0000/g, '').replace(/\u0000CUT\u0000/g, '');
+}
+
+/**
+ * 返す中身と、持ち主のメール（サーバーの中だけで使う）を作る。
+ * 失敗したときは null を返す。呼ぶ側は 500 を返すこと。
+ */
+function sanitizeWork(blob) {
+  if (!looksLikeEmailKey(blob)) return { body: blob, ownerEmail: null };
+
+  // 読み直せるなら、鍵を落として組み直す。これがいちばん確かな道。
+  try {
+    const obj = JSON.parse(blob);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      let owner = null;
+      for (const k of Object.keys(obj)) {
+        if (EMAIL_KEY_RE.test(k)) {
+          if (k === 'ownerEmail' && typeof obj[k] === 'string') owner = obj[k];
+          delete obj[k];
+        }
+      }
+      return { body: JSON.stringify(obj), ownerEmail: owner };
+    }
+  } catch (e) { /* 下の道へ */ }
+
+  // 読み直せなかったとき（形が想定と違う）の最後の手。
+  // 文字として切ったあと、必ず JSON として読めることを確かめる。
+  // 確かめずに返すと、本文の中に同じ形の文字列があった場合に
+  // 壊れたものを渡してしまう。
+  try {
+    const cut = cutEmailPairs(blob);
+    if (looksLikeEmailKey(cut)) return null;   // 取り切れていない
+    JSON.parse(cut);                           // 大きさによらず必ず確かめる
+    const m = blob.match(/"ownerEmail"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    return { body: cut, ownerEmail: m ? m[1] : null };
+  } catch (e) { return null; }
+}
+
+/**
+ * 「これはあなたの作品ですか」に、はい・いいえだけで答える。
+ * メールアドレスは返さない。判断はサーバーの中で済ませる。
+ * ログインしていない人には答えない（null）。
+ */
+async function amIOwner(context, id, ownerFromBlob) {
+  let u = null;
+  try { u = await currentUser(context.request, context.env); } catch (e) { u = null; }
+  if (!u) return null;
+  const me = String(u.email || '').toLowerCase();
+  if (!me) return null;
+
+  const roles = u.roles || [];
+  if (roles.indexOf('owner') !== -1) return true;
+
+  // 持ち主の正は D1 の works_meta。作品の中身に入っている ownerEmail は、
+  // 古い作品にしか無いので当てにしない。
+  try {
+    const d = db(context.env);
+    if (d) {
+      const row = await d.prepare('SELECT owner_email FROM works_meta WHERE work_id = ?1')
+        .bind(id).first();
+      if (row && row.owner_email) {
+        return String(row.owner_email).toLowerCase() === me;
+      }
+    }
+  } catch (e) { /* D1 が無い・引けないときは下へ */ }
+
+  if (ownerFromBlob) return String(ownerFromBlob).toLowerCase() === me;
+  return false;
+}
+
 // GET /api/works/:id
 export async function onRequestGet(context) {
   // 他所のページから当サイトの本文を読ませる形の複製を断る。
@@ -134,13 +244,24 @@ export async function onRequestGet(context) {
     return json({ error: 'not found' }, 404);
   }
 
-  return new Response(stored, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-    },
-  });
+  const safe = sanitizeWork(stored);
+  if (!safe) {
+    // 連絡先を外せなかった。中身を返すより、返さない方を選ぶ。
+    console.error('[works] ' + id + ': メールアドレスを外せませんでした');
+    return json({ error: 'sanitize_failed', message: 'この作品を安全に返せませんでした。' }, 500);
+  }
+
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    // 作者判定に使う。以前は作品の中の ownerEmail を画面側で見比べて
+    // いたため、メールアドレスを配る必要があった。ここでは答えだけ渡す。
+    'Vary': 'Cookie',
+  };
+  const mine = await amIOwner(context, id, safe.ownerEmail);
+  if (mine !== null) headers['X-Work-Is-Mine'] = mine ? '1' : '0';
+
+  return new Response(safe.body, { status: 200, headers });
 }
 
 // PUT /api/works/:id — 保存 + バージョン履歴作成
