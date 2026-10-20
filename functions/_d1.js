@@ -152,6 +152,39 @@ export async function checkPeek(env, request, reader, workId) {
   }
 }
 
+/**
+ * その読者が、その作品を今日すでに開いたか。
+ * ------------------------------------------------------------------
+ * 2026-10-20 追加。api/reading.js が import しているのに定義が無く、
+ * Pages の Functions バンドルが「No matching export」で落ちていた。
+ *
+ * 中身は checkPeek の中にある「今日すでに開いたか」の照会と同じもの。
+ * 違いは、数え上げも書き込みもしないこと。読み取りだけ。
+ *
+ * 何のためにあるか
+ *   登録していない読者が、作品を開く手順を踏まずに読書の記録だけを
+ *   投げてくる経路を塞ぐ。開いた記録 (peek_counts) が無ければ数えない。
+ *
+ * 引けなかったときは false を返す（＝数えない）。
+ *   checkPeek は引けなかったとき「読ませる側」に倒すが、それは
+ *   読む権利の話。こちらはポイントの話なので、確かめられないものを
+ *   数える方には倒さない。数え落ちは取り返せるが、
+ *   水増しは支払いの根拠を壊す。
+ */
+export async function peekSeen(env, reader, workId) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    const row = await d.prepare(
+      'SELECT 1 FROM peek_counts WHERE reader = ?1 AND day = ?2 AND work_id = ?3'
+    ).bind(reader, jstDay(), workId).first();
+    return !!row;
+  } catch (e) {
+    console.warn('[d1] 立ち読みの記録を引けませんでした:', e && e.message);
+    return false;
+  }
+}
+
 /* ---------------- 読書ログ ---------------- */
 
 /**
