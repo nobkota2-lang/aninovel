@@ -202,13 +202,25 @@ export async function onRequestPut(context) {
   await kv.put('work:' + id, JSON.stringify(data));
 
   // 3) サーバーカタログを更新
+  //
+  //    行を丸ごと置き換えてはいけない。画面が送ってくる meta は本文から
+  //    出せる項目だけで、英訳の題 (titleEn / authorEn / descriptionEn)、
+  //    表紙の画像、sourceLang、公開停止の印などは入っていない。
+  //    置き換えると、それらが黙って消える。
+  //
+  //    2026-10-20: ここは置き換えていた。_drafts.js の publishDraft には
+  //    同じ理由の注意書きがあり、そちらは重ねているのに、この経路だけが
+  //    守られていなかった。作者が公開済みの作品を1文字直して上書き公開
+  //    するだけで、手で付けた英題が消える状態だった。
+  //    （『坊ちゃん』の題を直すと titleEn の "Botchan" が消える。）
   if (meta) {
     const catalog = await readCatalog(kv);
-    const entry = Object.assign({}, meta, {
+    const idx = catalog.findIndex(function (w) { return w && w.id === id; });
+    const prev = (idx >= 0 && catalog[idx]) ? catalog[idx] : {};
+    const entry = Object.assign({}, prev, meta, {
       id: id,
       updatedAt: new Date().toISOString(),
     });
-    const idx = catalog.findIndex(function (w) { return w && w.id === id; });
     if (idx >= 0) catalog[idx] = entry;
     else catalog.push(entry);
     await kv.put(CATALOG_KEY, JSON.stringify(catalog));

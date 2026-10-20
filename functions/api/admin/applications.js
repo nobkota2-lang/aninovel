@@ -7,9 +7,31 @@
  *   POST { id, action, reason }
  *         action = 'approve' | 'reject'
  */
-import { requireOwner } from '../../_owner.js';
 import { kvOf, json, putUser, getUser } from '../../_authlib.js';
+import { requireOwner as requireOwnerCommon } from '../../_owner.js';
 import { sendMail, originOf, mailToAuthorOnApprove, mailToAuthorOnReject } from '../../_mail.js';
+
+/* 入口の判定は _owner.js の requireOwner に寄せる。
+ *
+ * 2026-10-20: ここは Cloudflare Access のトークンを自前で検証し、
+ * ACCESS_TEAM_DOMAIN と ACCESS_AUD が無いと 503「Access が未設定です」を
+ * 返していた。環境変数が入っていなかったため、管理画面を開くだけで
+ * この節が 503 になり、作者登録の承認がまるごとできなかった。
+ *
+ * Access はダッシュボードで api/admin/* を守っていて、通っていない
+ * 要求はそもそもここに届かない。コード側の環境変数は、届いた
+ * トークンを読むためのものにすぎない。無いことを理由に断るのは筋が違う。
+ *
+ * _owner.js の requireOwner は、サイトのログイン (オーナーの役) か
+ * Access のどちらかで通す。同じ管理画面の「公開中の作品」
+ * (api/admin/published.js) や差し止め請求もこれを使っている。
+ * この節だけ違う判定にしておく理由がない。
+ */
+async function requireOwner(context) {
+  const g = await requireOwnerCommon(context);
+  if (g.deny) return g;
+  return { who: Object.assign({}, g.who, { isOwner: true }) };
+}
 
 export async function onRequestGet(context) {
   const g = await requireOwner(context);

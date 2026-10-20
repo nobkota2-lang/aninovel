@@ -7041,7 +7041,23 @@ function applyI18n(){
     if(state.lang!=='en') return;
     var root=document.getElementById('app'); if(!root) return;
     // テキストノード走査
-    var w=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    //
+    // <script> と <style> の中身も文字の塊なので、走査が当たると
+    // ソースや CSS を書き換えてしまう。このファイルの CSS には
+    //   .insert-area.drag-over::after{content:'▼ ここにドロップ ▼'}
+    // のように、画面に効く日本語が入っている。
+    // translate="no" / class="notranslate" も尊重する。
+    var _SKIP_TAGS={SCRIPT:1,STYLE:1,NOSCRIPT:1,TEMPLATE:1,CODE:1,PRE:1,TEXTAREA:1};
+    function _skipNode(n){
+      for(var e=n.parentNode; e && e.nodeType===1; e=e.parentNode){
+        if(_SKIP_TAGS[e.tagName]) return true;
+        if(e.getAttribute && e.getAttribute('translate')==='no') return true;
+        if(e.classList && e.classList.contains('notranslate')) return true;
+      }
+      return false;
+    }
+    var w=document.createTreeWalker(root, NodeFilter.SHOW_TEXT,
+      {acceptNode:function(n){return _skipNode(n)?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;}}, false);
     var node, nodes=[]; while(node=w.nextNode()){ nodes.push(node); }
     for(var i=0;i<nodes.length;i++){
       var t=nodes[i].nodeValue; if(!t) continue; var k=t.trim(); if(!k) continue;

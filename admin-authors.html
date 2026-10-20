@@ -6,7 +6,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>作者登録の承認 — AniNovel</title>
+<!-- ------------------------------------------------------------------
+     この画面の言葉について
+     ------------------------------------------------------------------
+     2026-10-20: ここは i18n の仕組みが一切入っておらず、英語モードでも
+     すべて日本語だった。言葉は js/i18n-admin.js に分けてある。
+     この画面でしか出ない語が 280 ほどあるので、読者が開く
+     js/i18n.js の表には足さない。
+     英語のときだけ、描く前に隠して、入れ替えてから見せる。
+     ------------------------------------------------------------------ -->
+<script>(function(){try{
+  var l=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+  if(l!=='en')return;
+  var d=document.documentElement;
+  d.classList.add('i18n-pending');
+  window.__i18nReveal=function(){try{d.classList.remove('i18n-pending');}catch(e){}};
+  setTimeout(window.__i18nReveal,6000);   // 何かあっても白い画面のままにはしない
+}catch(e){}})();</script>
 <style>
+html.i18n-pending body{visibility:hidden}
 :root{
   --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
   --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52; --err:#b23a3a; --ok:#3a7d44;
@@ -66,6 +84,37 @@ dl.kv dd{margin:0;word-break:break-word}
   border-radius:8px;padding:10px 12px;margin-top:4px;font-size:.9rem}
 
 </style>
+<script src="js/i18n-admin.js"></script>
+<script src="js/i18n.js"></script>
+<script>
+/* ------------------------------------------------------------------
+ * 知らせの文 (alert / confirm / prompt)
+ * ------------------------------------------------------------------
+ * これらはブラウザが出す窓なので、画面の走査では直せない。
+ * 出す直前に言葉を入れ替える。値や作品名を挟んで組み立てた文が
+ * 多いので、丸ごと一致だけでなく断片でも引く textFull を使う。
+ */
+(function(){
+  function tr(m){
+    try{
+      var g = window.AninovelI18n;
+      if (!g || typeof g.textFull !== 'function') return m;
+      if (typeof g.getLang === 'function' && g.getLang() !== 'en') return m;
+      return g.textFull(String(m));
+    }catch(e){ return m; }
+  }
+  ['alert','confirm','prompt'].forEach(function(name){
+    var orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function(){
+      var a = Array.prototype.slice.call(arguments);
+      if (a.length) a[0] = tr(a[0]);
+      if (name === 'prompt' && a.length > 1) a[1] = tr(a[1]);
+      return orig.apply(window, a);
+    };
+  });
+})();
+</script>
 </head>
 <body>
 <div class="wrap wide">
@@ -151,6 +200,19 @@ dl.kv dd{margin:0;word-break:break-word}
       <button class="btn sm ghost" id="wclear">作者を外す</button>
     </div>
     <div class="msg" id="wmsg"></div>
+  </div>
+
+  <h1 style="margin-top:42px">英語で出す題名と作者名</h1>
+  <p class="lead">英語で読む人に見える題名と作者名です。一覧・作品の画面・SNSのカードがここを読みます。<br>
+    本文の翻訳とは別のもので、ここを直しても本文には触りません。</p>
+  <div class="card">
+    <p class="hint" style="margin:0 0 12px">英語の欄が空の作品は、AIが本文から作った題名が出ます。
+      そのままだと原題から離れた題になることがあるので、気になるものはここで決めてください。</p>
+    <div class="row">
+      <button class="btn sm ghost" id="enLoad">一覧を読み込む</button>
+    </div>
+    <div id="enList" style="margin-top:12px"></div>
+    <div class="msg" id="enMsg"></div>
   </div>
 
   <h1 style="margin-top:42px">利用者と権限</h1>
@@ -286,7 +348,25 @@ var $=function(id){return document.getElementById(id);};
 function show(kind,text){ var m=$('msg'); m.className='msg '+kind; m.textContent=text; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-function when(ms){ return ms ? new Date(ms).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : ''; }
+/* 日付の書き方。
+   2026-10-20: ここは ja-JP 固定で、英語モードでも「2026/10/1 9:00:00」と
+   日本式に出ていた。法務ページで同じ指摘を受けた箇所と同じたぐい。
+   時刻そのものは日本時間のまま。運営の暦は日本時間で動いているので、
+   表記だけを言語に合わせる。英語は 1 Oct 2026, 09:00 の形。*/
+function _dt(v){
+  if(!v) return '';
+  var d = (v instanceof Date) ? v : new Date(v);
+  if(isNaN(d.getTime())) return '';
+  var en = false;
+  try{
+    var g = window.AninovelI18n;
+    en = !!(g && typeof g.getLang === 'function' && g.getLang() === 'en');
+  }catch(e){}
+  if(!en) return d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+  return d.toLocaleString('en-GB',{ timeZone:'Asia/Tokyo', day:'numeric', month:'short',
+                                    year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function when(ms){ return _dt(ms); }
 
 var all=[];
 
@@ -412,6 +492,67 @@ $('reload').onclick=load;
 $('onlyPending').onchange=render;
 load();
 
+/* ===== 英語で出す題名と作者名 =====
+   カタログの titleEn / authorEn を直す。
+   この欄を書き込む経路がアプリのどこにも無く、間違いが入ったまま
+   直せなかった (authorEn が "Oonaa" の作品が2件、英題の末尾に句点が
+   付いた作品が3件)。本文も原文の欄も触らない。 */
+var enRows = [];
+
+async function enLoad(){
+  $('enMsg').className='msg ok'; $('enMsg').textContent='読み込んでいます…';
+  var r = await adminFetch('/api/admin/catalog-meta');
+  if(r.authRequired){ authLost($('enMsg')); return; }
+  if(!r.ok){ $('enMsg').className='msg err'; $('enMsg').textContent=r.error; return; }
+  enRows = (r.data||{}).works || [];
+  $('enMsg').className='msg'; $('enMsg').textContent='';
+  enRender();
+}
+
+function enRender(){
+  if(!enRows.length){
+    $('enList').innerHTML='<p class="hint" style="margin:0">作品がありません。</p>';
+    return;
+  }
+  $('enList').innerHTML = enRows.map(function(w,i){
+    return '<div style="padding:12px 0;border-top:1px solid var(--line)">'
+      + '<div style="font-weight:600">'+esc(w.title||'無題の作品')+'</div>'
+      + '<div class="hint" style="margin:2px 0 8px">'+esc(w.author||'作者名なし')
+      + ' ／ <span style="font-family:monospace;font-size:.85rem">'+esc(w.id)+'</span></div>'
+      + '<label for="enT'+i+'">英語の題名</label>'
+      + '<input id="enT'+i+'" value="'+esc(w.titleEn||'')+'" placeholder="（未設定・AIの訳が出ます）">'
+      + '<label for="enA'+i+'" style="margin-top:8px">英語の作者名</label>'
+      + '<input id="enA'+i+'" value="'+esc(w.authorEn||'')+'" placeholder="（未設定）">'
+      + '<div class="row" style="margin-top:10px">'
+      + '<button class="btn sm" data-enset="'+i+'">この作品を保存</button>'
+      + '</div></div>';
+  }).join('');
+  $('enList').querySelectorAll('[data-enset]').forEach(function(b){
+    b.onclick = function(){ enSave(Number(b.dataset.enset)); };
+  });
+}
+
+async function enSave(i){
+  var w = enRows[i]; if(!w) return;
+  var t = $('enT'+i).value.trim();
+  var a = $('enA'+i).value.trim();
+  $('enMsg').className='msg ok'; $('enMsg').textContent='保存しています…';
+  var r = await adminFetch('/api/admin/catalog-meta', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id:w.id, titleEn: t || null, authorEn: a || null })
+  });
+  if(r.authRequired){ authLost($('enMsg')); return; }
+  if(!r.ok){
+    $('enMsg').className='msg err';
+    $('enMsg').textContent=((r.data&&r.data.message)||r.error);
+    return;
+  }
+  var after=(r.data||{}).after||{};
+  enRows[i].titleEn=after.titleEn||''; enRows[i].authorEn=after.authorEn||'';
+  $('enMsg').className='msg ok';
+  $('enMsg').textContent='「'+(w.title||w.id)+'」の英語の欄を保存しました。';
+}
+
 /* ===== 作品の作者を決める ===== */
 function wshow(kind,text){ var m=$('wmsg'); m.className='msg '+kind; m.textContent=text; }
 function widNow(){ return ($('widManual').value.trim() || $('wid').value || ''); }
@@ -431,6 +572,7 @@ function widNow(){ return ($('widManual').value.trim() || $('wid').value || '');
   }catch(e){ $('wid').innerHTML='<option value="">（一覧を取得できませんでした。下の欄にIDを入力）</option>'; }
 })();
 
+$('enLoad').onclick=enLoad;
 $('whoGet').onclick=async function(){
   var id=widNow(); if(!id){ wshow('err','作品を選ぶか、作品IDを入力してください。'); return; }
   $('whoNow').textContent='';
@@ -473,9 +615,19 @@ function roleLabel(roles){
   roles=roles||[];
   var a=[]; if(roles.indexOf('owner')>=0)a.push('オーナー');
   if(roles.indexOf('author')>=0)a.push('作者'); a.push('読者');
-  return a.join('・');
+  return a.map(_T).join(_T('・'));
 }
-function statusLabel(s){ return {active:'使える',unverified:'メール未確認',disabled:'停止'}[s]||s; }
+/* ラベルを返すこの2つは、戻り値が文の中に差し込まれる。
+   「状態が「使える」のままです。」のように。
+   画面の走査では、差し込まれた塊ごと引くことになり、
+   語の組み合わせの数だけ辞書が要る。元で訳す方が確かで短い。 */
+function _T(x){
+  try{
+    var g=window.AninovelI18n;
+    return (g&&typeof g.text==='function')?g.text(x):x;
+  }catch(e){ return x; }
+}
+function statusLabel(s){ return _T({active:'使える',unverified:'メール未確認',disabled:'停止'}[s]||s); }
 
 function syncStatusWarn(){
   $('ustatusWarn').style.display = ($('ustatus').value==='active') ? 'none' : 'block';
@@ -654,7 +806,7 @@ function rvRender(){
       '</div>'+
       '<dl class="kv">'+
         '<dt>依頼した人</dt><dd>'+esc(d.ownerEmail||'')+'</dd>'+
-        '<dt>依頼した日時</dt><dd>'+esc(d.submittedAt?new Date(d.submittedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</dd>'+
+        '<dt>依頼した日時</dt><dd>'+esc(d.submittedAt?_dt(d.submittedAt):'')+'</dd>'+
         '<dt>本文の数</dt><dd>'+esc(String(d.itemCount||0))+' 件</dd>'+
         '<dt>作品ID</dt><dd style="font-family:monospace;font-size:.85rem">'+esc(d.id)+'</dd>'+
       '</dl>'+
@@ -753,7 +905,7 @@ function pbRender(){
           '<div style="font-weight:600">'+esc(w.title)+'</div>'+
           '<div class="hint">'+esc(w.author||'作者名なし')+
             ' ／ <span style="font-family:monospace;font-size:.85rem">'+esc(w.id)+'</span>'+
-            (w.updatedAt?' ／ 更新 '+esc(new Date(w.updatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})):'')+
+            (w.updatedAt?' ／ 更新 '+esc(_dt(w.updatedAt)):'')+
           '</div>'+
         '</div>'+
         '<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(w.id)+'" target="_blank" '+
@@ -837,8 +989,8 @@ function objRender(){
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'+
         '<div style="min-width:0">'+
           '<div style="font-weight:700;font-family:monospace;font-size:.95rem">'+esc(r.workId)+'</div>'+
-          '<div class="hint">最初の請求 '+esc(r.first?new Date(r.first).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+
-            ' ／ 最新 '+esc(r.last?new Date(r.last).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</div>'+
+          '<div class="hint">最初の請求 '+esc(r.first?_dt(r.first):'')+
+            ' ／ 最新 '+esc(r.last?_dt(r.last):'')+'</div>'+
         '</div>'+
         '<span style="font-size:.8rem;font-weight:700;padding:3px 12px;border-radius:99px;color:#fff;'+
           'background:'+(heavy?'#DC2626':(r.count>=2?'#F59E0B':'#6B635A'))+'">'+r.count+' 件</span>'+
@@ -872,7 +1024,7 @@ async function objDetail(workId){
       return '<div style="padding:6px 0;border-bottom:1px solid var(--line)">'+
         '<div style="font-size:.86rem"><strong>'+esc(it.reasonLabel)+'</strong>'+
           ' <span class="hint">'+esc(it.reporter==='member'?'会員':'未ログイン')+
-          ' ／ '+esc(it.at?new Date(it.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</span></div>'+
+          ' ／ '+esc(it.at?_dt(it.at):'')+'</span></div>'+
         (it.comment?'<div class="bio" style="margin-top:4px">'+esc(it.comment)+'</div>':'')+
       '</div>';
     }).join('')+'</div>';
@@ -896,7 +1048,7 @@ function alRender(){
           (r.checked?'':' <span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:99px;'+
             'color:#B45309;background:rgba(245,158,11,.16)">未確認</span>')+'</div>'+
         '<div class="hint">'+esc(r.ownerEmail||'')+' ／ '+
-          esc(r.at?new Date(r.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'')+'</div>'+
+          esc(r.at?_dt(r.at):'')+'</div>'+
         '<div class="hint">追加 '+(d.added||0)+'件 ／ 変更 '+(d.changed||0)+'件 ／ 削除 '+(d.removed||0)+'件</div>'+
       '</div>'+
       (r.publishedId?'<a class="btn sm ghost" href="viewer.html?work='+encodeURIComponent(r.publishedId)+

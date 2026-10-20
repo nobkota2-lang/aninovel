@@ -11,8 +11,7 @@
  *
  * このパスも Access の api/author/* に含まれるので保護される。
  */
-import { requireOwner } from '../../../../_owner.js';
-
+import { requireOwner as requireOwnerCommon } from '../../../../_owner.js';
 const ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 
 function json(obj, status = 200) {
@@ -24,6 +23,25 @@ function json(obj, status = 200) {
 
 function getKV(env) {
   return env.WORKS || env.WORKS_KV || null;
+}
+
+/* 入口の判定は _owner.js の requireOwner に寄せる。
+ * 理由は api/admin/applications.js と同じ。環境変数が無いだけで
+ * 503 を返していたため、「作品の作者を決める」が使えなかった。 */
+async function requireOwner(context) {
+  const g = await requireOwnerCommon(context);
+  if (g.deny) {
+    // この口に固有の言い回しに直す。何を断られたのか分かるように。
+    try {
+      const body = await g.deny.clone().json();
+      if (body && body.error === 'forbidden') {
+        return { deny: json({ error: 'forbidden',
+          message: '作者の指定はオーナーだけができます。' }, 403) };
+      }
+    } catch (e) {}
+    return g;
+  }
+  return { who: Object.assign({}, g.who, { isOwner: true }) };
 }
 
 export async function onRequestGet(context) {
