@@ -834,26 +834,21 @@ body.dark .campaign-ribbon {
       addFilterUI(grid);
       
       // Phase 1.1: 読了時間バッジを追加
-      addReadTimeBadges(grid);
-      
-      // ranking-list にも読了時間バッジを追加
-      var rankingList = document.getElementById('ranking-list');
-      if (rankingList) {
-        addReadTimeBadges(rankingList);
-      }
-      
-      // portal.js が動的に DOM を更新する場合に備える
-      var gridObserver = new MutationObserver(function() {
-        addReadTimeBadges(grid);
+      //
+      // 2026-10-20: 対象が #works-grid と #ranking-list だけだった。
+      // 作品の大半は #aozora-grid（青空文庫シリーズ）に並ぶので、
+      // 14作品のうち10作品にバッジが出ていなかった。
+      // 入れ物を並べて同じ扱いにする。増えたらここに足すこと。
+      ['works-grid', 'aozora-grid', 'ranking-list'].forEach(function (id) {
+        var box = document.getElementById(id);
+        if (!box) return;
+        addReadTimeBadges(box);
+        // portal.js が後から中身を入れ替えることがあるので、見張る。
+        try {
+          new MutationObserver(function () { addReadTimeBadges(box); })
+            .observe(box, { childList: true, subtree: true });
+        } catch (e) {}
       });
-      gridObserver.observe(grid, { childList: true, subtree: true });
-      
-      if (rankingList) {
-        var rankingObserver = new MutationObserver(function() {
-          addReadTimeBadges(rankingList);
-        });
-        rankingObserver.observe(rankingList, { childList: true, subtree: true });
-      }
     });
     
     // Phase 1.3: ギャラリーモーダル監視を開始
