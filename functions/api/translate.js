@@ -305,9 +305,29 @@ export async function onRequestPost(context) {
       return out || text;
     }
 
-    // ===== ローマ字化（緩い検証）=====
+    /* ===== ローマ字化（緩い検証）=====
+     *
+     * 人の名前でない語を渡さないこと。
+     *   2026-10-20: カタログの authorEn が2作品で "Oonaa" になっていた。
+     *   公開した時点で作者の欄に「オーナー」(役の名前) が入っていて、
+     *   それをヘボン式に直した結果。出てきた字の形は正しいので、
+     *   下の検証も通ってしまう。
+     *   役や置き換えの語は、訳語を決めておいて AI に渡さない。
+     *   ナレーターは全作品の話者一覧に入っているので特に大事。
+     */
+    const NOT_A_NAME = {
+      'オーナー':'Owner', 'オーナーモード':'Owner',
+      '作者':'Author', '著者':'Author', '作者名なし':'Unknown author',
+      '読者':'Reader', '管理者':'Administrator', '運営':'Administrator', '運営者':'Administrator',
+      'ナレーター':'Narrator', 'ナレーション':'Narration', '語り':'Narrator', '語り手':'Narrator',
+      '全員':'Everyone', 'みんな':'Everyone', 'その他':'Other', 'モブ':'Bystander',
+      '名前なし':'Unnamed', '無名':'Unnamed', '不明':'Unknown',
+      '無題':'Untitled', '無題の作品':'Untitled work', '（無題）':'(untitled)',
+    };
     async function romanizeName(name){
       if (!name || !name.trim()) return name;
+      const fixed = NOT_A_NAME[name.trim()];
+      if (fixed) { if (debug) dbg.push({op:'romanize-notaname', in: name, out: fixed}); return fixed; }
       if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(name)) return name;
       const res = await runWithFallback({
         messages: [
