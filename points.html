@@ -184,7 +184,9 @@ details .inner table{margin-top:0}
       t('ご自身の作品が読まれて得たポイントです。',
         'Points earned when people read your works.');
     document.getElementById('t-back').textContent = t('トップに戻る', 'Back to top');
-    document.getElementById('lang').textContent = t('English', '日本語');
+    document.getElementById('lang').textContent = t('English', 'Japanese');
+    // 英語で読んでいる人に日本語の文字を出さない。authors.html と
+    // js/i18n.js の切替も英語表記なので、そちらに揃えた。
     document.getElementById('lang').setAttribute('aria-label',
       t('英語に切り替える', 'Switch to Japanese'));
 

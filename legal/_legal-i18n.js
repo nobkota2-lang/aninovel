@@ -103,8 +103,10 @@
 
     var btn = document.getElementById('legal-lang-btn');
     if (btn) {
-      btn.textContent = en ? '日本語' : 'English';
-      btn.setAttribute('aria-label', en ? '日本語に切り替える' : 'Switch to English');
+      // 英語で読んでいる人に日本語の文字を出さない。サイトの他の
+      // 切替 (points.html / authors.html / js/i18n.js) に揃えてある。
+      btn.textContent = en ? 'Japanese' : 'English';
+      btn.setAttribute('aria-label', en ? 'Switch to Japanese' : 'Switch to English');
     }
   }
 
