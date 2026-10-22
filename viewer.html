@@ -64,6 +64,17 @@
       }
     </script>
     <link rel="manifest" href="./manifest.json">
+    <!-- 2026-10-22: 英語モードでは英語の manifest に差し替える。
+         インストールしたアプリの窓の題は manifest の name から来るので、
+         ここが日本語だと、日本語の書体が無いパソコンでは題だけ豆腐(□)に
+         なる。id を両方に同じ値で持たせてあるので、Chrome は別のアプリ
+         ではなく同じアプリの更新として扱う。 -->
+    <script>(function(){try{
+      var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';
+      if(l!=='en') return;
+      var m=document.querySelector('link[rel="manifest"]');
+      if(m) m.setAttribute('href','./manifest-en.json');
+    }catch(e){}})();</script>
     <link rel="apple-touch-icon" href="./icons/icon-192.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
