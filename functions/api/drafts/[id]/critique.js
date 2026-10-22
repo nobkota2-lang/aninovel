@@ -471,6 +471,30 @@ Return only the JSON, with no explanation before or after.
 ${JSON.stringify(parsed)}`;
 }
 
+/* 保存済みの英語の講評から、日本語だけを取り除く。
+ * 作り直しではない。点も文もそのままで、名前をローマ字にするだけ。
+ * 2026-10-22: 指示文を直す前に作った講評が残っており、作者に
+ * 「もう一度みてもらう」を押してもらうしかなかった。作品の数だけ
+ * 押させるのは筋が悪いので、読まれたときに一度だけ自分で直す。 */
+export async function repairLatin(env, parsed) {
+  if (!env || !env.AI || !parsed) return null;
+  for (const m of MODELS) {
+    try {
+      const r = await env.AI.run(m, {
+        messages: [{ role: 'user', content: repairPrompt(parsed) }],
+        max_tokens: 1800,
+        temperature: 0,
+      });
+      const t = (r && (r.response || r.result || r.output_text)) || '';
+      const p2 = parseResult(t);
+      if (p2 && (p2.axes || []).length && !cjkLeft(p2).length) return p2;
+    } catch (e) {
+      console.warn('[critique] 直しに失敗しました (' + m + '):', String(e && e.message));
+    }
+  }
+  return null;
+}
+
 async function runAI(env, prompt, opts) {
   const o = opts || {};
   let lastErr = null;
@@ -741,7 +765,7 @@ export async function onRequestGet(context) {
 
   // 読む言語。画面が ?lang=en を付けて呼ぶ。
   const want = normLang(new URL(context.request.url).searchParams.get('lang'));
-  const got = resultFor(rec, want);
+  let got = resultFor(rec, want);
   // 画面は critique.result を見る作りなので、求められた言語の講評を
   // そこに差し替えて返す。無ければ null を入れ、画面に「まだ無い」と
   // 分かるようにする（勝手に日本語を出すと、英語で読む人には
@@ -750,7 +774,26 @@ export async function onRequestGet(context) {
    * 作り直す前に作った分には、登場人物の名前が原文のまま入っている。
    * 日本語の書体が入っていないパソコンでは読めないので、画面に
    * 「作り直せます」と添えられるように知らせる。 */
-  const mixed = !!(want === 'en' && got && got.result && cjkLeft(got.result).length);
+  let mixed = !!(want === 'en' && got && got.result && cjkLeft(got.result).length);
+
+  /* 混じっていたら、その場で一度だけ直す。
+   * 失敗したときは印を残し、読まれるたびにAIを呼ばないようにする。
+   * 直しは講評を作り直すのではないので、1日の回数には数えない。 */
+  let repaired = false;
+  if (mixed && !rec.enRepairFailed && context.env.AI) {
+    const fixed = await repairLatin(context.env, got.result);
+    if (fixed) {
+      rec.results = rec.results || {};
+      rec.results.en = Object.assign({}, rec.results.en, { result: fixed });
+      rec.enRepaired = new Date().toISOString();
+      got = rec.results.en;
+      mixed = false;
+      repaired = true;
+    } else {
+      rec.enRepairFailed = new Date().toISOString();
+    }
+    await saveStored(context.env, r.draft.id, rec);
+  }
 
   let out = rec;
   if (rec) {
@@ -766,6 +809,7 @@ export async function onRequestGet(context) {
   return json({ ok: true, id: r.draft.id, critique: out, stale: stale,
                 outdated: outdated, 本文が変わっている: outdated,
                 lang: want, ある言語: langsOf(rec), 日本語が混じっている: mixed,
+                名前を直した: repaired,
                 読んでいるのは: r.mine ? '作者本人' : '運営者',
                 公開の下限: PUBLISH_MIN_SCORE, 注意: noteFor(want) });
 }
