@@ -14,7 +14,7 @@
  */
 import { requireOwner } from '../../_owner.js';
 import { kvOf, json, normEmail, validEmail, passwordProblem,
-         hashPassword, getUser, putUser } from '../../_authlib.js';
+         hashPassword, getUser, putUser, targetIter } from '../../_authlib.js';
 
 const ROLES = ['reader', 'author', 'owner'];
 const STATUS = ['active', 'unverified', 'disabled'];
@@ -97,7 +97,7 @@ export async function onRequestPut(context) {
   if (b.password) {
     const ng = passwordProblem(b.password);
     if (ng) return json({ error: ng }, 400);
-    u.pw = await hashPassword(b.password);
+    u.pw = await hashPassword(b.password, null, targetIter(context.env));
     u.pwChangedAt = Date.now();
   }
 

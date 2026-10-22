@@ -169,6 +169,32 @@ export async function onRequest(context) {
     return json({ error: 'forbidden_origin', message: '許可されていないオリジンからのリクエストです' }, 403);
   }
 
+  /* Origin が付いていない書き込みを断る。
+   * ----------------------------------------------------------------------
+   * 2026-10-22 追加。
+   *
+   * これまでは Origin が無いと素通ししていた (!origin が真になる)。
+   * クッキーは SameSite=Lax なので多くの CSRF は成立しないが、
+   * 「名乗らなければ通る」という形そのものを残さない。
+   *
+   * 通すものは3つだけ。
+   *   ・GET / HEAD      … 状態を変えないので対象外。ブラウザの画面遷移や
+   *                       クローラは Origin を付けない。
+   *   ・書き込みトークン … ブラウザ以外からの正規の経路。他サイトの JavaScript は
+   *                       Authorization を付けられない (付けると事前確認で弾かれる)。
+   *   ・Stripe の webhook … Stripe は Origin を付けない。代わりに署名を確かめている。
+   */
+  const writing = (request.method !== 'GET' && request.method !== 'HEAD');
+  if (writing && !origin) {
+    const bearer = /^Bearer\s+\S/i.test(request.headers.get('Authorization') || '');
+    const webhook = (url.pathname === '/api/billing/stripe-webhook');
+    if (!bearer && !webhook) {
+      console.warn('[middleware] Origin の無い書き込みを断りました:', request.method, url.pathname);
+      return json({ error: 'forbidden_origin',
+                    message: '送信元が確かめられないため受け付けられません。' }, 403);
+    }
+  }
+
   // ===== レート制限 =====
   {
     const limit = pickLimit(url.pathname);

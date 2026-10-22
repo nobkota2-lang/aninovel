@@ -1,6 +1,6 @@
 /** ログイン(読者も作者も)  POST /api/auth/login   { email, password } */
 import { kvOf, json, normEmail, getUser, verifyPassword, isAuthor,
-         createSession, sessionCookie } from '../../_authlib.js';
+         createSession, sessionCookie, upgradeHashIfWeak } from '../../_authlib.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -19,6 +19,11 @@ export async function onRequestPost(context) {
 
   const ok = await verifyPassword(password, u.pw);
   if (!ok) return ng();
+
+  /* 2026-10-22: 古い回数で保存されたパスワードを、今の回数に入れ替える。
+     平文が手元にあるのは照合に成功したこの瞬間だけなので、ここで行う。
+     失敗してもログインは通す。 */
+  try { await upgradeHashIfWeak(kv, env, u, password); } catch (e) {}
 
   if (u.status === 'unverified') {
     return json({ error: 'メールアドレスの確認が済んでいません。届いたメールのリンクを開いてください。',

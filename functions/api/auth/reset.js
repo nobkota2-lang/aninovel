@@ -1,5 +1,6 @@
 /** 新しいパスワードを設定  POST /api/auth/reset  { token, password } */
-import { kvOf, json, takeReset, getUser, putUser, hashPassword, passwordProblem } from '../../_authlib.js';
+import { kvOf, json, takeReset, getUser, putUser, hashPassword, passwordProblem,
+         targetIter } from '../../_authlib.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -18,7 +19,7 @@ export async function onRequestPost(context) {
   const u = await getUser(kv, rec.email);
   if (!u) return json({ error: 'not_found' }, 404);
 
-  u.pw = await hashPassword(b.password);
+  u.pw = await hashPassword(b.password, null, targetIter(env));
   u.pwChangedAt = Date.now();
   await putUser(kv, u);
   return json({ ok: true, message: 'パスワードを変更しました。ログインしてください。' });

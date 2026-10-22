@@ -1,6 +1,6 @@
 /** パスワードの変更  POST /api/auth/password  { current, next } */
 import { kvOf, json, currentUser, getUser, putUser,
-         verifyPassword, hashPassword, passwordProblem } from '../../_authlib.js';
+         verifyPassword, hashPassword, passwordProblem, targetIter } from '../../_authlib.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -22,7 +22,7 @@ export async function onRequestPost(context) {
   const ng = passwordProblem(b.next);
   if (ng) return json({ error: ng }, 400);
 
-  u.pw = await hashPassword(b.next);
+  u.pw = await hashPassword(b.next, null, targetIter(env));
   u.pwChangedAt = Date.now();
   await putUser(kv, u);
   return json({ ok: true });

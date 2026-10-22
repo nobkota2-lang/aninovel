@@ -24,6 +24,28 @@
 // そのときはこの値を 210000 に戻すとよい。
 // (既存のパスワードは rec.iter を見るので、値を変えてもログインできる)
 const PBKDF2_ITER = 10000;
+
+/* 2026-10-22 追加。
+ * 回数をダッシュボードの環境変数 ANINOVEL_PBKDF2_ITER で変えられるようにした。
+ * コードを触らずに上げ下げできるようにするため。wrangler.toml は触らない決まりなので、
+ * 設定はダッシュボードの Environment variables に置く。
+ *
+ * この容器で測った実測値 (PBKDF2-SHA256 / 256bit):
+ *    10,000回 … 2.3ms    100,000回 … 18ms
+ *    50,000回 … 9.3ms    210,000回 … 50ms
+ * 無料プランは1リクエスト 10ms なので、無料のままなら 30,000 あたりが上限。
+ * Workers Paid なら 210,000 (OWASP の目安) を入れてよい。
+ *
+ * 既存のパスワードは記録ごとの rec.iter で照合するので、値を変えても
+ * ログインできなくならない。古い回数のまま残る分は、次のログインで
+ * upgradeHashIfWeak が今の回数に入れ替える。 */
+const ITER_MIN = 10000;
+const ITER_MAX = 600000;
+export function targetIter(env) {
+  const v = parseInt((env && env.ANINOVEL_PBKDF2_ITER) || '', 10);
+  if (!Number.isFinite(v)) return PBKDF2_ITER;
+  return Math.max(ITER_MIN, Math.min(ITER_MAX, v));
+}
 const SESSION_DAYS = 30;
 const RESET_HOURS = 2;
 
@@ -170,6 +192,24 @@ export async function getUser(kv, email) {
   if (!raw) return null;
   try { return normalizeUser(JSON.parse(raw)); } catch (e) { return null; }
 }
+/* 古い回数で保存されたパスワードを、今の回数に入れ替える。
+ * 照合に成功した直後にだけ呼ぶ。そのときだけ平文が手元にあるため。
+ * 失敗しても落とさない。入れ替えられなくてもログインは通すべきなので。
+ * 戻り値は入れ替えたかどうか。 */
+export async function upgradeHashIfWeak(kv, env, user, password) {
+  try {
+    const want = targetIter(env);
+    const now = (user && user.pw && user.pw.iter) || 0;
+    if (!kv || !user || !user.pw || now >= want) return false;
+    user.pw = await hashPassword(password, null, want);
+    await putUser(kv, user);
+    return true;
+  } catch (e) {
+    console.warn('[auth] 伸長回数の入れ替えに失敗しました:', e && e.message);
+    return false;
+  }
+}
+
 export async function putUser(kv, user) {
   user.email = normEmail(user.email);
   await kv.put('user:' + user.email, JSON.stringify(user));

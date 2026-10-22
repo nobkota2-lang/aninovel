@@ -1061,11 +1061,20 @@ function showExportMenu(btn){
   var r=btn.getBoundingClientRect();
   var pop=document.createElement('div');pop.id='export-popup';
   pop.style.cssText='position:fixed;top:'+(r.bottom+4)+'px;right:'+Math.max(8,Math.round(window.innerWidth-r.right))+'px;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:3000;min-width:220px;max-height:72vh;overflow-y:auto;padding:6px 0;white-space:nowrap;';
-  [['\U0001F4C4 .aninovel\uFF08\u63A8\u5968\uFF09','exportData()'],['\U0001F50A .aninovel\uFF08\u97F3\u58F0\u4ED8\u304D\uFF09','exportDataWithAudio()'],['\U0001F4DD \u30C6\u30AD\u30B9\u30C8\uFF08.txt\uFF09','exportTxt()'],['\U0001F4DA EPUB\uFF08.epub\uFF09','exportEpub()']].forEach(function(item){
+  /* 2026-10-22: ここは関数名を文字列で持ち、eval で呼んでいた。
+     いまは中身が固定なので危険ではないが、CSP の 'unsafe-eval' を
+     自前の都合で要る状態にしておきたくないので、関数そのものを持つ。
+     あわせて、絵文字が大文字の U で始まる書き方になっていた。
+     JavaScript ではこれは escape として働かないので、画面には
+     「U0001F4C4 .aninovel（推奨）」と出ていた。実物の絵文字に直す。 */
+  [['📄 '+_L('.aninovel（推奨）','.aninovel (recommended)'), exportData],
+   ['🔊 '+_L('.aninovel（音声付き）','.aninovel (with audio)'), exportDataWithAudio],
+   ['📝 '+_L('テキスト（.txt）','Text (.txt)'), exportTxt],
+   ['📚 '+_L('EPUB（.epub）','EPUB (.epub)'), exportEpub]].forEach(function(item){
     var el=document.createElement('button');
     el.style.cssText='display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-family:inherit;color:var(--text-primary);text-align:left;white-space:nowrap;';
     el.textContent=item[0];
-    el.onclick=function(){pop.remove();eval(item[1]);};
+    el.onclick=function(){pop.remove();item[1]();};
     el.onmouseenter=function(){el.style.background='var(--bg-secondary)';};
     el.onmouseleave=function(){el.style.background='none';};
     pop.appendChild(el);

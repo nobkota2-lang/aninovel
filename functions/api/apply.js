@@ -5,7 +5,8 @@
  * 申請を KV に積み、オーナーへメールで知らせる。
  */
 import { kvOf, json, randToken, normEmail, validEmail,
-         passwordProblem, hashPassword, verifyPassword, getUser, isAuthor } from '../_authlib.js';
+         passwordProblem, hashPassword, verifyPassword, getUser, isAuthor,
+         targetIter } from '../_authlib.js';
 import { sendMail, originOf, mailToOwnerOnApply } from '../_mail.js';
 
 export async function onRequestPost(context) {
@@ -53,7 +54,7 @@ export async function onRequestPost(context) {
   }
 
   // 既存の読者はパスワードを取り直さない(いまのものを使う)
-  const pw = existingUser ? null : await hashPassword(password);
+  const pw = existingUser ? null : await hashPassword(password, null, targetIter(env));
   const id = randToken(12);
   const app = {
     id, name, email, nickname, bio,

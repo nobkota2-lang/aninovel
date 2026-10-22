@@ -4,7 +4,8 @@
  * 承認は要らない。確認メールのリンクを踏むと有効になる。
  */
 import { kvOf, json, normEmail, validEmail, passwordProblem,
-         hashPassword, getUser, putUser, createVerify, VERIFY_VALID_HOURS } from '../../_authlib.js';
+         hashPassword, getUser, putUser, createVerify, VERIFY_VALID_HOURS,
+         targetIter } from '../../_authlib.js';
 import { sendMail, originOf, mailVerify } from '../../_mail.js';
 
 export async function onRequestPost(context) {
@@ -32,7 +33,7 @@ export async function onRequestPost(context) {
   // 未確認のまま残っている記録は作り直す（確認メールを再送できるように）
   const user = {
     email, name, nickname, bio: '',
-    pw: await hashPassword(b.password),
+    pw: await hashPassword(b.password, null, targetIter(env)),
     status: 'unverified',
     roles: ['reader'],
     createdAt: Date.now(),
