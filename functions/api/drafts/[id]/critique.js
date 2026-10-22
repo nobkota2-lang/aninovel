@@ -64,6 +64,25 @@ const AXES = [
   ['読みごたえ', '読み終えたときに何か残るか'],
 ];
 
+/* 英語で読む人に向けた観点の名前。
+ * 日本語の5つと一対一で対応させること。順番も変えない。
+ * viewer.html の I18N_DICT にも同じ対応を入れてある（古い記録は
+ * 日本語の観点名で保存されているので、そちらは辞書で訳す）。 */
+const AXES_EN = [
+  ['Setting and period', 'When and in what world the story stands up'],
+  ['Writing',            'How the prose moves. Description, dialogue, pacing'],
+  ['Characters',         'Whether people are distinguishable, and their motives visible'],
+  ['Originality',        'Whether it reads like something read elsewhere'],
+  ['Staying power',      'Whether anything stays with you after the last line'],
+];
+
+/* 扱う言語。ここに無い言語を求められたら日本語で返す。 */
+const LANGS = ['ja', 'en'];
+function normLang(v) {
+  const l = String(v || 'ja').toLowerCase().slice(0, 2);
+  return LANGS.indexOf(l) >= 0 ? l : 'ja';
+}
+
 const kvOf = (env) => env.WORKS || env.WORKS_KV || null;
 const critiqueKey = (id) => 'critique:' + id;
 
@@ -184,7 +203,8 @@ export function sample(text) {
   };
 }
 
-export function buildPrompt(meta, body) {
+export function buildPrompt(meta, body, lang) {
+  if (normLang(lang) === 'en') return buildPromptEn(meta, body);
   const axisList = AXES.map(([n, d]) => `  - ${n}: ${d}`).join('\n');
   return `あなたは、小説投稿サイトで作者本人に講評を返す編集者です。
 この講評は作者が読みます。作者を書き続ける気にさせることが仕事です。
@@ -250,6 +270,83 @@ ${body}
 }
 各 comment は80〜160字。strengths と suggestions は各2〜3件、1件100〜180字。
 nextStep は60〜120字。`;
+}
+
+/* 英語で読む人に向けた講評の指示文。
+ * ------------------------------------------------------------------
+ * 2026-10-22 追加。英語で開いたときに、画面の見出しだけ英語で中身が
+ * 日本語、という状態だったため。訳すのではなく、英語で書かせる。
+ * 講評は数百字しかないので、本文の翻訳よりAIの負担は軽い。
+ *
+ * 日本語版と同じことを言っていること。片方だけ直すと、同じ作品の
+ * 講評が言語によって別の基準で書かれることになる。 */
+function buildPromptEn(meta, body) {
+  const axisList = AXES_EN.map(([n, d]) => `  - ${n}: ${d}`).join('\n');
+  return `You are an editor on a fiction-posting site, writing a critique for the author themselves.
+The author will read this. Your job is to leave them wanting to keep writing.
+
+[Rules]
+1. Always point at specific places in the text. Do not write generalities
+   like "interesting" or "easy to read". Say which scene, and which way of
+   writing it, does that.
+2. Put what works first, and be specific. Not flattery: find what is
+   genuinely doing work and put it into words. Best of all is naming a
+   strength the author has not noticed themselves.
+3. Write what to fix not as a fault but as "do this here, and it becomes
+   that". Say what gets better, and how.
+4. Use no critical or condescending turns of phrase. Do not use words like
+   "clumsy", "derivative", or "lacking".
+5. Write in English, in plain, courteous prose.
+6. Do not let summary repeat the per-axis comments. Say briefly what is good
+   overall and what would make it better. Two or three sentences.
+   strengths and suggestions must not repeat the per-axis comments either.
+
+[How to score] An integer from 0 to 100 for each axis.
+  90-100 : at the standard of commercial publication
+  70- 89 : worth recommending to someone
+  50- 69 : worth reading
+  30- 49 : rough, but there is something to see
+  10- 29 : presentable; a little further to being a piece of reading
+   0-  9 : cannot be read as a work (effectively blank, meaningless
+           strings of characters, almost no text, and so on)
+  * Give 9 or below only when the work truly cannot be read. Never give it
+    to something written with effort. When in doubt, give 30 or more.
+  * Do not round to multiples of 5. Score to the single point.
+  * Make the five axes clearly different from one another. Someone looking
+    only at the numbers should see where this work stands out and where it
+    has room. Do not line up similar scores.
+  * Do not copy any number or example sentence from these instructions.
+    Decide everything from the text you have just been given.
+
+[Axes]
+${axisList}
+
+[The work]
+Title: ${meta.title}
+Author: ${meta.author}
+${meta.description ? 'Blurb: ' + meta.description + '\n' : ''}${meta.partial ? '* This is a long work; you are reading the opening, the middle and the ending.\n' : ''}
+---
+${body}
+---
+
+[Output]
+Return only the following JSON. Add no explanation before or after.
+Replace what is inside the angle brackets with what you decided from reading the work.
+{
+  "axes": [
+    {"name": "Setting and period", "score": <integer>, "comment": "<which place in this work, and why>"},
+    {"name": "Writing", "score": <integer>, "comment": "<same>"},
+    {"name": "Characters", "score": <integer>, "comment": "<same>"},
+    {"name": "Originality", "score": <integer>, "comment": "<same>"},
+    {"name": "Staying power", "score": <integer>, "comment": "<same>"}
+  ],
+  "strengths": ["<a specific strength>", "<a specific strength>"],
+  "suggestions": ["<do this here, and it becomes that>"],
+  "nextStep": "<if you work on one thing next: one thing, concrete>",
+  "summary": "<what is good overall, and what would make it better. 2-3 sentences>"
+}
+Each comment is 60 to 120 words. strengths and suggestions are 2 to 3 items each,
+80 to 140 words per item. nextStep is 50 to 90 words.`;
 }
 
 /** モデルの返事からJSONを取り出す。``` で囲ってくることがある。 */
@@ -380,11 +477,60 @@ async function saveStored(env, id, rec) {
 
 const NOTE = 'これはAIによる読みの一例です。点数は絶対的な評価ではありません。'
            + '同じ作品でも、読む人によって受け取り方は変わります。';
+const NOTE_EN = 'This is one example of how an AI read the work. The scores are not an '
+              + 'absolute judgement. The same work lands differently on different readers.';
+function noteFor(lang) { return normLang(lang) === 'en' ? NOTE_EN : NOTE; }
+
+/* 言語ごとの講評を1つの記録に入れる。
+ * ------------------------------------------------------------------
+ * 2026-10-22: 記録は result 1つだけを持っていた。英語で開くと画面の
+ * 見出しだけ英語で、中身は日本語のままだった。
+ *
+ * 形:
+ *   rec.results = { ja: {result, model, createdAt}, en: {...} }
+ *   rec.result  = results.ja.result   ← 昔の形のまま残す
+ *   rec.model   = results.ja.model
+ *
+ * result を残すのは、公開審査の経路 (api/drafts/[id]/submit.js) が
+ * critique.result.total を見て下限を判定しているため。あそこは
+ * 日本語で動いていればよく、言語の話は持ち込まない。
+ *
+ * 版 (REC_VERSION) は上げない。上げると既にある講評が全部
+ * 「作り直し」になり、作者が見ていたものが消える。古い記録は
+ * 日本語の講評として読めるので、そのまま使える。 */
+function resultFor(rec, lang) {
+  if (!rec) return null;
+  const l = normLang(lang);
+  if (rec.results && rec.results[l] && rec.results[l].result) return rec.results[l];
+  // 昔の形。日本語として扱う。
+  if (l === 'ja' && rec.result) {
+    return { result: rec.result, model: rec.model || '', createdAt: rec.createdAt };
+  }
+  return null;
+}
+
+/** その記録が持っている言語。画面が「英語版はまだ無い」と出せるように。 */
+function langsOf(rec) {
+  if (!rec) return [];
+  const out = [];
+  LANGS.forEach((l) => { if (resultFor(rec, l)) out.push(l); });
+  return out;
+}
+
+/** 言語ぶんを記録に入れる。ほかの言語と公開の印は触らない。 */
+function putResult(rec, lang, result, model) {
+  const l = normLang(lang);
+  rec.results = rec.results || {};
+  rec.results[l] = { result, model, createdAt: new Date().toISOString() };
+  if (l === 'ja') { rec.result = result; rec.model = model; }
+  return rec;
+}
 
 /** 保存されたものが、いまの本文・いまの形式に合っているか。 */
-function isFresh(rec, hash) {
-  return !!(rec && rec.hash === hash && rec.v === REC_VERSION
-            && rec.result && typeof rec.result.total === 'number');
+function isFresh(rec, hash, lang) {
+  if (!(rec && rec.hash === hash && rec.v === REC_VERSION)) return false;
+  const got = resultFor(rec, lang);
+  return !!(got && got.result && typeof got.result.total === 'number');
 }
 
 /**
@@ -399,9 +545,10 @@ export async function ensureCritique(context, draft, opts) {
   const text = plainText(draft);
   if (text.length < 200) return null;
 
+  const lang = normLang(o.lang);
   const hash = (await sha256hex(text)).slice(0, 40);
   const stored = await loadStored(env, draft.id);
-  if (isFresh(stored, hash) && !o.force) return stored;
+  if (isFresh(stored, hash, lang) && !o.force) return stored;
   if (!env.AI) return null;
 
   // 1日の回数を見る
@@ -423,7 +570,7 @@ export async function ensureCritique(context, draft, opts) {
     partial: s.partial,
   };
 
-  const ai = await runAI(env, buildPrompt(meta, s.text));
+  const ai = await runAI(env, buildPrompt(meta, s.text, lang));
   if (!ai.ok) {
     // 理由を捨てない。502 だけ返されても、作者にも私にも何も分からない。
     // (2026-10-20 実際に 502 が出て、原因が追えなかった。)
@@ -437,30 +584,59 @@ export async function ensureCritique(context, draft, opts) {
     try { await kv.put(rk, String(runs + 1), { expirationTtl: 60 * 60 * 36 }); } catch (e) {}
   }
 
+  // 本文が変わっていなければ、ほかの言語の講評は残す。
+  // 変わっていれば、どの言語のものも古いので捨てる。
+  const keep = (stored && stored.hash === hash && stored.v === REC_VERSION)
+    ? (stored.results || {}) : {};
   const rec = {
     v: REC_VERSION,
     hash,
     createdAt: new Date().toISOString(),
-    model: ai.model,
     partial: s.partial,
     charCount: text.length,
     // 公開は引き継ぐ。作り直すたびに勝手に公開されるのも、勝手に
     // 引っ込むのも困る。初回だけ false。
+    // 言語ごとには分けない。作者が公開するのは「この作品の講評」で、
+    // 英語だけ公開する／しないという選び方は画面にも無い。
     published: stored ? !!stored.published : false,
     publishedAt: stored ? (stored.publishedAt || null) : null,
-    result: ai.result,
+    results: Object.assign({}, keep),
   };
+  // 昔の形で保存されていた日本語の講評も引き継ぐ。
+  if (!rec.results.ja && stored && stored.hash === hash && stored.result) {
+    rec.results.ja = { result: stored.result, model: stored.model || '',
+                       createdAt: stored.createdAt };
+  }
+  putResult(rec, lang, ai.result, ai.model);
+  /* 公開審査の経路 (submit.js) は rec.result.total を見る。
+   * そこに置くのは日本語のものにする。審査は日本語で動いている。
+   * 日本語がまだ無いとき（英語だけ作ったとき）は、下限の判定が
+   * できなくなるので、いま作ったものを置く。 */
+  if (rec.results.ja && rec.results.ja.result) {
+    rec.result = rec.results.ja.result;
+    rec.model = rec.results.ja.model;
+  } else {
+    rec.result = ai.result;
+    rec.model = ai.model;
+  }
   await saveStored(env, draft.id, rec);
   return rec;
 }
 
 /** 公開中の作品の講評を、読者に見せてよい形で返す。 */
-export async function publicCritique(env, draftId) {
+export async function publicCritique(env, draftId, lang) {
   const rec = await loadStored(env, draftId);
-  if (!rec || !rec.published || !rec.result) return null;
-  return { total: rec.result.total, axes: rec.result.axes,
-           strengths: rec.result.strengths, summary: rec.result.summary,
-           createdAt: rec.createdAt, 注意: NOTE };
+  if (!rec || !rec.published) return null;
+  const want = normLang(lang);
+  // 求められた言語が無ければ、持っているものを返す。
+  // 英語で開いた読者に何も出さないより、日本語でも出す方がよい。
+  const got = resultFor(rec, want) || resultFor(rec, 'ja') || resultFor(rec, 'en');
+  if (!got || !got.result) return null;
+  const r = got.result;
+  return { total: r.total, axes: r.axes, strengths: r.strengths, summary: r.summary,
+           createdAt: got.createdAt || rec.createdAt,
+           lang: (resultFor(rec, want) ? want : (rec.results && rec.results.ja ? 'ja' : 'ja')),
+           注意: noteFor(resultFor(rec, want) ? want : 'ja') };
 }
 
 export async function onRequestGet(context) {
@@ -485,9 +661,42 @@ export async function onRequestGet(context) {
   // 指示文を直した後は、古い版の講評をそのまま見せない。
   // (2026-10-20 全作品 60 点だった分は、これで作り直しの対象になる。)
   const stale = !!(rec && rec.v !== REC_VERSION);
-  return json({ ok: true, id: r.draft.id, critique: rec, stale: stale,
+
+  /* 本文が、講評を作ったときから変わっているか。
+   * 2026-10-22 追加。これまで知らせる手立てが無く、作者は書き直した
+   * あとも古い本文に対する講評を見ていた。
+   * 見せるのは止めない（止めると、少し直すたびに講評が消える）。
+   * 画面が「本文が変わっています」と添えられるようにするだけ。 */
+  let outdated = false;
+  try {
+    const nowText = plainText(r.draft);
+    if (rec && rec.hash && nowText.length >= 200) {
+      outdated = rec.hash !== (await sha256hex(nowText)).slice(0, 40);
+    }
+  } catch (e) { outdated = false; }
+
+  // 読む言語。画面が ?lang=en を付けて呼ぶ。
+  const want = normLang(new URL(context.request.url).searchParams.get('lang'));
+  const got = resultFor(rec, want);
+  // 画面は critique.result を見る作りなので、求められた言語の講評を
+  // そこに差し替えて返す。無ければ null を入れ、画面に「まだ無い」と
+  // 分かるようにする（勝手に日本語を出すと、英語で読む人には
+  // 読めないものが出てしまう）。
+  let out = rec;
+  if (rec) {
+    out = Object.assign({}, rec, {
+      result: got ? got.result : null,
+      model: got ? got.model : null,
+      lang: want,
+      言語: want,
+      ある言語: langsOf(rec),
+    });
+  }
+  return json({ ok: true, id: r.draft.id, critique: out, stale: stale,
+                outdated: outdated, 本文が変わっている: outdated,
+                lang: want, ある言語: langsOf(rec),
                 読んでいるのは: r.mine ? '作者本人' : '運営者',
-                公開の下限: PUBLISH_MIN_SCORE, 注意: NOTE });
+                公開の下限: PUBLISH_MIN_SCORE, 注意: noteFor(want) });
 }
 
 export async function onRequestPost(context) {
@@ -510,7 +719,13 @@ export async function onRequestPost(context) {
     stored.published = body.publish === true;
     stored.publishedAt = stored.published ? new Date().toISOString() : null;
     await saveStored(env, draft.id, stored);
-    return json({ ok: true, id: draft.id, published: stored.published, critique: stored });
+    const pl = normLang(body.lang);
+    const pg = resultFor(stored, pl);
+    return json({ ok: true, id: draft.id, published: stored.published,
+                  critique: Object.assign({}, stored, {
+                    result: pg ? pg.result : null, model: pg ? pg.model : null,
+                    lang: pl, ある言語: langsOf(stored) }),
+                  lang: pl });
   }
 
   // ---- 講評を作る ----
@@ -523,8 +738,9 @@ export async function onRequestPost(context) {
     return json({ error: 'not_configured', message: 'AI が未設定です。' }, 500);
   }
 
+  const wantLang = normLang(body.lang);
   const rec = await ensureCritique(context, draft,
-    { force: !!body.force, email: r.who && r.who.email });
+    { force: !!body.force, email: r.who && r.who.email, lang: wantLang });
 
   if (rec && rec.aiFailed) {
     return json({ error: 'ai_failed',
@@ -544,6 +760,13 @@ export async function onRequestPost(context) {
                   message: '講評を作れませんでした。時間をおいてお試しください。' }, 502);
   }
 
-  return json({ ok: true, id: draft.id, critique: rec,
-                公開の下限: PUBLISH_MIN_SCORE, 注意: NOTE });
+  // 画面は critique.result を見る。作った言語のものを差し替えて返す。
+  const made = resultFor(rec, wantLang);
+  return json({ ok: true, id: draft.id,
+                critique: Object.assign({}, rec, {
+                  result: made ? made.result : rec.result,
+                  model: made ? made.model : rec.model,
+                  lang: wantLang, ある言語: langsOf(rec) }),
+                lang: wantLang,
+                公開の下限: PUBLISH_MIN_SCORE, 注意: noteFor(wantLang) });
 }

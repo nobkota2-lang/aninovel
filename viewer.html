@@ -6606,6 +6606,8 @@ function renderDupModal(){
 // 作品本文(ナレーション/セリフ)は辞書に無いので翻訳されない(Phase2で対応)。
 // ============================================================
 var I18N_DICT={
+  'この講評を作ったあとで本文が変わっています。いまの本文で作り直すには「もう一度みてもらう」を押してください。':'The text has changed since this critique was made. Press “Ask again” to have it read the text as it stands now.',
+  'この作品の講評は、別の言語で作られています。\n\nいま読んでいる言語のぶんを作りますか？\n読み終わるまで少しかかります。':'A critique of this work has been made in another language.\n\nShall I make one in the language you are reading?\nIt takes a little while.',
   /* 2026-10-22 追加。英語モードで実際に各パネルを描いて数え直したら、
      辞書に無い言葉が残っていた。入れ忘れていた場所は3つ。
        ・#app の外にあるもの（Cookie の帯・読み上げの案内）
@@ -7824,13 +7826,19 @@ function _critiqueHTML(rec){
   return h;
 }
 
-function _critiqueRender(rec){
+function _critiqueRender(rec, opts){
   if(!rec || !rec.result || !(rec.result.axes||[]).length){
     alert('講評の中身を受け取れませんでした。\n\nもう一度お試しください。');
     return;
   }
   var p = _critiqueShell();
-  p.innerHTML = _critiqueHTML(rec);
+  p.innerHTML = _critiqueHTML(rec)
+    + (((opts && opts.outdated) || rec.outdated)
+        ? '<p style="margin:14px 0 0;padding:10px 12px;border-radius:6px;'
+          + 'background:rgba(245,158,11,.14);font-size:13px">'
+          + 'この講評を作ったあとで本文が変わっています。'
+          + 'いまの本文で作り直すには「もう一度みてもらう」を押してください。</p>'
+        : '');
   p.querySelector('#critClose').onclick = _critiqueClose;
   p.querySelector('#critRedo').onclick = function(){ _critiqueRun(true); };
   var cb = p.querySelector('#critPublish');
@@ -7840,7 +7848,7 @@ function _critiqueRender(rec){
     cb.disabled = true;
     msg.textContent = '切り替えています…';
     try{
-      var r = await _critiqueFetch('POST', { publish: want });
+      var r = await _critiqueFetch('POST', { publish: want, lang: (state && state.lang === 'en') ? 'en' : 'ja' });
       msg.textContent = r.published ? 'この講評は読者にも見えます。' : '公開していません。';
     }catch(e){
       cb.checked = !want;
@@ -7870,7 +7878,12 @@ function _critiqueResolveId(){
 
 async function _critiqueFetch(method, body){
   var cid = _critiqueTarget;
-  var r = await fetch('/api/drafts/' + encodeURIComponent(cid) + '/critique', {
+  // いまの表示言語の講評を求める。英語で開いているなら英語の講評。
+  // 2026-10-22: 以前は言語を渡しておらず、画面の見出しだけ英語で
+  // 中身が日本語という状態だった。
+  var _lg = (state && state.lang === 'en') ? 'en' : 'ja';
+  var r = await fetch('/api/drafts/' + encodeURIComponent(cid)
+                      + '/critique?lang=' + _lg, {
     method: method,
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -7888,7 +7901,9 @@ async function _critiqueFetch(method, body){
 async function _critiqueRun(force){
   var pg = _showProgress('🧪 AIが読んでいます');
   try{
-    var j = await _critiqueFetch('POST', force ? { force: true } : null);
+    var _lg2 = (state && state.lang === 'en') ? 'en' : 'ja';
+    var j = await _critiqueFetch('POST',
+      force ? { force: true, lang: _lg2 } : { lang: _lg2 });
     _hideProgress(pg);
     _critiqueRender(j.critique);
   }catch(e){
@@ -7949,7 +7964,31 @@ async function _openAiCritique(){
       }
       if(j.critique && j.critique.result){ _critiqueRender(j.critique); return; }
     }
-    if(j.critique && j.critique.result){ _critiqueRender(j.critique); return; }
+    if(j.critique && j.critique.result){
+      // 本文が講評を作ったときから変わっている場合は、そう添える。
+      // 見せるのは止めない（止めると少し直すたびに講評が消える）。
+      if(j.outdated || j['本文が変わっている']){
+        _critiqueRender(j.critique, { outdated: true });
+      } else {
+        _critiqueRender(j.critique);
+      }
+      return;
+    }
+    // 別の言語の講評はあるが、いまの表示言語のものが無い場合。
+    // 「まだ講評が無い」と言うと嘘になるので、作り直しではなく
+    // 「この言語のぶんを作る」と伝える。
+    var _have = (j['ある言語'] || j.ある言語 || []);
+    if(j.critique && !j.critique.result && _have.length){
+      _hideProgress(pg);
+      if(!confirm('この作品の講評は、別の言語で作られています。\n\n'
+        + 'いま読んでいる言語のぶんを作りますか？\n'
+        + '読み終わるまで少しかかります。')){
+        alert('作成を取りやめました。\n\nもう一度「🧪 AI講評」を押せば、いつでも作れます。');
+        return;
+      }
+      await _critiqueRun(false);
+      return;
+    }
   }
   _hideProgress(pg);
   if(!confirm('この作品をAIに読んでもらい、講評を作りますか？\n\n'
@@ -7979,7 +8018,9 @@ async function _loadReaderCritique(workId){
   _readerCritique = null;
   if(!workId) return;
   try{
-    var r = await fetch('/api/works/' + encodeURIComponent(workId) + '/critique');
+    var _lg = (state && state.lang === 'en') ? 'en' : 'ja';
+    var r = await fetch('/api/works/' + encodeURIComponent(workId)
+                        + '/critique?lang=' + _lg);
     if(!r.ok) return;                       // 404 = 公開されていない
     var j = await r.json();
     if(j && j.ok && j.critique) _readerCritique = j.critique;

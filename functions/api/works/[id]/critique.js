@@ -31,9 +31,13 @@ export async function onRequestGet(context) {
     });
   }
 
+  // 読む言語。viewer が ?lang=en を付けて呼ぶ。
+  // その言語の講評が無ければ publicCritique が持っているものを返す。
+  const lang = (new URL(context.request.url).searchParams.get('lang') || 'ja');
+
   let rec = null;
   try {
-    rec = await publicCritique(context.env, id);
+    rec = await publicCritique(context.env, id, lang);
   } catch (e) {
     console.warn('[works/critique] 読めませんでした:', e);
     rec = null;
@@ -47,6 +51,7 @@ export async function onRequestGet(context) {
         // 無いことも少しの間は覚えておく。作品を開くたびに KV を
         // 読みに行かせない。1日の読み取り回数は決して多くない。
         'Cache-Control': 'public, max-age=300',
+        'Vary': 'Accept-Language',
       },
     });
   }
@@ -56,6 +61,7 @@ export async function onRequestGet(context) {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'public, max-age=300',
+        'Vary': 'Accept-Language',
     },
   });
 }
