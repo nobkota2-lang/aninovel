@@ -6629,6 +6629,7 @@ function renderDupModal(){
 // 作品本文(ナレーション/セリフ)は辞書に無いので翻訳されない(Phase2で対応)。
 // ============================================================
 var I18N_DICT={
+  'この英語の講評に日本語が残っています。「もう一度みてもらう」を押すと、名前をローマ字にして作り直します。':'This English critique still has Japanese in it. Press \u201cHave it read again\u201d and it is made again with the names in roman letters.',
   '🎤 音声生成中':'🎤 Making the audio','🔊 音声データ取込中':'🔊 Reading the audio in',
   /* js/drafts-client.js と js/services.js が投げる文言。
      ビューアの alert / confirm は _trFull を通るので、ここで訳せる。 */
@@ -8082,13 +8083,23 @@ function _critiqueRender(rec, opts){
     return;
   }
   var p = _critiqueShell();
-  p.innerHTML = _critiqueHTML(rec)
-    + (((opts && opts.outdated) || rec.outdated)
-        ? '<p style="margin:14px 0 0;padding:10px 12px;border-radius:6px;'
-          + 'background:rgba(245,158,11,.14);font-size:13px">'
-          + 'この講評を作ったあとで本文が変わっています。'
-          + 'いまの本文で作り直すには「もう一度みてもらう」を押してください。</p>'
-        : '');
+  function _note(t){
+    return '<p style="margin:14px 0 0;padding:10px 12px;border-radius:6px;'
+         + 'background:rgba(245,158,11,.14);font-size:13px">'+t+'</p>';
+  }
+  var _notes = '';
+  if((opts && opts.outdated) || rec.outdated){
+    _notes += _note('この講評を作ったあとで本文が変わっています。'
+      + 'いまの本文で作り直すには「もう一度みてもらう」を押してください。');
+  }
+  /* 2026-10-22: 作り直す前に作った英語の講評には、登場人物の名前が
+     原文のまま入っている。日本語の書体が入っていないパソコンでは
+     そこだけ読めないので、作り直せることを添える。 */
+  if(rec['日本語が混じっている'] || (opts && opts.mixed)){
+    _notes += _note('この英語の講評に日本語が残っています。'
+      + '「もう一度みてもらう」を押すと、名前をローマ字にして作り直します。');
+  }
+  p.innerHTML = _critiqueHTML(rec) + _notes;
   p.querySelector('#critClose').onclick = _critiqueClose;
   p.querySelector('#critRedo').onclick = function(){ _critiqueRun(true); };
   var cb = p.querySelector('#critPublish');

@@ -297,6 +297,12 @@ The author will read this. Your job is to leave them wanting to keep writing.
 4. Use no critical or condescending turns of phrase. Do not use words like
    "clumsy", "derivative", or "lacking".
 5. Write in English, in plain, courteous prose.
+5a. Use the Latin alphabet only. Never write Japanese characters, not even
+   for a name. Write names of people and places in Hepburn romanisation
+   (for example a name written in kanji becomes Minokichi, O-Yuki).
+   Translate any other Japanese word into English. The reader may have no
+   Japanese font on their computer, so Japanese characters show as blank
+   boxes and cannot be read at all.
 6. Do not let summary repeat the per-axis comments. Say briefly what is good
    overall and what would make it better. Two or three sentences.
    strengths and suggestions must not repeat the per-axis comments either.
@@ -346,7 +352,8 @@ Replace what is inside the angle brackets with what you decided from reading the
   "summary": "<what is good overall, and what would make it better. 2-3 sentences>"
 }
 Each comment is 60 to 120 words. strengths and suggestions are 2 to 3 items each,
-80 to 140 words per item. nextStep is 50 to 90 words.`;
+80 to 140 words per item. nextStep is 50 to 90 words.
+Every character you return must be in the Latin alphabet. Romanise the names.`;
 }
 
 /** モデルの返事からJSONを取り出す。``` で囲ってくることがある。 */
@@ -432,7 +439,40 @@ function echoed(parsed) {
   return null;
 }
 
-async function runAI(env, prompt) {
+/* 英語の講評に日本語が混じっていないか。
+ *
+ * 2026-10-22: 英語で作った講評の中で、登場人物の名前だけが
+ * 原文のまま (巳之吉 / お雪) 出ていた。日本語の書体が入っていない
+ * パソコンでは、そこだけ豆腐(□)になって読めない。
+ * 指示文で釘は刺したが、守らないことがあるので、出たものを見て、
+ * 混じっていたら一度だけ直させる。 */
+const CJK_RE = /[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uff01-\uff60]/;
+
+function cjkLeft(parsed) {
+  const out = [];
+  const push = (v) => { if (typeof v === 'string' && CJK_RE.test(v)) out.push(v); };
+  for (const a of (parsed.axes || [])) { push(a && a.name); push(a && a.comment); }
+  for (const v of (parsed.strengths || [])) push(v);
+  for (const v of (parsed.suggestions || [])) push(v);
+  push(parsed.nextStep); push(parsed.summary);
+  return out;
+}
+
+function repairPrompt(parsed) {
+  return `The JSON below is a critique written for a reader who cannot read Japanese.
+It still contains Japanese characters. Rewrite it so that every character is in
+the Latin alphabet.
+  - Names of people and places: Hepburn romanisation.
+  - Any other Japanese word or phrase: translate it into English.
+Change nothing else. Keep every score exactly as it is, and keep each sentence
+as it is apart from the Japanese parts you are replacing.
+Return only the JSON, with no explanation before or after.
+
+${JSON.stringify(parsed)}`;
+}
+
+async function runAI(env, prompt, opts) {
+  const o = opts || {};
   let lastErr = null;
   for (const m of MODELS) {
     try {
@@ -445,7 +485,31 @@ async function runAI(env, prompt) {
       const parsed = parseResult(text);
       if (parsed) {
         const bad = echoed(parsed);
-        if (!bad) return { ok: true, model: m, result: parsed };
+        if (!bad) {
+          if (!o.latinOnly || !cjkLeft(parsed).length) {
+            return { ok: true, model: m, result: parsed };
+          }
+          // 日本語が混じっている。同じ型に、名前だけ直させる。
+          console.warn('[critique] ' + m + ' の英語の講評に日本語が混じっています: '
+            + cjkLeft(parsed).join(' / ').slice(0, 120));
+          try {
+            const r2 = await env.AI.run(m, {
+              messages: [{ role: 'user', content: repairPrompt(parsed) }],
+              max_tokens: 1800,
+              temperature: 0,
+            });
+            const t2 = (r2 && (r2.response || r2.result || r2.output_text)) || '';
+            const p2 = parseResult(t2);
+            if (p2 && (p2.axes || []).length && !cjkLeft(p2).length) {
+              return { ok: true, model: m, result: p2, repaired: true };
+            }
+          } catch (e) {
+            console.warn('[critique] 直しに失敗しました:', String(e && e.message));
+          }
+          /* 直せなかった。講評そのものは出す。
+             何も出さないより、名前だけ原文のまま出すほうがましなので。 */
+          return { ok: true, model: m, result: parsed, cjkLeft: cjkLeft(parsed).length };
+        }
         // 作品を読まずに返している。次の型に回す。
         console.warn('[critique] ' + m + ' が読まずに答えました: ' + bad);
         lastErr = new Error(bad);
@@ -570,7 +634,7 @@ export async function ensureCritique(context, draft, opts) {
     partial: s.partial,
   };
 
-  const ai = await runAI(env, buildPrompt(meta, s.text, lang));
+  const ai = await runAI(env, buildPrompt(meta, s.text, lang), { latinOnly: lang === 'en' });
   if (!ai.ok) {
     // 理由を捨てない。502 だけ返されても、作者にも私にも何も分からない。
     // (2026-10-20 実際に 502 が出て、原因が追えなかった。)
@@ -682,6 +746,12 @@ export async function onRequestGet(context) {
   // そこに差し替えて返す。無ければ null を入れ、画面に「まだ無い」と
   // 分かるようにする（勝手に日本語を出すと、英語で読む人には
   // 読めないものが出てしまう）。
+  /* 英語の講評に日本語が残っていないか。
+   * 作り直す前に作った分には、登場人物の名前が原文のまま入っている。
+   * 日本語の書体が入っていないパソコンでは読めないので、画面に
+   * 「作り直せます」と添えられるように知らせる。 */
+  const mixed = !!(want === 'en' && got && got.result && cjkLeft(got.result).length);
+
   let out = rec;
   if (rec) {
     out = Object.assign({}, rec, {
@@ -690,11 +760,12 @@ export async function onRequestGet(context) {
       lang: want,
       言語: want,
       ある言語: langsOf(rec),
+      日本語が混じっている: mixed,
     });
   }
   return json({ ok: true, id: r.draft.id, critique: out, stale: stale,
                 outdated: outdated, 本文が変わっている: outdated,
-                lang: want, ある言語: langsOf(rec),
+                lang: want, ある言語: langsOf(rec), 日本語が混じっている: mixed,
                 読んでいるのは: r.mine ? '作者本人' : '運営者',
                 公開の下限: PUBLISH_MIN_SCORE, 注意: noteFor(want) });
 }
