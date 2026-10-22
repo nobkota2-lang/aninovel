@@ -39,6 +39,18 @@ const ALLOWED_ORIGINS = [
  * もともと厳密ではなかった。精度は実質変わらず、枠だけが空く。
  */
 const RATE_LIMIT = {
+  /* ログインまわり。既定(1分60回)のままだと、1つのIPから1日に8万回も
+     パスワードを試せる。ここだけは KV で数える。辺縁の控えは拠点ごとに
+     別勘定になるため、拠点を変えられると効かないから。
+     数え方は countInKV のとおりで、上限に達したら書き込みも止める。
+     (2026-10-22 追加。それまでは既定のままだった。) */
+  '/api/auth/login': { max: 15, windowSec: 600, store: 'kv' },        // 10分15回
+  '/api/auth/password': { max: 10, windowSec: 600, store: 'kv' },     // 10分10回
+  '/api/auth/reset-request': { max: 5, windowSec: 600, store: 'kv' }, // 10分5回
+  '/api/auth/reset': { max: 10, windowSec: 600, store: 'kv' },        // 10分10回
+  '/api/auth/register': { max: 5, windowSec: 3600, store: 'kv' },     // 1時間5回
+  '/api/auth/verify': { max: 20, windowSec: 600, store: 'kv' },       // 10分20回
+  '/api/apply': { max: 5, windowSec: 3600, store: 'kv' },             // 1時間5回
   '/api/newsletter': { max: 5, windowSec: 600, store: 'kv' },   // 10分5回まで
   '/api/reports': { max: 10, windowSec: 600, store: 'kv' },     // 10分10回まで
   '/api/billing': { max: 20, windowSec: 600, store: 'kv' },     // 課金フロー
