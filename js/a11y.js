@@ -31,7 +31,9 @@
     var first=focusables[0],last=focusables[focusables.length-1];
     var prevFocus=document.activeElement;
     function onKey(e){
-      if(e.key==='Escape'){var b=modal.querySelector('[data-close],[aria-label*="閉じる"]');if(b)b.click();}
+      if(e.key==='Escape'){/* 英語モードでは aria-label が Close に訳されるので、両方を見る。
+         これまで英語で読んでいる人は Esc で閉じられなかった。 */
+      var b=modal.querySelector('[data-close],[aria-label*="閉じる"],[aria-label*="Close"]');if(b)b.click();}
       if(e.key!=='Tab')return;
       if(e.shiftKey){if(document.activeElement===first){e.preventDefault();last.focus();}}
       else{if(document.activeElement===last){e.preventDefault();first.focus();}}

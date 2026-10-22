@@ -25,6 +25,19 @@
 !function () {
   "use strict";
 
+  /* 言語。ポータル(aninovel_lang_v1)とビューア(aninovel_lang)の両方を見る。
+     share.js と同じ形。日本語の書体が入っていないパソコンでは、
+     英語モードに残った日本語は豆腐(□)になるので、元で出し分ける。 */
+  function _lang(){
+    try{
+      var v=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+      return v==='en'?'en':'ja';
+    }catch(e){ return 'ja'; }
+  }
+  function _t(ja,en){ return _lang()==='en' ? en : ja; }
+
+
+
   // 2027-01-01 00:00 (日本時間)。UTC では前日の15:00。
   var ADS_START = Date.UTC(2026, 11, 31, 15, 0, 0);
 
@@ -122,14 +135,14 @@
       + "font-size:13px;color:#2D2A26;box-shadow:0 8px 24px rgba(0,0,0,.15);"
       + "z-index:9000;line-height:1.6;font-family:system-ui";
     box.innerHTML = '<div style="font-weight:700;color:#C0392B;margin-bottom:6px">'
-      + '\u{1F4E3} 広告ブロッカーを検出</div>'
-      + '当サイトは広告収入で運営されています。<br>'
-      + 'もし可能でしたら、ブロッカーのオフをご検討ください。'
-      + '広告非表示プラン(月額予定)もあります。'
+      + _t('\u{1F4E3} 広告ブロッカーを検出','\u{1F4E3} An ad blocker is on')+'</div>'
+      + _t('当サイトは広告収入で運営されています。<br>','This site is paid for by its adverts.<br>')
+      + _t('もし可能でしたら、ブロッカーのオフをご検討ください。','If you can, please consider turning the blocker off.')
+      + _t('広告非表示プラン(月額予定)もあります。','There is also a plan without adverts.')
       + '<div style="text-align:right;margin-top:8px">'
       + '<button onclick="this.closest(\'div\').remove()" '
       + 'style="border:none;background:transparent;color:#666;cursor:pointer;'
-      + 'font-size:12px">[閉じる]</button></div>';
+      + 'font-size:12px">'+_t('[閉じる]','[Close]')+'</button></div>';
     document.body.appendChild(box);
   }
 

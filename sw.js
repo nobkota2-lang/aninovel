@@ -16,7 +16,7 @@
 //    コメントは必ず独立した行に置くこと。
 // ------------------------------------------------------------
 
-const CACHE_VERSION = 'v30-2026-10-20';
+const CACHE_VERSION = 'v31-2026-10-22';
 const CACHE_NAME = 'aninovel-' + CACHE_VERSION;
 
 // オフライン用の最小限のプリキャッシュ（失敗しても install は止めない）

@@ -10,6 +10,19 @@
  */
 (function(){
   'use strict';
+  /* 言語。ポータル(aninovel_lang_v1)とビューア(aninovel_lang)の両方を見る。
+     share.js / billing.js と同じ形。ここで独自の記憶は持たない。
+     2026-10-22: 通報の画面がまるごと日本語のままだったので足した。
+     ビューアの辞書(viewer.html)は #app の外に後から足される
+     この画面まで面倒を見きれないので、元で出し分ける。 */
+  function _lang(){
+    try{
+      var v=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+      return v==='en'?'en':'ja';
+    }catch(e){ return 'ja'; }
+  }
+  function _t(ja,en){ return _lang()==='en' ? en : ja; }
+
   var QUEUE_KEY='aninovel_pending_reports_v1';
   var ENDPOINT=window.ANINOVEL_MODERATION_ENDPOINT||null; // 例: 'https://api.aninovel.com/reports'
 
@@ -19,17 +32,17 @@
 
   // 通報理由(共通リスト)
   var REASONS=[
-    {id:'copyright',label:'著作権侵害',desc:'第三者の著作物の無断転載・盗作・引用範囲を超える複製'},
-    {id:'sexual',label:'わいせつ・性的に不適切',desc:'児童ポルノ、過度な性描写、合意なき性表現'},
-    {id:'violence',label:'暴力・残虐',desc:'過度な暴力描写、残虐行為の助長'},
-    {id:'hate',label:'差別・ヘイト',desc:'人種・民族・性別・宗教・性的指向に基づく差別'},
-    {id:'harassment',label:'嫌がらせ・誹謗中傷',desc:'特定個人への攻撃、晒し行為、リベンジ目的'},
-    {id:'privacy',label:'プライバシー侵害',desc:'個人情報・住所・連絡先の無断公開'},
-    {id:'spam',label:'スパム・宣伝',desc:'広告、勧誘、無関係なリンクの大量投稿'},
-    {id:'illegal',label:'違法行為',desc:'犯罪を肯定、薬物使用、詐欺、その他法令違反'},
-    {id:'minor',label:'未成年者に有害',desc:'未成年者の保護に支障'},
-    {id:'selfharm',label:'自傷・自殺の誘引',desc:'自傷や自殺の方法を具体的に示す、またはそれを勧める内容'},
-    {id:'other',label:'その他',desc:'上記に該当しないが問題があると考えるもの'}
+    {id:'copyright',label:_t('著作権侵害','Copyright infringement'),desc:_t('第三者の著作物の無断転載・盗作・引用範囲を超える複製','Someone else’s work reposted without permission, plagiarised, or copied beyond fair quotation')},
+    {id:'sexual',label:_t('わいせつ・性的に不適切','Obscene or sexually inappropriate'),desc:_t('児童ポルノ、過度な性描写、合意なき性表現','Child sexual material, excessive sexual description, sexual content without consent')},
+    {id:'violence',label:_t('暴力・残虐','Violence or cruelty'),desc:_t('過度な暴力描写、残虐行為の助長','Excessive description of violence, or encouraging cruelty')},
+    {id:'hate',label:_t('差別・ヘイト','Discrimination or hate'),desc:_t('人種・民族・性別・宗教・性的指向に基づく差別','Discrimination on race, ethnicity, sex, religion or sexual orientation')},
+    {id:'harassment',label:_t('嫌がらせ・誹謗中傷','Harassment or defamation'),desc:_t('特定個人への攻撃、晒し行為、リベンジ目的','Attacks on a particular person, exposing them, or revenge')},
+    {id:'privacy',label:_t('プライバシー侵害','Invasion of privacy'),desc:_t('個人情報・住所・連絡先の無断公開','Personal details, an address or contact details published without permission')},
+    {id:'spam',label:_t('スパム・宣伝','Spam or advertising'),desc:_t('広告、勧誘、無関係なリンクの大量投稿','Adverts, soliciting, or many unrelated links')},
+    {id:'illegal',label:_t('違法行為','Unlawful acts'),desc:_t('犯罪を肯定、薬物使用、詐欺、その他法令違反','Approving of crime, drug use, fraud, or other breaches of the law')},
+    {id:'minor',label:_t('未成年者に有害','Harmful to minors'),desc:_t('未成年者の保護に支障','Gets in the way of protecting minors')},
+    {id:'selfharm',label:_t('自傷・自殺の誘引','Encouraging self-harm or suicide'),desc:_t('自傷や自殺の方法を具体的に示す、またはそれを勧める内容','Content that sets out ways to self-harm or take one’s life, or that encourages it')},
+    {id:'other',label:'その他',desc:_t('上記に該当しないが問題があると考えるもの','Something else you think is a problem')}
   ];
 
   /* 画面の理由と、サーバー(/api/objections)の理由の対応。
@@ -56,10 +69,13 @@
         })
       });
       var j=null; try{ j=await res.json(); }catch(e){}
-      if(!res.ok) return {ok:false, message:(j&&j.message)||('送信に失敗しました（'+res.status+'）')};
-      return {ok:true, message:(j&&j.message)||'受け付けました。', already:!!(j&&j.alreadySent)};
+      /* サーバーの message は日本語で返る。英語で読んでいる人には出さない。
+         日本語の書体が入っていないパソコンでは豆腐(□)になるため。 */
+      var _srv = (_lang()==='en') ? null : (j&&j.message);
+      if(!res.ok) return {ok:false, message:_srv||(_t('送信に失敗しました（','It could not be sent (')+res.status+_t('）',')'))};
+      return {ok:true, message:_srv||_t('受け付けました。','Received.'), already:!!(j&&j.alreadySent)};
     }catch(e){
-      return {ok:false, message:'通信に失敗しました。時間をおいてもう一度お試しください。'};
+      return {ok:false, message:_t('通信に失敗しました。時間をおいてもう一度お試しください。','The connection failed. Please leave it a while and try again.')};
     }
   }
 
@@ -105,18 +121,18 @@
     var bx=document.createElement('div');
     bx.style.cssText='background:#fff;color:#2D2A26;border-radius:12px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 24px 64px rgba(0,0,0,.4);font-size:14px;line-height:1.7';
     bx.innerHTML=
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:#C0392B">⚠ 通報する</h3><button id="anrep-close" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#666">&times;</button></div>'
-      +'<p style="color:#666;font-size:12px;margin-bottom:18px">通報内容は運営が確認します。虚偽通報は禁止されています(<a href="/legal/terms.html" style="color:#C0392B">利用規約</a>)。</p>'
-      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">対象</label><div style="background:#F5EFE6;padding:10px 12px;border-radius:6px;font-size:13px;color:#666">'
-        +'種別: '+escHtml(opts.targetType||'work')+' / ID: '+escHtml(opts.targetId||opts.workId||'(unknown)')
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:#C0392B">'+_t('⚠ 通報する','⚠ Report it')+'</h3><button id="anrep-close" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#666">&times;</button></div>'
+      +'<p style="color:#666;font-size:12px;margin-bottom:18px">'+_t('通報内容は運営が確認します。虚偽通報は禁止されています(','The site owner checks every report. False reports are not allowed (')+'<a href="/legal/terms.html" style="color:#C0392B">利用規約</a>)。</p>'
+      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">'+_t('対象','What you are reporting')+'</label><div style="background:#F5EFE6;padding:10px 12px;border-radius:6px;font-size:13px;color:#666">'
+        +_t('種別: ','Type: ')+escHtml(opts.targetType||'work')+' / ID: '+escHtml(opts.targetId||opts.workId||'(unknown)')
         +(opts.ctx?'<br>'+escHtml(opts.ctx).slice(0,200):'')
       +'</div></div>'
-      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">理由 (必須)</label><div id="anrep-reasons" style="display:flex;flex-direction:column;gap:6px">'
+      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">'+_t('理由 (必須)','Reason (required)')+'</label><div id="anrep-reasons" style="display:flex;flex-direction:column;gap:6px">'
         +REASONS.map(function(r){return '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid #E2DCD4;border-radius:6px;cursor:pointer"><input type="radio" name="anrep-reason" value="'+r.id+'" style="margin-top:3px"><div><div style="font-weight:600">'+escHtml(r.label)+'</div><div style="font-size:11px;color:#888">'+escHtml(r.desc)+'</div></div></label>';}).join('')
       +'</div></div>'
-      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">詳細 (任意、最大1000文字)</label><textarea id="anrep-detail" rows="4" maxlength="1000" placeholder="該当箇所、具体的な侵害内容など" style="width:100%;padding:8px;border:1px solid #E2DCD4;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px"></textarea></div>'
-      +'<div style="margin-bottom:14px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#666"><input type="checkbox" id="anrep-pledge"> 上記が真実であることを宣誓します</label></div>'
-      +'<div style="display:flex;gap:8px;justify-content:flex-end"><button id="anrep-cancel" style="padding:10px 20px;border:1px solid #E2DCD4;background:#fff;border-radius:6px;cursor:pointer">キャンセル</button><button id="anrep-submit" style="padding:10px 24px;background:#C0392B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">運営者に知らせる</button></div>'
+      +'<div style="margin-bottom:14px"><label style="display:block;font-weight:600;margin-bottom:6px">'+_t('詳細 (任意、最大1000文字)','More detail (optional, up to 1000 characters)')+'</label><textarea id="anrep-detail" rows="4" maxlength="1000" placeholder="'+_t('該当箇所、具体的な侵害内容など','Where it is, what exactly is wrong, and so on')+'" style="width:100%;padding:8px;border:1px solid #E2DCD4;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px"></textarea></div>'
+      +'<div style="margin-bottom:14px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#666"><input type="checkbox" id="anrep-pledge"> '+_t('上記が真実であることを宣誓します','I declare that what I have written is true')+'</label></div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end"><button id="anrep-cancel" style="padding:10px 20px;border:1px solid #E2DCD4;background:#fff;border-radius:6px;cursor:pointer">キャンセル</button><button id="anrep-submit" style="padding:10px 24px;background:#C0392B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">'+_t('運営者に知らせる','Tell the site owner')+'</button></div>'
       +'<div id="anrep-msg" style="margin-top:10px;font-size:12px;color:#C0392B;display:none"></div>';
     ov.appendChild(bx);
     document.body.appendChild(ov);
@@ -129,8 +145,8 @@
       var detail=document.getElementById('anrep-detail').value.trim();
       var pledge=document.getElementById('anrep-pledge').checked;
       var msg=document.getElementById('anrep-msg');msg.style.display='block';
-      if(!reasonEl){msg.textContent='理由を選んでください';return;}
-      if(!pledge){msg.textContent='宣誓のチェックが必要です';return;}
+      if(!reasonEl){msg.textContent=_t('理由を選んでください','Please choose a reason');return;}
+      if(!pledge){msg.textContent=_t('宣誓のチェックが必要です','Please tick the declaration');return;}
       var rep={
         id:uid(),
         ts:new Date().toISOString(),
@@ -147,7 +163,7 @@
         canary:(window.AninovelAntiPiracy&&window.AninovelAntiPiracy.getCanary&&window.AninovelAntiPiracy.getCanary())||null
       };
       enqueue(rep);
-      msg.textContent='送信しています…';
+      msg.textContent=_t('送信しています…','Sending…');
       var btn=document.getElementById('anrep-submit');
       if(btn){btn.disabled=true;btn.style.opacity='.6';}
 
@@ -155,14 +171,14 @@
         bx.innerHTML='<div style="text-align:center;padding:20px">'+
           '<div style="font-size:48px;margin-bottom:12px">'+(r.ok?'✓':'⚠')+'</div>'+
           '<h3 style="color:'+(r.ok?'#10B981':'#C0392B')+';font-weight:700;margin-bottom:8px">'+
-            (r.ok?(r.already?'すでに受け付けています':'受け付けました'):'送信できませんでした')+'</h3>'+
+            (r.ok?(r.already?_t('すでに受け付けています','Already received'):_t('受け付けました','Received')):_t('送信できませんでした','It could not be sent'))+'</h3>'+
           '<p style="color:#666;font-size:13px;line-height:1.7">'+escHtml(r.message)+'<br><br>'+
             (r.ok
-              ? '運営者が内容を確認し、必要と判断した場合は公開を中止します。<br>'+
-                '判断には少しお時間をいただきます。<br><br>'+
-                '<a href="/legal/dmca.html" style="color:#C0392B">著作権侵害に関する窓口</a>もございます。'
-              : 'お手数ですが、時間をおいてもう一度お試しください。')+
-            '<br><br>受付ID: <code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+escHtml(rep.id)+'</code>'+
+              ? ''+_t('運営者が内容を確認し、必要と判断した場合は公開を中止します。','The site owner will look at it and, if it is warranted, will take the work down.')+'<br>'+
+                ''+_t('判断には少しお時間をいただきます。','That decision takes a little time.')+'<br><br>'+
+                '<a href="/legal/dmca.html" style="color:#C0392B">'+_t('著作権侵害に関する窓口','the copyright contact point')+'</a>'+_t('もございます。',' is also available.')+''
+              : _t('お手数ですが、時間をおいてもう一度お試しください。','Sorry — please leave it a while and try again.'))+
+            '<br><br>'+_t('受付ID: ','Reference: ')+'<code style="background:#F5EFE6;padding:2px 6px;border-radius:3px">'+escHtml(rep.id)+'</code>'+
           '</p>'+
           '<div style="margin-top:20px"><button id="anrep-done" style="padding:10px 24px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">閉じる</button></div></div>';
         document.getElementById('anrep-done').onclick=close;
@@ -175,21 +191,21 @@
     var u;try{u=JSON.parse(localStorage.getItem('aninovel_user'));}catch(e){}
     var roles=u&&(u.roles||[u.role||'reader'])||[];
     if(!u||!u.loggedIn||(roles.indexOf('owner')<0&&roles.indexOf('admin')<0)){
-      alert('運営者権限が必要です');return;
+      alert(_t('運営者権限が必要です','You need operator rights'));return;
     }
     var ov=document.createElement('div');
     ov.id='aninovel-mod-panel';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif';
     ov.onclick=function(e){if(e.target===ov)ov.remove();};
     var q=loadQueue();
-    var inner='<div style="background:#fff;color:#2D2A26;border-radius:12px;max-width:880px;width:100%;max-height:90vh;overflow-y:auto;padding:24px"><div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="font-size:18px;font-weight:700">🛡️ モデレーション (送信待ち '+q.length+'件)</h3><button onclick="this.closest(\'#aninovel-mod-panel\').remove()" style="border:none;background:transparent;font-size:22px;cursor:pointer">&times;</button></div>';
-    if(!q.length)inner+='<p style="text-align:center;color:#666;padding:30px">通報なし</p>';
+    var inner='<div style="background:#fff;color:#2D2A26;border-radius:12px;max-width:880px;width:100%;max-height:90vh;overflow-y:auto;padding:24px"><div style="display:flex;justify-content:space-between;margin-bottom:16px"><h3 style="font-size:18px;font-weight:700">'+_t('🛡️ モデレーション (送信待ち','🛡️ Moderation (waiting to be sent ')+' '+q.length+_t('件)',')')+'</h3><button onclick="this.closest(\'#aninovel-mod-panel\').remove()" style="border:none;background:transparent;font-size:22px;cursor:pointer">&times;</button></div>';
+    if(!q.length)inner+='<p style="text-align:center;color:#666;padding:30px">'+_t('通報なし','No reports')+'</p>';
     else{
-      inner+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#F5EFE6"><th style="padding:8px;text-align:left">受付時刻</th><th style="padding:8px;text-align:left">理由</th><th style="padding:8px;text-align:left">対象</th><th style="padding:8px;text-align:left">通報者</th><th style="padding:8px"></th></tr></thead><tbody>';
+      inner+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#F5EFE6"><th style="padding:8px;text-align:left">'+_t('受付時刻','Received at')+'</th><th style="padding:8px;text-align:left">理由</th><th style="padding:8px;text-align:left">対象</th><th style="padding:8px;text-align:left">'+_t('通報者','Reported by')+'</th><th style="padding:8px"></th></tr></thead><tbody>';
       q.forEach(function(r){
-        inner+='<tr style="border-top:1px solid #E2DCD4"><td style="padding:8px">'+escHtml(r.ts)+'</td><td style="padding:8px"><strong>'+escHtml(r.reasonLabel||r.reason)+'</strong>'+(r.detail?'<br><small style="color:#666">'+escHtml(r.detail.slice(0,100))+'</small>':'')+'</td><td style="padding:8px">'+escHtml(r.targetType)+'<br><code style="font-size:11px">'+escHtml(r.targetId||'')+'</code></td><td style="padding:8px"><code style="font-size:11px">'+escHtml(r.reporter&&r.reporter.id||'?')+'</code></td><td style="padding:8px;text-align:right"><button data-rid="'+r.id+'" class="anmod-del" style="padding:4px 10px;border:1px solid #C0392B;background:#fff;color:#C0392B;border-radius:4px;cursor:pointer;font-size:12px">処理済</button></td></tr>';
+        inner+='<tr style="border-top:1px solid #E2DCD4"><td style="padding:8px">'+escHtml(r.ts)+'</td><td style="padding:8px"><strong>'+escHtml(r.reasonLabel||r.reason)+'</strong>'+(r.detail?'<br><small style="color:#666">'+escHtml(r.detail.slice(0,100))+'</small>':'')+'</td><td style="padding:8px">'+escHtml(r.targetType)+'<br><code style="font-size:11px">'+escHtml(r.targetId||'')+'</code></td><td style="padding:8px"><code style="font-size:11px">'+escHtml(r.reporter&&r.reporter.id||'?')+'</code></td><td style="padding:8px;text-align:right"><button data-rid="'+r.id+'" class="anmod-del" style="padding:4px 10px;border:1px solid #C0392B;background:#fff;color:#C0392B;border-radius:4px;cursor:pointer;font-size:12px">'+_t('処理済','Done')+'</button></td></tr>';
       });
-      inner+='</tbody></table><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button id="anmod-flush" style="padding:8px 16px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">サーバへ送信を再試行</button><button id="anmod-export" style="padding:8px 16px;background:#10B981;color:#fff;border:none;border-radius:6px;cursor:pointer">JSONダウンロード</button></div>';
+      inner+='</tbody></table><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button id="anmod-flush" style="padding:8px 16px;background:#3D3A36;color:#fff;border:none;border-radius:6px;cursor:pointer">'+_t('サーバへ送信を再試行','Try sending to the server again')+'</button><button id="anmod-export" style="padding:8px 16px;background:#10B981;color:#fff;border:none;border-radius:6px;cursor:pointer">'+_t('JSONダウンロード','Download as JSON')+'</button></div>';
     }
     inner+='</div>';
     ov.innerHTML=inner;

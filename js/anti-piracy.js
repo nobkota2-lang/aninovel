@@ -13,6 +13,19 @@
 (function(){
   'use strict';
 
+  /* 言語。ポータル(aninovel_lang_v1)とビューア(aninovel_lang)の両方を見る。
+     share.js と同じ形。日本語の書体が入っていないパソコンでは、
+     英語モードに残った日本語は豆腐(□)になるので、元で出し分ける。 */
+  function _lang(){
+    try{
+      var v=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';
+      return v==='en'?'en':'ja';
+    }catch(e){ return 'ja'; }
+  }
+  function _t(ja,en){ return _lang()==='en' ? en : ja; }
+
+
+
   // ===== 設定 =====
   var CONFIG={
     // 公式ホスト一覧。これ以外で動作した場合に警告(将来 aninovel.com 追加予定)
@@ -127,7 +140,7 @@
         if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
         e.preventDefault();
         // クリップボードにマーカーテキストを書く
-        try{e.clipboardData.setData('text/plain','— アニノベルの作品は著作権法で保護されています。無断転載は禁止です。https://aninovel.com —');}catch(_){}
+        try{e.clipboardData.setData('text/plain',_t('— アニノベルの作品は著作権法で保護されています。無断転載は禁止です。https://aninovel.com —','— Works on AniNovel are protected by copyright. Reposting them is not allowed. https://aninovel.com —'));}catch(_){}
       });
     }
     if(CONFIG.blockSelect){
@@ -174,7 +187,7 @@
       try{
         var bn=document.createElement('div');
         bn.style.cssText='position:fixed;top:0;left:0;right:0;background:#C0392B;color:#fff;padding:14px;text-align:center;z-index:99999;font-family:system-ui,sans-serif;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.3)';
-        bn.innerHTML='⚠ このサイトは「アニノベル」公式サイトではありません。無断転載の可能性があります。 公式: <a href="https://aninovel.com" style="color:#fff;text-decoration:underline">aninovel.com</a>';
+        bn.innerHTML=_t('⚠ このサイトは「アニノベル」公式サイトではありません。無断転載の可能性があります。 公式: ','⚠ This is not the official AniNovel site. It may be a copy put up without permission. Official: ')+'<a href="https://aninovel.com" style="color:#fff;text-decoration:underline">aninovel.com</a>';
         (document.body||document.documentElement).appendChild(bn);
       }catch(e){}
     }

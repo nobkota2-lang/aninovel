@@ -25,6 +25,14 @@
     <meta name="twitter:title" content="アニノベル - 作品ビューワ">
     <meta name="twitter:description" content="アニメ風吹き出しと音声読み上げで小説を楽しめます。">
     <meta name="twitter:image" content="https://aninovel.com/og-image.png">
+    <!-- 2026-10-22: 英語モードでは、最初の描画より前に題と lang を英語にする。
+         <title> は上の行で日本語に決まってしまうので、ここで上書きする。
+         日本語の書体が入っていないパソコンでは、タブの見出しが豆腐(□)に
+         見えていた。lang を先に立てると html[lang="en"] の CSS も効く。 -->
+    <script>(function(){try{
+      var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';
+      if(l==='en'){ document.documentElement.setAttribute('lang','en'); document.title='AniNovel - Viewer'; }
+    }catch(e){}})();</script>
     <!-- 書き込みトークン。fetch を包むので、他のどのスクリプトよりも先に読む -->
     <script src="js/auth-token.js"></script>
     <script>
@@ -131,6 +139,7 @@ ruby{ruby-align:center}
 .insert-area.drag-over{background:rgba(142,68,173,.15)!important;outline:2px dashed var(--accent-author);outline-offset:-2px;min-height:64px!important}
 .insert-area.drag-over .insert-row{display:none}
 .insert-area.drag-over::after{content:'▼ ここにドロップ ▼';display:block;text-align:center;color:var(--accent-author);font-size:14px;font-weight:600;padding:16px}
+html[lang="en"] .insert-area.drag-over::after{content:'\25BC Drop it here \25BC'}
 .vertical-content-wrapper .insert-area{writing-mode:horizontal-tb;min-height:auto;min-width:24px;height:100%;padding:0 2px;margin-left:4px;display:flex;align-items:center;justify-content:center}
 .vertical-content-wrapper .insert-area .insert-row{flex-direction:column;padding:0 2px;gap:4px}
 .vertical-content-wrapper .insert-area .insert-row .ibtn{writing-mode:horizontal-tb;padding:8px 4px;font-size:11px;white-space:normal;text-align:center;line-height:1.2;max-width:32px}
@@ -195,6 +204,9 @@ input[type="color"]{padding:2px;cursor:pointer;height:40px}
 .home-hero{min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#2D2A26 0%,#4A3728 40%,#6B4423 80%,#8B5E3C 100%);color:#FAF6F0;position:relative;overflow:hidden}
 .home-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0L60 30L30 60L0 30z' fill='none' stroke='%23ffffff' stroke-width='0.3' opacity='0.05'/%3E%3C/svg%3E");pointer-events:none}
 .home-hero::after{content:'物語';position:absolute;right:-60px;top:50%;transform:translateY(-50%);font-size:280px;font-family:'Shippori Mincho',serif;font-weight:700;opacity:.03;pointer-events:none;writing-mode:vertical-rl}
+/* 英語モードでは日本語の書体が入っていないパソコンを前提にする。
+   この飾り字は280pxあるので、豆腐(□)になると大きく目立つ。 */
+html[lang="en"] .home-hero::after{content:'STORY';font-family:Georgia,'Times New Roman',serif;writing-mode:horizontal-tb;letter-spacing:.08em;right:-30px}
 .char-card{border:1px solid var(--border);border-radius:12px;padding:14px;transition:all .2s;background:var(--panel-bg)}.char-card:hover{border-color:var(--accent-author);box-shadow:0 4px 12px var(--shadow)}
 .narration-plain{border-left:3px solid var(--border);padding-left:16px;margin:0 auto}
 .gallery-tab{padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--panel-bg);transition:all .2s}.gallery-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -474,8 +486,10 @@ function openClassifyReview(){
     var v=view(), tot=Math.max(1,Math.ceil(v.length/PAGE));
     if(page>=tot)page=tot-1;
     var c={plain:0,mono:0,talk:0}; rows.forEach(function(x){c[x.kind]++;});
-    m.querySelector('#cls-sum').textContent='全'+rows.length+'件 — 地の文'+c.plain+' / 独白'+c.mono+' / 会話'+c.talk
-      +'　確認が必要: '+rows.filter(function(x){return x.r.conf<LOW;}).length+'件';
+    m.querySelector('#cls-sum').textContent=_L('全'+rows.length+'件 — 地の文'+c.plain+' / 独白'+c.mono+' / 会話'+c.talk,
+      rows.length+' in all — narration '+c.plain+' / inner voice '+c.mono+' / dialogue '+c.talk)
+      +_L('　確認が必要: '+rows.filter(function(x){return x.r.conf<LOW;}).length+'件',
+           '  needs checking: '+rows.filter(function(x){return x.r.conf<LOW;}).length);
     m.querySelector('#cls-page').textContent=(v.length?(page*PAGE+1):0)+'–'+Math.min((page+1)*PAGE,v.length)+' / '+v.length;
     var h=v.slice(page*PAGE,(page+1)*PAGE).map(function(x){
       var btns=['plain','mono','talk'].map(function(k){
@@ -542,7 +556,7 @@ function _itemsHTML(pc,opts){
   // 継ぎ足しのときは、前のページの末尾に既に挿入行があるので先頭には出さない
   // (出すと「＋ナレーション …」が二重に並ぶ)。代わりにページの区切りを示す。
   if(opts&&opts.appended){
-    h+='<div class="page-sep"><span>'+((opts.page||0)+1)+' ページ</span></div>';
+    h+='<div class="page-sep"><span>'+_L(((opts.page||0)+1)+' ページ','Page '+((opts.page||0)+1))+'</span></div>';
   }else{
     h+=insertRow(pc[0].order);
   }
@@ -866,13 +880,13 @@ function saveData(silent){try{
   if(!silent && typeof showToast==='function')showToast('保存しました');
 }catch(e){console.error('[Save]エラー',e);alert('保存エラー: '+e.message);}render()}
 function loadData(){try{var s=localStorage.getItem('aninovel_data');if(s){var d=JSON.parse(s);state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.darkMode!==undefined)state.darkMode=d.darkMode}}catch(e){console.error(e)}}
-function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,timestamp:new Date().toISOString()},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(state.novel.title||'作品')+'_'+Date.now()+'.aninovel';a.click();URL.revokeObjectURL(a.href)}
+function exportData(){var b=new Blob([JSON.stringify({version:'2.2',novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,bookmarks:state.bookmarks,timestamp:new Date().toISOString()},null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(state.novel.title||_L('作品','work'))+'_'+Date.now()+'.aninovel';a.click();URL.revokeObjectURL(a.href)}
 // 音声埋込みエクスポート: IndexedDBに保存された生成音声をBase64でJSONに同梱
 async function exportDataWithAudio(){
   var wid=_currentWorkId();
   var keys=await _idbKeysByWork(wid);
   if(!keys.length){
-    if(!confirm('このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「~1F3A4~ 音声生成」ボタンで先に作れます)'))return;
+    if(!confirm('このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「🎤 音声生成」ボタンで先に作れます)'))return;
     return exportData();
   }
   // Base64は元の約1.33倍に膨らみ、しかも1つのJSON文字列に載せるので
@@ -883,11 +897,12 @@ async function exportDataWithAudio(){
     if(_r0&&_r0.blob)_est+=_r0.blob.size;
   }
   var _estMB=Math.round(_est/Math.max(Math.min(keys.length,20),1)*keys.length*1.4/1e6);
-  if(_estMB>300&&!confirm('音声'+keys.length+'件を埋め込むと約'+_estMB+'MBのファイルになります。\n'
+  if(_estMB>300&&!confirm(_L('音声'+keys.length+'件を埋め込むと約'+_estMB+'MBのファイルになります。\n',
+       keys.length+' audio files embedded comes to a file of about '+_estMB+'MB.\n')
       +'この大きさだとブラウザが落ちる可能性が高いです。\n\n'
       +'投稿すれば音声はサーバーに保存され、読者にも配信されます。\n'
       +'それでも埋め込みエクスポートを続けますか？'))return;
-  var pg=_showProgress('~1F4E6~ 音声埋込みエクスポート中');
+  var pg=_showProgress('📦 音声埋込みエクスポート中');
   try{
     var audioStore={};var i=0;
     for(var k=0;k<keys.length;k++){
@@ -909,7 +924,7 @@ async function exportDataWithAudio(){
     };
     var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
     var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-    a.download=(state.novel.title||'作品')+'_音声付_'+Date.now()+'.aninovel';a.click();
+    a.download=(state.novel.title||_L('作品','work'))+_L('_音声付_','_with_audio_')+Date.now()+'.aninovel';a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
     alert(state.lang==='en'?('Export complete ('+recs.length+' audio embedded, approx '+Math.round(blob.size/1024)+'KB)'):('エクスポート完了 ('+recs.length+'音声を埋込み, サイズ約'+Math.round(blob.size/1024)+'KB)'));
   }finally{_hideProgress(pg);}
@@ -3247,6 +3262,10 @@ async function generateVoices(){
   alert(lines.join('\n'));
 }
 function _showProgress(title){
+  /* 2026-10-22: 札は body に直に足されるので、render() の訳が当たらない。
+     見張り(_i18nWatch)でも訳せるが、出てすぐ消える札なので
+     ここで先に訳しておく。 */
+  try{ title=_trFull(title); }catch(e){}
   var el=document.createElement('div');
   el.style.cssText='position:fixed;top:20px;right:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#000);border:2px solid var(--accent,#6366F1);border-radius:8px;padding:16px 20px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);min-width:280px;font-size:13px';
   el.innerHTML='<div style="font-weight:700;margin-bottom:8px">'+title+'</div><div class="pg-bar" style="background:#eee;height:8px;border-radius:4px;overflow:hidden;margin-bottom:6px"><div class="pg-fill" style="background:#6366F1;height:100%;width:0%;transition:width .2s"></div></div><div class="pg-text" style="font-size:11px;color:#666">開始中...</div>';
@@ -3731,7 +3750,7 @@ function renderTTSBar(){
 window.startTTS=startTTS;window.pauseTTS=pauseTTS;window.stopTTS=stopTTS;window.setTTSRate=setTTSRate;
 // 音声リスト非同期読み込み
 if(window.speechSynthesis){speechSynthesis.addEventListener('voiceschanged',function(){state.tts.voices=speechSynthesis.getVoices();});}
-function addChapter(){state.chapters.push({id:'ch'+Date.now(),title:(state.lang==='en'?('Chapter '+(state.chapters.length+1)):('第'+(state.chapters.length+1)+'章')),sections:[{id:'sec'+Date.now(),title:'第1節'}]});render()}
+function addChapter(){state.chapters.push({id:'ch'+Date.now(),title:(state.lang==='en'?('Chapter '+(state.chapters.length+1)):('第'+(state.chapters.length+1)+'章')),sections:[{id:'sec'+Date.now(),title:_L('第1節','Section 1')}]});render()}
 function addSection(ci){var ch=state.chapters[ci||0];if(ch){ch.sections.push({id:'sec'+Date.now(),title:(state.lang==='en'?('Section '+(ch.sections.length+1)):('第'+(ch.sections.length+1)+'節'))});render()}}
 // 衝突しないユニークID生成。Date.now() だけだと、挿入ボタンの二度押し等で
 // 同一ミリ秒に複数項目が作られた際に同じIDになり、音声がIDで紐づくため二重再生を招く。
@@ -3883,7 +3902,7 @@ function _readingStart(){
 
 function showToast(msg){var t=document.createElement('div');t.className='anim-slide-up';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg-toolbar);color:#fff;padding:10px 24px;border-radius:24px;font-size:14px;z-index:999;box-shadow:0 4px 16px var(--shadow-strong)';t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s'},2000);setTimeout(function(){t.remove()},2500)}
 
-async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.audioStore){var wid=_currentWorkId();var ids=Object.keys(d.audioStore),cnt=0;var pg=_showProgress('🔊 音声データ取込中');try{for(var k=0;k<ids.length;k++){var iid=ids[k],rec=d.audioStore[iid];_updateProgress(pg,k+1,ids.length,iid);try{var blob=_b64ToBlob(rec.b64,rec.mime||'audio/wav');await _idbPut(wid,iid,blob,rec.meta||{});cnt++;}catch(ie){console.warn('音声取込失敗',iid,ie);}}}finally{_hideProgress(pg);}console.info('[Import] 音声'+cnt+'件をIndexedDBに保存 workId='+wid);}showToast('インポート完了'+(d.audioStore?' (音声'+Object.keys(d.audioStore).length+'件)':''));render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert((state.lang==='en'?'Error: ':'エラー: ')+e.message)}}
+async function handleFileImport(ev){var f=ev.target.files[0];if(!f)return;if(!confirm('現在のデータを上書きしてインポートしますか？'))return;var ext=f.name.split('.').pop().toLowerCase();try{if(ext==='aninovel'){var e=await detEnc(f);var d=JSON.parse(await rdTxt(f,e));state.novel=d.novel||state.novel;state.chapters=d.chapters||state.chapters;state.characters=d.characters||state.characters;state.content=d.content||state.content;if(d.displaySettings)Object.assign(state.displaySettings,d.displaySettings);state.bookmarks=d.bookmarks||[];if(d.audioStore){var wid=_currentWorkId();var ids=Object.keys(d.audioStore),cnt=0;var pg=_showProgress('🔊 音声データ取込中');try{for(var k=0;k<ids.length;k++){var iid=ids[k],rec=d.audioStore[iid];_updateProgress(pg,k+1,ids.length,iid);try{var blob=_b64ToBlob(rec.b64,rec.mime||'audio/wav');await _idbPut(wid,iid,blob,rec.meta||{});cnt++;}catch(ie){console.warn('音声取込失敗',iid,ie);}}}finally{_hideProgress(pg);}console.info('[Import] 音声'+cnt+'件をIndexedDBに保存 workId='+wid);}showToast(_L('インポート完了','Import done')+(d.audioStore?_L(' (音声'+Object.keys(d.audioStore).length+'件)',' ('+Object.keys(d.audioStore).length+' audio files)'):''));render()}else if(ext==='txt'){var e2=await detEnc(f);parseText(await rdTxt(f,e2));showToast('テキストインポート完了')}else if(ext==='docx'){var r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});parseText(r.value);showToast('Wordインポート完了')}else if(ext==='pdf'){var pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;var t='';for(var i=1;i<=pdf.numPages;i++){var p=await pdf.getPage(i);var tc=await p.getTextContent();t+=tc.items.map(function(it){return it.str}).join(' ')+'\n'}parseText(t);showToast('PDFインポート完了')}else if(ext==='epub'){var z=await JSZip.loadAsync(f);var t2='';for(var fn in z.files){if(fn.endsWith('.html')||fn.endsWith('.xhtml')){var c=await z.files[fn].async('text');t2+=new DOMParser().parseFromString(c,'text/html').body.textContent+'\n'}}parseText(t2);showToast('EPUBインポート完了')}else alert('非対応')}catch(e){alert((state.lang==='en'?'Error: ':'エラー: ')+e.message)}}
 async function detEnc(file){return new Promise(function(r){var rd=new FileReader;rd.onload=function(e){var a=new Uint8Array(e.target.result);if(a.length>=3&&a[0]===0xEF&&a[1]===0xBB&&a[2]===0xBF)return r('UTF-8');r('UTF-8')};rd.readAsArrayBuffer(file)})}
 async function rdTxt(f,e){return new Promise(function(r,j){var rd=new FileReader;rd.onload=function(ev){r(ev.target.result)};rd.onerror=j;rd.readAsText(f,e||'UTF-8')})}
 function detGender(n){
@@ -5145,7 +5164,7 @@ function renderDialogue(item,index){var _isTTSItem=state.tts&&state.tts.active&&
     // 読者向けには**素の地の文**として描き、作者モードでだけ注意を促す。
     if(!state.isAuthorMode)return renderNarration(item);
     ch={id:'_noChar',name:'話者未設定',shortName:'—',bubbleColor:'#FEF3C7',iconColor:'#F59E0B',gender:'male',_unknown:true};
-  }var ds=state.displaySettings,fs=ds.fontSize,lh=_lh(ds.lineHeight),is=ds.iconSize,ft=_font(ds.font),or=ds.orientation;var txt=_dispRuby(item,state.searchQuery);var _spIdx=state.characters.filter(function(c){return c.id!=='narrator'}).findIndex(function(c){return c.id===item.characterId});var isL=_sideMap[item.id]==='right'?false:(_sideMap[item.id]==='left'?true:(_spIdx%2===0));var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';var _ttsCls=_isTTSItem?' tts-highlight':'';if(or==='vertical'){return'<div class="v-bubble-wrap citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(item.characterId,is)+'</div><div class="bubble char-bubble v-bubble-body" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div>'}return'<div class="citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:10pt;margin-bottom:4px;position:relative;'+(isL?'':'flex-direction:row-reverse')+'">'+aBtn(item.id)+dh+rIcon(item.characterId,is)+'<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;'+(isL?'':'text-align:right')+'">'+esc(_cname(ch))+'</div><div class="bubble char-bubble '+(_monoMap[item.id]?'bubble-mono':(isL?'bubble-left':'bubble-right'))+'" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';border-color:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';max-width:none;width:100%;box-sizing:border-box"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div></div>'}
+  }var ds=state.displaySettings,fs=ds.fontSize,lh=_lh(ds.lineHeight),is=ds.iconSize,ft=_font(ds.font),or=ds.orientation;var txt=_dispRuby(item,state.searchQuery);var _spIdx=state.characters.filter(function(c){return c.id!=='narrator'}).findIndex(function(c){return c.id===item.characterId});var isL=_sideMap[item.id]==='right'?false:(_sideMap[item.id]==='left'?true:(_spIdx%2===0));var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';var _ttsCls=_isTTSItem?' tts-highlight':'';if(or==='vertical'){return'<div class="v-bubble-wrap citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(item.characterId,is)+'</div><div class="bubble char-bubble v-bubble-body" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div>'}return'<div class="citem'+_ttsCls+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:10pt;margin-bottom:4px;position:relative;'+(isL?'':'flex-direction:row-reverse')+'">'+aBtn(item.id)+dh+rIcon(item.characterId,is)+'<div style="flex:1;min-width:0"><div translate="no" style="font-size:11px;color:var(--text-muted);margin-bottom:4px;'+(isL?'':'text-align:right')+'">'+esc(_cname(ch))+'</div><div class="bubble char-bubble '+(_monoMap[item.id]?'bubble-mono':(isL?'bubble-left':'bubble-right'))+'" style="background:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';border-color:'+(_rc&&_rc.bubbleColor?_rc.bubbleColor:ch.bubbleColor)+';max-width:none;width:100%;box-sizing:border-box"><p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div></div></div>'}
 function renderImageBlock(item){
   var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';
   var url=item.url||'';
@@ -5743,7 +5762,7 @@ function renderHeading(item){
   var wm=(or==='vertical')?'writing-mode:vertical-rl;':'';
   return '<div class="citem '+(big?'chapter-head':'section-head')+'" data-cid="'+item.id+'"'+editAttr(item)+hv()+
     ' style="'+wm+'text-align:center;margin:'+(big?'32px':'20px')+' auto;max-width:640px;position:relative">'+aBtn(item.id)+
-    '<p class="font-serif-jp" style="font-size:'+sz+'px;font-weight:700;font-family:'+ft+';letter-spacing:.15em;color:var(--text-primary)">'+
+    '<p translate="no" class="font-serif-jp" style="font-size:'+sz+'px;font-weight:700;font-family:'+ft+';letter-spacing:.15em;color:var(--text-primary)">'+
     esc((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'')+'</p><div style="height:1px;background:var(--border-color,rgba(128,128,128,.3));margin:'+(big?'12px':'8px')+' auto;width:'+(big?'160px':'90px')+'"></div></div>';
 }
 
@@ -5769,15 +5788,15 @@ function renderNarration(item){var ds=state.displaySettings,fs=ds.fontSize,lh=_l
   // 吹き出しで描くときは名前を出す(ナレーターも)。素の地の文のときは出さない。
   var _lbl=(_ch&&(_cid||ns==='bubble'))?('<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px'+(_cid&&_sideMap[item.id]==='right'?';text-align:right':'')+'">'+esc(_cname(_ch))+'</div>'):'';
   var _revN=(_cid&&_sideMap[item.id]==='right')?'flex-direction:row-reverse;':'';
-  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble bubble-mono':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative;'+_revN+'">'+aBtn(item.id)+dh+rIcon(_who,is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble bubble-mono':'')+'" style="background:'+_bg+';max-width:600px"><p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
+  var txt=_dispRuby(item,state.searchQuery);var dh=state.isAuthorMode?'<div class="drag-handle" draggable="true" data-dragid="'+item.id+'" title="ドラッグで移動">⠿</div>':'';if(or==='vertical'){if(ns==='bubble'||_cid){return'<div class="v-bubble-wrap citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<div class="v-icon" style="writing-mode:horizontal-tb">'+rIcon(_cid||'narrator',is)+'</div><div class="bubble'+(_cid?' char-bubble bubble-mono':'')+' v-bubble-body" style="background:'+_bg+';padding-top:'+(is/2+14)+'px;padding-right:'+(is/2+10)+'px;overflow:visible;max-width:none"><p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div>'}return'<div class="vertical-item citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="position:relative">'+aBtn(item.id)+dh+'<p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+'">'+txt+'</p></div>'}if(ns==='bubble'||_cid)return'<div class="citem" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;position:relative;'+_revN+'">'+aBtn(item.id)+dh+rIcon(_who,is)+'<div class="flex1" style="flex:1;min-width:0">'+_lbl+'<div class="bubble'+(_cid?' char-bubble bubble-mono':'')+'" style="background:'+_bg+';max-width:600px"><p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';'+_sty+'">'+txt+'</p></div></div></div>';return'<div class="citem narration-plain" data-cid="'+item.id+'"'+editAttr(item)+hv()+' style="margin-bottom:4px;max-width:640px;position:relative;margin-left:auto;margin-right:auto">'+aBtn(item.id)+dh+'<p translate="no" class="font-serif-jp" style="font-size:'+fs+'px;line-height:'+lh+';font-family:'+ft+';color:var(--text-secondary)">'+txt+'</p></div>'}
 
-function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div>'+_langToggle()+'<button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
+function renderHome(){var features=[['📖','吹き出し表示','アニメ風の臨場感'],['🔖','しおり＆目次','読書位置を記録'],['✏️','作者モード','D&Dで簡単編集'],['📂','多形式対応','TXT/DOCX/PDF/EPUB']];var h='<div class="home-hero"><nav style="padding:20px 32px;display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2"><div style="display:flex;align-items:center;gap:12px"><span class="font-serif-jp" style="font-size:28px;font-weight:700;letter-spacing:2px">アニノベル</span><span style="font-size:11px;opacity:.5;margin-top:6px">v2.2</span></div>'+_langToggle()+'<button onclick="toggleDarkMode()" class="btn-icon" style="color:#FAF6F0">'+(state.darkMode?'☀️':'🌙')+'</button></nav><div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 32px;position:relative;z-index:2"><div class="anim-slide-up" style="text-align:center;max-width:700px"><p translate="no" class="font-serif-jp" style="font-size:14px;letter-spacing:8px;opacity:.5;margin-bottom:16px">VISUAL NOVEL BROWSER</p><h1 class="font-serif-jp" style="font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.2;margin-bottom:24px;letter-spacing:2px">物語を、<br>もっと自由に。</h1><p style="font-size:16px;opacity:.7;line-height:1.8;margin-bottom:48px">アニメーションと小説を融合させた新しい読書体験。</p><div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap"><button onclick="state.isAuthorMode=false;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(255,255,255,.15);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(255,255,255,.25);border-radius:12px">📖 読者モードで開く</button><button onclick="state.isAuthorMode=true;state.currentScreen=\'reader\';render()" class="btn" style="background:rgba(142,68,173,.3);color:#fff;padding:14px 32px;font-size:16px;border:1px solid rgba(142,68,173,.4);border-radius:12px">✏️ 作者モードで開く</button></div></div></div><div class="anim-fade" style="padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:900px;margin:0 auto;width:100%;position:relative;z-index:2">';features.forEach(function(x){h+='<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px"><div style="font-size:24px;margin-bottom:8px">'+x[0]+'</div><div style="font-weight:600;margin-bottom:4px">'+x[1]+'</div><div style="font-size:13px;opacity:.5">'+x[2]+'</div></div>'});h+='</div></div>';return h}
 
 function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orientation==='vertical',prog=tp>1?(state.currentPage/(tp-1))*100:100;var _mayAuthor=!_portalMode||_canAuthorThisWork();
   // 👥 を見せる相手: この作品の作者本人とオーナー。
   // すでに作者モードで開けている人は、経路に関わらず必ず見せる
   // (編集用のボタンが出ているのに登場人物だけ出ない、を防ぐ)。
-  var _showChars=_mayAuthor||state.isAuthorMode;var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf('draft_')===0){
+  var _showChars=_mayAuthor||state.isAuthorMode;var h='<div style="display:flex;flex-direction:column;height:100vh;height:100dvh" class="'+(state.fullscreen?'fullscreen-mode':'')+'">';h+='<div class="toolbar '+(state.isAuthorMode?'author-mode':'')+'"><div style="display:flex;align-items:center;gap:12px;min-width:0"><button onclick="goHome()" class="btn-icon" title="ホーム">←</button><h2 translate="no" class="font-serif-jp" style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'+_font(state.displaySettings.font)+'">'+esc(_ntitle())+'</h2>'+(state.isAuthorMode?'<button onclick="state.metaEditOpen=true;render()" class="btn-icon" title="小説情報" style="font-size:13px">📝</button>':'')+'</div><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;min-width:0">';if(state.isAuthorMode){h+='<span class="tb-pc"><button onclick="saveData()" class="btn" style="background:#059669;color:#fff;padding:6px 12px;font-size:12px;border-radius:6px">💾 保存</button></span><button onclick="saveData()" class="btn-icon tb-mobi" title="保存" style="background:#059669;color:#fff;border-radius:6px">💾</button>';h+='<span class="tb-fold">';if(_workParam&&_workParam.indexOf('draft_')===0){
       // 下書きは「公開」ではなく「公開の依頼」。押しただけでは公開されない。
       var _ds=state._draftStatus||'draft';
       var _dp=!!state._draftPending;
@@ -5821,7 +5840,7 @@ function _tocEntries(){
   });
   // 見出しが無い作品はページ送りだけでも案内する
   if(!out.length&&br.length-1>1){
-    for(var p=0;p<br.length-1;p++)out.push({id:null,title:'ページ '+(p+1),sub:false,page:p});
+    for(var p=0;p<br.length-1;p++)out.push({id:null,title:_L('ページ '+(p+1),'Page '+(p+1)),sub:false,page:p});
   }
   return out;
 }
@@ -5844,7 +5863,7 @@ function renderTOC(){
       var cur=(e.page===state.currentPage);
       // onclick に文字列を埋め込むと、id に含まれる引用符で属性が壊れる。
       // data 属性に持たせて、押されたときに読み出す。
-      return '<button data-toc-page="'+e.page+'" data-toc-id="'+esc(e.id||'')+'" onclick="tocGo(this)" '
+      return '<button translate="no" data-toc-page="'+e.page+'" data-toc-id="'+esc(e.id||'')+'" onclick="tocGo(this)" '
         +'style="text-align:left;border:0;background:'+(cur?'var(--bg-secondary)':'transparent')+';cursor:pointer;'
         +'padding:'+(e.sub?'6px 10px 6px 26px':'9px 10px')+';border-left:3px solid '+(cur?'var(--accent)':'transparent')+';'
         +'border-radius:6px;color:var(--text-'+(e.sub?'secondary':'primary')+');'
@@ -6302,7 +6321,7 @@ function saveReaderSnapshot(){
   var w=_rbWork(_workParam),L=w.saves;
   for(var i=0;i<L.length;i++){
     if(L[i].name===name){
-      if(!confirm('「'+name+'」は既にあります。上書きしますか？'))return;
+      if(!confirm(_L('「'+name+'」は既にあります。上書きしますか？','“'+name+'” already exists. Overwrite it?')))return;
       L.splice(i,1);break;
     }
   }
@@ -6312,7 +6331,7 @@ function saveReaderSnapshot(){
   w.lastSaved=JSON.parse(JSON.stringify(snap));   // 未保存の印を消す
   _rbPersist();
   render();
-  showToast('「'+name+'」を保存しました');
+  showToast(_L('「'+name+'」を保存しました','“'+name+'” saved'));
 }
 function loadReaderSnapshot(idx){
   var w=_rbWork(_workParam),s=w.saves[idx];
@@ -6322,12 +6341,12 @@ function loadReaderSnapshot(idx){
   saveReaderCustom(_workParam);
   state.readerLoadOpen=false;
   render();
-  showToast('「'+s.name+'」を読み込みました');
+  showToast(_L('「'+s.name+'」を読み込みました','“'+s.name+'” loaded'));
 }
 function deleteReaderSnapshot(idx){
   var L=_rbWork(_workParam).saves,s=L[idx];
   if(!s)return;
-  if(!confirm('「'+s.name+'」を削除しますか？'))return;
+  if(!confirm(_L('「'+s.name+'」を削除しますか？','Delete “'+s.name+'”?')))return;
   L.splice(idx,1);
   _rbPersist();
   render();
@@ -6365,9 +6384,12 @@ function _readerLoadModalHTML(){
 
   // なにができるのかを、はじめての人にも分かる言葉で。
   h+='<p style="font-size:12px;line-height:1.7;color:var(--text-secondary);background:var(--bg-secondary);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">'+
-     '本文の<strong>キャラクターのアイコンを押す</strong>と、そのキャラの吹き出しの色・アイコン画像・読み上げ音声を変えられます。<br>'+
-     '変えただけでは<strong>この端末に残るだけ</strong>です。下の「今の設定を保存」を押すと、'+
-     'アカウントに保存され、ほかの端末やパソコンでも同じ見た目で読めます。</p>';
+     _L('本文の<strong>キャラクターのアイコンを押す</strong>と、そのキャラの吹き出しの色・アイコン画像・読み上げ音声を変えられます。<br>'
+        +'変えただけでは<strong>この端末に残るだけ</strong>です。下の「今の設定を保存」を押すと、'
+        +'アカウントに保存され、ほかの端末やパソコンでも同じ見た目で読めます。',
+        '<strong>Press a character’s icon</strong> in the text to change that character’s bubble colour, icon image and reading voice.<br>'
+        +'On their own, those changes <strong>stay on this device</strong>. Press “Save these settings” below and they are kept '
+        +'with your account, so the work looks the same on your other devices.')+'</p>';
 
   // いまの状態
   var badge = dirty
@@ -6385,16 +6407,17 @@ function _readerLoadModalHTML(){
      '<div style="font-size:13px;font-weight:600;margin-bottom:6px">保存した設定</div>';
   if(!L.length){
     h+='<p style="font-size:12px;color:var(--text-muted);margin:0 0 4px 0;line-height:1.6">'+
-       'まだありません。色やアイコンを整えてから「今の設定を保存」を押すと、名前を付けてここに残せます（最大'+READER_SAVE_MAX+'件）。</p>';
+       _L('まだありません。色やアイコンを整えてから「今の設定を保存」を押すと、名前を付けてここに残せます（最大'+READER_SAVE_MAX+'件）。',
+           'Nothing yet. Set the colours and icons the way you like, press “Save these settings”, and you can keep them here under a name (up to '+READER_SAVE_MAX+').')+'</p>';
   }else{
     h+='<p style="font-size:11px;color:var(--text-muted);margin:0 0 8px 0">使いたい設定の「この設定にする」を押すと、いまの見た目が入れ替わります。</p>';
     h+='<div style="max-height:240px;overflow:auto">';
     L.forEach(function(s,i){
-      var when=new Date(s.savedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+      var when=new Date(s.savedAt).toLocaleString(_L('ja-JP','en-GB'),{timeZone:'Asia/Tokyo'});
       var n=Object.keys(s.data||{}).length;
       h+='<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)">'+
         '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.name)+'</div>'+
-        '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+' ・ '+n+'人分</div></div>'+
+        '<div style="font-size:11px;color:var(--text-muted)">'+esc(when)+_L(' ・ '+n+'人分',' · '+n+' characters')+'</div></div>'+
         '<button onclick="loadReaderSnapshot('+i+')" class="btn btn-ghost" style="padding:6px 12px;font-size:12px;white-space:nowrap">この設定にする</button>'+
         '<button onclick="deleteReaderSnapshot('+i+')" class="btn-icon" title="この保存を削除" style="color:#DC2626">🗑️</button></div>';
     });
@@ -6500,7 +6523,7 @@ function renderReaderCustomModal(){
   // Reset button
   // 「全部戻す」はここには置かない(このキャラだけのつもりで全部消してしまうため)。
   // 全キャラをまとめて戻すのは「🎨 読み方の設定」パネルの中にある。
-  h+='<p style="font-size:11px;color:var(--text-muted);line-height:1.6;margin:16px 0 0 0">変更は'+esc(c.name)+'だけに効きます。この端末に残るので、上の「🎨 読み方の設定」で保存すると他の端末でも同じ見た目になります。</p>';
+  h+='<p style="font-size:11px;color:var(--text-muted);line-height:1.6;margin:16px 0 0 0">'+_L('変更は'+esc(c.name)+'だけに効きます。この端末に残るので、上の「🎨 読み方の設定」で保存すると他の端末でも同じ見た目になります。','The changes apply to '+esc(c.name)+' only. They stay on this device, so save them under “🎨 Reading settings” above and the work looks the same on your other devices.')+'</p>';
   h+='<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="if(state.readerCustom&&state.readerCustom[state.readerCustomCharId]){delete state.readerCustom[state.readerCustomCharId];saveReaderCustom(_workParam)}state.readerCustomOpen=false;render()" class="btn btn-ghost" style="flex:1;justify-content:center;min-width:170px">↩ このキャラだけ元に戻す</button><button onclick="state.readerCustomOpen=false;render()" class="btn btn-primary" style="flex:1;justify-content:center;min-width:100px">完了</button></div>';
   h+='</div></div></div>';
   if(state.imageGalleryOpen)h+=renderGallery();
@@ -6575,7 +6598,7 @@ function renderDupModal(){
   if(!state.dupModalOpen)return '';
   var pairs=_findDuplicates();
   var h='<div class="modal-overlay" onclick="if(event.target===this)closeDupModal()"><div class="modal-content" style="max-width:780px;max-height:85vh;overflow-y:auto">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="font-weight:700;font-size:16px">🔍 重複コンテンツ検出 ('+pairs.length+'件)</h3><button onclick="closeDupModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="font-weight:700;font-size:16px">'+_L('🔍 重複コンテンツ検出 ('+pairs.length+'件)','🔍 Duplicate content ('+pairs.length+')')+'</h3><button onclick="closeDupModal()" class="btn-icon" style="color:var(--text-primary)">✕</button></div>';
   h+='<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">同一テキストが複数ある箇所を表示します。ナレーター側がキャラセリフを引用しているケース等が候補です。<br>★ = 削除推奨。「ジャンプ」で本文の位置を確認できます。</p>';
   if(!pairs.length){h+='<p style="text-align:center;color:var(--text-muted);padding:30px">重複は検出されませんでした 🎉</p>';}
   else{
@@ -6606,6 +6629,93 @@ function renderDupModal(){
 // 作品本文(ナレーション/セリフ)は辞書に無いので翻訳されない(Phase2で対応)。
 // ============================================================
 var I18N_DICT={
+  '🎤 音声生成中':'🎤 Making the audio','🔊 音声データ取込中':'🔊 Reading the audio in',
+  /* js/drafts-client.js と js/services.js が投げる文言。
+     ビューアの alert / confirm は _trFull を通るので、ここで訳せる。 */
+  'ログインの有効期限が切れています。もう一度ログインしてください。':'Your sign-in has expired. Please sign in again.',
+  'この操作をする権限がありません。':'You do not have the rights to do that.',
+  '作品が見つかりません。':'The work could not be found.',
+  '作品が大きすぎます。':'The work is too large.',
+  '無題の作品':'Untitled work',
+  '新しい作品':'A new work',
+  '差し戻すときは理由を書いてください。':'Please write a reason when you send it back.',
+  '下書き':'Draft',
+  '審査待ち':'Awaiting review',
+  '公開中':'Published',
+  '差し戻し':'Sent back',
+  '投稿済み作品が見つかりません':'No posted work was found',
+  '作品データの読み込みに失敗しました':'The work could not be loaded',
+  '投票するにはログインが必要です':'You need to be signed in to vote',
+  '下書き機能が読み込まれていません (js/drafts-client.js)':'The draft feature has not loaded (js/drafts-client.js)',
+  '作者としてログインしてください':'Please sign in as an author',
+  '作品IDが指定されていません':'No work ID was given',
+  '(無題)':'(untitled)',
+  'ログインが必要です':'You need to be signed in',
+  /* 2026-10-22 追加（第2弾）。英語モードに日本語が残っていた分。
+     日本語の書体が入っていないパソコンでは、残った字は豆腐(□)になる。
+     __i18nAudit() で画面から数えて洗い出した。 */
+  '長い作品のため、冒頭・中ほど・終わりを抜き出して読んでいます。':'The work is long, so the opening, the middle and the end were taken and read.',
+  '注意':'Note',
+  '切り替えています…':'Switching…',
+  '切り替えに失敗しました。':'Could not switch it.',
+  '講評を作れませんでした。':'The critique could not be made.',
+  'この作品の講評は見られません。':'You cannot see the critique of this work.',
+  '🧪 AIが読んでいます':'🧪 The AI is reading',
+  '🧪 講評を確認中':'🧪 Looking for a critique',
+  '見られるのはあなただけです。':'Only you can see it.',
+  'いつでも外せます。':'You can take it down at any time.',
+  '📤 公開を依頼':'📤 Ask to publish',
+  '⏳ 審査待ち':'⏳ Awaiting review',
+  '📤 直して再依頼':'📤 Fix it and ask again',
+  '運営者の確認を経て公開されます':'It goes live once the site owner has checked it',
+  '運営者の確認をお待ちください':'Waiting for the site owner to check it',
+  '差し戻されています。直してから再度依頼してください':'Sent back to you. Fix it, then ask again',
+  '話者未設定':'Speaker not set',
+  '登録なしで読める作品は1日5作品までです。':'Without an account you can read five works a day.',
+  '今日の立ち読みはここまでです':'That is all the browsing for today',
+  '作品一覧に戻る':'Back to the works',
+  '（心の声）':'(inner voice)',
+  '左':'Left',
+  '中央':'Centre',
+  '右':'Right',
+  '動物':'Animal',
+  'おとな':'Adult',
+  'いろいろ':'Any',
+  '猫':'Cat',
+  '犬':'Dog',
+  'うさぎ':'Rabbit',
+  '熊':'Bear',
+  'きつね':'Fox',
+  'おおかみ':'Wolf',
+  'ライオン':'Lion',
+  'とら':'Tiger',
+  '馬':'Horse',
+  '牛':'Cow',
+  'ぶた':'Pig',
+  'しか':'Deer',
+  'さる':'Monkey',
+  'パンダ':'Panda',
+  'コアラ':'Koala',
+  'ぞう':'Elephant',
+  'ペンギン':'Penguin',
+  'ふくろう':'Owl',
+  'にわとり':'Chicken',
+  'いるか':'Dolphin',
+  'これは翻訳表示です。':'You are reading a translation.',
+  '編集は原文の言語に切り替えて行ってください。':'Switch to the original language to edit.',
+  'この作品のいまの設定に名前を付けて保存します':'Give the settings for this work a name and save them',
+  '日本語表示時=VOICEVOX、英語表示時=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動使用。':'Japanese display uses VOICEVOX; English display uses the cloud voice (Aura). On a computer without them, a standard voice matching the gender and language is used.',
+  'このブラウザにこの作品の生成音声がありません。\n音声なしでエクスポートしますか? (「🎤 音声生成」ボタンで先に作れます)':'This browser has no generated audio for this work.\nExport it without audio? (You can make the audio first with the “🎤 Generate audio” button.)',
+  '📦 音声埋込みエクスポート中':'📦 Exporting with the audio embedded',
+  '☁️ 英語音声生成中 (Aura)':'☁️ Making the English audio (Aura)',
+  '🔊 音声を送信中':'🔊 Sending the audio',
+  '🔊 音声をアップロード中':'🔊 Uploading the audio',
+  '作者モードを使うにはログインが必要です。ログイン画面へ進みます。':'You need to be signed in to use author mode. Taking you to the sign-in screen.',
+  '作者モードは作者またはオーナー登録済みのアカウントのみ利用できます。':'Author mode is only for accounts registered as an author or as the operator.',
+  'この作品はあなたの作品ではないため、作者モードでは開けません。':'This is not your work, so it cannot be opened in author mode.',
+  'AIでの話者特定機能は本日の利用上限に達したため停止中です。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、日本時間の翌朝9時（毎朝9時に上限がリセットされます）以降に再度読み込んでください。':'Working out who is speaking with the AI has hit today’s limit and has stopped. It will carry on without the AI, which is less accurate. If accuracy matters, correct it yourself, or load the work again after 9am Japan time, when the limit resets.',
+  '下書きが見つかりません':'The draft could not be found',
+  '下書きを開けませんでした':'The draft could not be opened',
   'この講評を作ったあとで本文が変わっています。いまの本文で作り直すには「もう一度みてもらう」を押してください。':'The text has changed since this critique was made. Press “Ask again” to have it read the text as it stands now.',
   'この作品の講評は、別の言語で作られています。\n\nいま読んでいる言語のぶんを作りますか？\n読み終わるまで少しかかります。':'A critique of this work has been made in another language.\n\nShall I make one in the language you are reading?\nIt takes a little while.',
   /* 2026-10-22 追加。英語モードで実際に各パネルを描いて数え直したら、
@@ -6630,7 +6740,7 @@ var I18N_DICT={
   '独自性':'Originality',
   '読みごたえ':'Staying power',
   // js/a11y.js が作る読み飛ばしリンク。viewer は js/i18n.js を読まないので、ここにも要る。
-  '本文へスキップ':'Skip to content','中性':'Neutral','← 次':'← Next','前 →':'Previous →','前':'Previous','次':'Next','⊞ 全画面表示':'⊞ Full screen','⊡ 通常表示':'⊡ Normal view','☀️ ライトモード':'☀️ Light mode','🌙 ナイトモード':'🌙 Night mode','✔ 公開中':'✔ Published','公開中です':'Published','この作品の変更を読者に公開する':'Publish your changes to readers','オーナー権限で他の人の作品を上書き公開':'Republish someone else’s work with operator rights','この講評は読者にも見えます。':'Readers can see this critique.','公開していません。':'Not published.','すべて':'All','どんな相手かを選んでください':'Please choose who they are','もう一度実行すると続きから処理します。':'Run it again and it carries on from where it stopped.','エラー:':'Error:','キャラクター画像':'Character images','サーバーに保存しました':'Saved to the server','サーバーに保存しました（変更を読者に届けるには、公開を依頼してください）':'Saved to the server (to get the changes to readers, ask for them to be published)','動物の種類を選んでください':'Please choose the kind of animal','年齢を選んでください':'Please choose an age','画風を選んでください':'Please choose a style','失敗':'Failed','成功':'Succeeded','枚':' images','本日の上限に達したためです。日本時間の翌朝9時以降にもう一度実行すると、続きから処理します。':'You have reached today’s limit. Run it again after 9am Japan time and it carries on from where it stopped.','登場人物の一覧（作者モードで追加・削除）':'The cast (add and remove them in author mode)','登場人物（追加・削除・編集）':'Characters (add, remove, edit)','直したぶんはまだ読者に届いていません。押すと運営者が確認します':'Your changes have not reached readers yet. Press this and the operator will check them','該当する画像がありません。':'There is no matching image.','読上中:':'Now reading:','📤 変更の公開を依頼':'📤 Ask for changes to be published','(登場人物なし)':'(no characters)','日本語=標準音声で試聴／英語=Auraで試聴（要デプロイ）':'Japanese: preview with the standard voice / English: preview with Aura','※音声を選ぶと作者の事前生成音声(高品質)は使われず、ブラウザ内蔵音声で再生されます。':'* If you choose a voice, the author’s pre-generated audio is not used and your browser’s own voice plays instead.','日本語表示時=VOICEVOX、英語表示時=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動で選びます。':'VOICEVOX when reading in Japanese, Aura in the cloud when reading in English. Where neither is available, a standard voice matching the gender and language is chosen automatically.','AIが5つの観点で講評します。見られるのは作者だけで、公開するかは後で選べます。':'AI gives a critique on five counts. Only you can see it; you choose later whether to publish it.','AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。':'Speaker detection by AI is unavailable just now. We will fall back to a method that does not use AI, which is less accurate. Please correct it yourself, or reload in a little while.','AIに聞くべき箇所は残っていません。':'There is nothing left to ask the AI about.','AI講評':'AI critique','EPUBインポート完了':'EPUB import complete','Language / 言語切替':'Language','MP4/WebM対応・50MBまで・常時ループ再生':'MP4 / WebM, up to 50MB, plays on a loop','PDFインポート完了':'PDF import complete','● まだ保存していない変更があります':'● You have unsaved changes','✓ 保存済みです':'✓ Saved','いまはキャンペーン期間中につき、会員登録も無料です。':'During the campaign, signing up is free.','いまは読者として読んでいるので、アイコンを押すと':'You are reading as a reader, so pressing an icon lets you change','このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。':'This browser does not support speech synthesis (the Web Speech API).\nPlease try Chrome, Edge or Safari.','この作品には、公開されている講評がありません。':'There is no published critique for this work.','この作品に保存された生成音声を削除しますか?\n(ブラウザのIndexedDB から削除)':'Delete the generated audio saved for this work?\n(It is removed from this browser.)','この作品の【全キャラクター】の色・アイコン・音声を、作者がつくったままの状態に戻します。\nよろしいですか？\n（「保存した設定」の一覧は消えません）':'This restores the colours, icons and voices of EVERY character to the way the author made them.\nAre you sure?\n(Your saved settings are not deleted.)','この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）':'Generate audio for every line in this work (English: Aura in the cloud / Japanese: VOICEVOX)','この作品の公開を依頼しますか？\n\n運営者が内容を確認し、問題がなければ公開されます。\nこの時点ではまだ公開されません。':'Ask for this work to be published?\n\nThe operator checks it and publishes it if there is no problem.\nIt is not published at this point.','この作品へのAIの講評':'The AI critique of this work','この作品へのAIの講評を読む（作者が公開しています）':'Read the AI critique of this work (the author has published it)','この作品を公開する権限がありません。':'You do not have permission to publish this work.','この作品を投稿しますか？\n投稿すると他の読者がこの作品を読んで評価できるようになります。':'Post this work?\nOnce posted, other readers can read it and vote for it.','この作品を自分好みの色・アイコン・音声で読むための設定。保存すると他の端末でも同じ見た目になります':'Settings for reading this work with the colours, icons and voices you like. Save them and your other devices look the same.','この判定で反映する':'Apply these decisions','この機能は作者・オーナーのみ利用できます。':'This is available to authors and the operator only.','この端末に残るだけ':'Kept on this device only','この講評を読者にも見せる':'Show this critique to readers too','しおり':'Bookmarks','だけを変えられます。':'only.','と、そのキャラの吹き出しの色・アイコン画像・読み上げ音声を変えられます。':', and you can change that character’s bubble colour, icon and reading voice.','は、右上の「✏️ 作者モード」に切り替えると行えます。':' can be done by switching to “✏️ Author mode” at the top right.','もう一度みてもらう':'Have it read again','キャプション（任意）':'Caption (optional)','キャラクターのアイコンを押す':'Press a character’s icon','キャラクターの色やアイコンを自分好みに変えるには、ログインが必要です。\nログイン画面へ進みますか？':'You need to sign in to change character colours and icons to your liking.\nGo to the sign-in screen?','クリックして動画を選択':'Click to choose a video','クリックして画像を選択':'Click to choose an image','ログインする':'Sign in','ログインすると、しおりを保存して他の端末でも読めます。':'Sign in to save bookmarks and read on your other devices.','中身のない作品は依頼できません。まず本文を書いてください。':'A work with no content cannot be submitted. Please write the text first.','作成を取りやめました。\n\nもう一度「🧪 AI講評」を押せば、いつでも作れます。':'Cancelled.\n\nPress “🧪 AI critique” again whenever you want one.','作者の設定に戻しました':'Restored the author’s settings','作者モードで開いてください':'Please open this in author mode','使いたい設定の「この設定にする」を押すと、いまの見た目が入れ替わります。':'Press “Use these settings” on the one you want, and the current look is replaced.','保存':'Save','保存機能を読み込めませんでした。ページを再読み込みしてください。':'The saving feature could not be loaded. Please reload the page.','先に作品を保存してください':'Please save the work first','先に作品を開いてください。':'Please open a work first.','公開を依頼しました。\n\n運営者の確認をお待ちください。\n結果は「マイ作品」の一覧に表示されます。':'Your request has been sent.\n\nPlease wait for the operator to check it.\nThe result appears in your “My works” list.','前へ':'Previous','動画':'Video','動画が大きすぎます（50MBまで）':'That video is too large (50MB maximum)','動画の説明':'Description of the video','動画ファイルを選んでください':'Please choose a video file','右へ':'Right','地の文・独白・会話を自動判定し、確信の持てないものだけ確認します':'Sorts narration, inner voice and dialogue automatically, and asks you only about the uncertain ones','外国人（英語）':'Non-Japanese (English)','左へ':'Left','挿絵画像':'Illustration','日本人（日本語）':'Japanese (Japanese)','未設定':'Not set','標準音声フォールバック時の言語':'Language used when falling back to the standard voice','次に手を付けるなら':'If you work on one thing next','次へ':'Next','無料で読者会員になる':'Sign up free as a reader','環境':'Environment','画像が大きすぎます（50MBまで）':'That image is too large (50MB maximum)','画像が大きすぎます（5MBまで）':'That image is too large (5MB maximum)','画像の説明':'Description of the image','画像ファイルを選んでください':'Please choose an image file','登場人物の':'the character’s','確認が必要なものだけ表示':'Show only the ones that need checking','確認が必要なものはありません':'There is nothing that needs checking','総評':'Overall','自分の作品だけが依頼できます。':'You can only submit your own work.','自分用の見た目':'Your own look','良かったところ':'What worked well','表示位置':'Position','表紙をアップロードしました':'Cover image uploaded','規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。':'Asks the AI only about the places the rules could not settle. It runs only when you press it.','語っている人':'Who is speaking','語り手:':'Narrator:','語り手（地の文・べた書き）':'Narrator (narration)','読み上げ可能なテキストがありません':'There is no text to read aloud','読者に向けた紹介文':'A blurb for readers','読者の言語設定に合わせて音声が選ばれます。':'The voice is chosen to match the reader’s language.','講評の中身を受け取れませんでした。\n\nもう一度お試しください。':'The critique came back empty.\n\nPlease try again.','追加・削除・編集':'add, remove and edit','非対応':'Not supported','🌐 母語 / 国籍':'🌐 First language','🎙 日本語の音声（VOICEVOX）':'🎙 Japanese voice (VOICEVOX)','🎙 英語の音声（Aura）':'🎙 English voice (Aura)','🎬 動画を選択':'🎬 Choose a video','🎭 AI話者判定':'🎭 AI speaker detection','🔎 文の種別':'🔎 Line types','🔖 現在のページにしおりを追加':'🔖 Bookmark this page','🚩 この作品の公開差し止めを求める':'🚩 Ask for this work to be taken down','🧪 AI講評':'🧪 AI critique','（ルビは 漢字《かな》 の形で書けます。例: 怪《け》しからん）':'(Ruby can be written as 漢字《かな》, for example 怪《け》しからん)','（人物を選ぶと心の声＝点線の吹き出しになります）':'(Choose a character and it becomes an inner voice — a dotted bubble)','＋ 動画':'+ Video','＋ 画像':'+ Image','保存完了':'Saved','内容を保存しました':'Content saved','aninovelの内容を保存しました':'Saved your AniNovel content','物語を、':'Tell your story,','もっと自由に。':'with more freedom.','アニメーションと小説を融合させた新しい読書体験。':'A new reading experience that fuses animation with fiction.','📖 読者モードで開く':'📖 Open in reader mode','吹き出し表示':'Speech bubbles','アニメ風の臨場感':'Anime-style immersion','しおり＆目次':'Bookmarks & contents','読書位置を記録':'Saves your place','作者モード':'Author mode','D&Dで簡単編集':'Easy drag & drop editing','多形式対応':'Multi-format support','停止':'Stop','書式':'Format','通報':'Report','音声':'Voice','シェア':'Share','セリフ':'Dialogue','タイプ':'Type','語り手':'Narrator','スキップ':'Skip','テキスト':'Text','(不明)':'(unknown)','📑 目次':'📑 Contents','👥 登場人物':'👥 Characters','📍 ジャンプ':'📍 Jump','⚙️ 表示設定':'⚙️ Display settings','📝 コンテンツ編集':'📝 Edit content','👤 キャラクター編集':'👤 Edit character','▼ ここにドロップ ▼':'▼ Drop here ▼','🔊 音声データ取込中':'🔊 Importing audio…','🎤 音声生成中':'🎤 Generating voice…','📝 テキスト（.txt）':'📝 Text (.txt)','🔊 .aninovel（音声付き）':'🔊 .aninovel (with audio)','インポート完了':'Import complete','Wordインポート完了':'Word import complete','テキストインポート完了':'Text import complete','削除しますか？':'Delete this?','デフォルトは削除できません':'The default cannot be deleted','プロファイルを削除しました':'Profile deleted','作者推奨の設定に戻しました':'Reset to author defaults','新しいプロファイル名を入力':'Enter a new profile name','同名のプロファイルがあります':'A profile with that name already exists','生成対象のセリフがありません':'No dialogue to generate','全TTSエンドポイント失敗':'All TTS endpoints failed','フォント（日本語）':'Font (Japanese)','フォント':'Font',
+  '本文へスキップ':'Skip to content','中性':'Neutral','← 次':'← Next','前 →':'Previous →','前':'Previous','次':'Next','⊞ 全画面表示':'⊞ Full screen','⊡ 通常表示':'⊡ Normal view','☀️ ライトモード':'☀️ Light mode','🌙 ナイトモード':'🌙 Night mode','✔ 公開中':'✔ Published','公開中です':'Published','この作品の変更を読者に公開する':'Publish your changes to readers','オーナー権限で他の人の作品を上書き公開':'Republish someone else’s work with operator rights','この講評は読者にも見えます。':'Readers can see this critique.','公開していません。':'Not published.','すべて':'All','どんな相手かを選んでください':'Please choose who they are','もう一度実行すると続きから処理します。':'Run it again and it carries on from where it stopped.','エラー:':'Error:','キャラクター画像':'Character images','サーバーに保存しました':'Saved to the server','サーバーに保存しました（変更を読者に届けるには、公開を依頼してください）':'Saved to the server (to get the changes to readers, ask for them to be published)','動物の種類を選んでください':'Please choose the kind of animal','年齢を選んでください':'Please choose an age','画風を選んでください':'Please choose a style','失敗':'Failed','成功':'Succeeded','枚':' images','本日の上限に達したためです。日本時間の翌朝9時以降にもう一度実行すると、続きから処理します。':'You have reached today’s limit. Run it again after 9am Japan time and it carries on from where it stopped.','登場人物の一覧（作者モードで追加・削除）':'The cast (add and remove them in author mode)','登場人物（追加・削除・編集）':'Characters (add, remove, edit)','直したぶんはまだ読者に届いていません。押すと運営者が確認します':'Your changes have not reached readers yet. Press this and the operator will check them','該当する画像がありません。':'There is no matching image.','読上中:':'Now reading:','📤 変更の公開を依頼':'📤 Ask for changes to be published','(登場人物なし)':'(no characters)','日本語=標準音声で試聴／英語=Auraで試聴（要デプロイ）':'Japanese: preview with the standard voice / English: preview with Aura','※音声を選ぶと作者の事前生成音声(高品質)は使われず、ブラウザ内蔵音声で再生されます。':'* If you choose a voice, the author’s pre-generated audio is not used and your browser’s own voice plays instead.','日本語表示時=VOICEVOX、英語表示時=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動で選びます。':'VOICEVOX when reading in Japanese, Aura in the cloud when reading in English. Where neither is available, a standard voice matching the gender and language is chosen automatically.','AIが5つの観点で講評します。見られるのは作者だけで、公開するかは後で選べます。':'AI gives a critique on five counts. Only you can see it; you choose later whether to publish it.','AIでの話者特定機能が一時的に利用できません。精度が落ちますが、AIを使わない方法で処理します。精度が気になる場合は、ご自分で修正するか、しばらくしてから再度読み込んでください。':'Speaker detection by AI is unavailable just now. We will fall back to a method that does not use AI, which is less accurate. Please correct it yourself, or reload in a little while.','AIに聞くべき箇所は残っていません。':'There is nothing left to ask the AI about.','AI講評':'AI critique','EPUBインポート完了':'EPUB import complete','Language / 言語切替':'Language','MP4/WebM対応・50MBまで・常時ループ再生':'MP4 / WebM, up to 50MB, plays on a loop','PDFインポート完了':'PDF import complete','● まだ保存していない変更があります':'● You have unsaved changes','✓ 保存済みです':'✓ Saved','いまはキャンペーン期間中につき、会員登録も無料です。':'During the campaign, signing up is free.','いまは読者として読んでいるので、アイコンを押すと':'You are reading as a reader, so pressing an icon lets you change','このブラウザは音声合成（Web Speech API）に対応していません。\nChrome / Edge / Safari をお試しください。':'This browser does not support speech synthesis (the Web Speech API).\nPlease try Chrome, Edge or Safari.','この作品には、公開されている講評がありません。':'There is no published critique for this work.','この作品に保存された生成音声を削除しますか?\n(ブラウザのIndexedDB から削除)':'Delete the generated audio saved for this work?\n(It is removed from this browser.)','この作品の【全キャラクター】の色・アイコン・音声を、作者がつくったままの状態に戻します。\nよろしいですか？\n（「保存した設定」の一覧は消えません）':'This restores the colours, icons and voices of EVERY character to the way the author made them.\nAre you sure?\n(Your saved settings are not deleted.)','この作品の全セリフを音声生成（英語=クラウドAura / 日本語=VOICEVOX）':'Generate audio for every line in this work (English: Aura in the cloud / Japanese: VOICEVOX)','この作品の公開を依頼しますか？\n\n運営者が内容を確認し、問題がなければ公開されます。\nこの時点ではまだ公開されません。':'Ask for this work to be published?\n\nThe operator checks it and publishes it if there is no problem.\nIt is not published at this point.','この作品へのAIの講評':'The AI critique of this work','この作品へのAIの講評を読む（作者が公開しています）':'Read the AI critique of this work (the author has published it)','この作品を公開する権限がありません。':'You do not have permission to publish this work.','この作品を投稿しますか？\n投稿すると他の読者がこの作品を読んで評価できるようになります。':'Post this work?\nOnce posted, other readers can read it and vote for it.','この作品を自分好みの色・アイコン・音声で読むための設定。保存すると他の端末でも同じ見た目になります':'Settings for reading this work with the colours, icons and voices you like. Save them and your other devices look the same.','この判定で反映する':'Apply these decisions','この機能は作者・オーナーのみ利用できます。':'This is available to authors and the operator only.','この端末に残るだけ':'Kept on this device only','この講評を読者にも見せる':'Show this critique to readers too','しおり':'Bookmarks','だけを変えられます。':'only.','と、そのキャラの吹き出しの色・アイコン画像・読み上げ音声を変えられます。':', and you can change that character’s bubble colour, icon and reading voice.','は、右上の「✏️ 作者モード」に切り替えると行えます。':' can be done by switching to “✏️ Author mode” at the top right.','もう一度みてもらう':'Have it read again','キャプション（任意）':'Caption (optional)','キャラクターのアイコンを押す':'Press a character’s icon','キャラクターの色やアイコンを自分好みに変えるには、ログインが必要です。\nログイン画面へ進みますか？':'You need to sign in to change character colours and icons to your liking.\nGo to the sign-in screen?','クリックして動画を選択':'Click to choose a video','クリックして画像を選択':'Click to choose an image','ログインする':'Sign in','ログインすると、しおりを保存して他の端末でも読めます。':'Sign in to save bookmarks and read on your other devices.','中身のない作品は依頼できません。まず本文を書いてください。':'A work with no content cannot be submitted. Please write the text first.','作成を取りやめました。\n\nもう一度「🧪 AI講評」を押せば、いつでも作れます。':'Cancelled.\n\nPress “🧪 AI critique” again whenever you want one.','作者の設定に戻しました':'Restored the author’s settings','作者モードで開いてください':'Please open this in author mode','使いたい設定の「この設定にする」を押すと、いまの見た目が入れ替わります。':'Press “Use these settings” on the one you want, and the current look is replaced.','保存':'Save','保存機能を読み込めませんでした。ページを再読み込みしてください。':'The saving feature could not be loaded. Please reload the page.','先に作品を保存してください':'Please save the work first','先に作品を開いてください。':'Please open a work first.','公開を依頼しました。\n\n運営者の確認をお待ちください。\n結果は「マイ作品」の一覧に表示されます。':'Your request has been sent.\n\nPlease wait for the operator to check it.\nThe result appears in your “My works” list.','前へ':'Previous','動画':'Video','動画が大きすぎます（50MBまで）':'That video is too large (50MB maximum)','動画の説明':'Description of the video','動画ファイルを選んでください':'Please choose a video file','右へ':'Right','地の文・独白・会話を自動判定し、確信の持てないものだけ確認します':'Sorts narration, inner voice and dialogue automatically, and asks you only about the uncertain ones','外国人（英語）':'Non-Japanese (English)','左へ':'Left','挿絵画像':'Illustration','日本人（日本語）':'Japanese (Japanese)','未設定':'Not set','標準音声フォールバック時の言語':'Language used when falling back to the standard voice','次に手を付けるなら':'If you work on one thing next','次へ':'Next','無料で読者会員になる':'Sign up free as a reader','環境':'Environment','画像が大きすぎます（50MBまで）':'That image is too large (50MB maximum)','画像が大きすぎます（5MBまで）':'That image is too large (5MB maximum)','画像の説明':'Description of the image','画像ファイルを選んでください':'Please choose an image file','登場人物の':'the character’s','確認が必要なものだけ表示':'Show only the ones that need checking','確認が必要なものはありません':'There is nothing that needs checking','総評':'Overall','自分の作品だけが依頼できます。':'You can only submit your own work.','自分用の見た目':'Your own look','良かったところ':'What worked well','表示位置':'Position','表紙をアップロードしました':'Cover image uploaded','規則で判定しきれなかった箇所だけをAIに問い合わせます。押したときだけ動きます。':'Asks the AI only about the places the rules could not settle. It runs only when you press it.','語っている人':'Who is speaking','語り手:':'Narrator:','語り手（地の文・べた書き）':'Narrator (narration)','読み上げ可能なテキストがありません':'There is no text to read aloud','読者に向けた紹介文':'A blurb for readers','読者の言語設定に合わせて音声が選ばれます。':'The voice is chosen to match the reader’s language.','講評の中身を受け取れませんでした。\n\nもう一度お試しください。':'The critique came back empty.\n\nPlease try again.','追加・削除・編集':'add, remove and edit','非対応':'Not supported','🌐 母語 / 国籍':'🌐 First language','🎙 日本語の音声（VOICEVOX）':'🎙 Japanese voice (VOICEVOX)','🎙 英語の音声（Aura）':'🎙 English voice (Aura)','🎬 動画を選択':'🎬 Choose a video','🎭 AI話者判定':'🎭 AI speaker detection','🔎 文の種別':'🔎 Line types','🔖 現在のページにしおりを追加':'🔖 Bookmark this page','🚩 この作品の公開差し止めを求める':'🚩 Ask for this work to be taken down','🧪 AI講評':'🧪 AI critique','（ルビは 漢字《かな》 の形で書けます。例: 怪《け》しからん）':'(For Japanese text, the reading goes in double angle brackets right after the kanji.)','（人物を選ぶと心の声＝点線の吹き出しになります）':'(Choose a character and it becomes an inner voice — a dotted bubble)','＋ 動画':'+ Video','＋ 画像':'+ Image','保存完了':'Saved','内容を保存しました':'Content saved','aninovelの内容を保存しました':'Saved your AniNovel content','物語を、':'Tell your story,','もっと自由に。':'with more freedom.','アニメーションと小説を融合させた新しい読書体験。':'A new reading experience that fuses animation with fiction.','📖 読者モードで開く':'📖 Open in reader mode','吹き出し表示':'Speech bubbles','アニメ風の臨場感':'Anime-style immersion','しおり＆目次':'Bookmarks & contents','読書位置を記録':'Saves your place','作者モード':'Author mode','D&Dで簡単編集':'Easy drag & drop editing','多形式対応':'Multi-format support','停止':'Stop','書式':'Format','通報':'Report','音声':'Voice','シェア':'Share','セリフ':'Dialogue','タイプ':'Type','語り手':'Narrator','スキップ':'Skip','テキスト':'Text','(不明)':'(unknown)','📑 目次':'📑 Contents','👥 登場人物':'👥 Characters','📍 ジャンプ':'📍 Jump','⚙️ 表示設定':'⚙️ Display settings','📝 コンテンツ編集':'📝 Edit content','👤 キャラクター編集':'👤 Edit character','▼ ここにドロップ ▼':'▼ Drop here ▼','🔊 音声データ取込中':'🔊 Importing audio…','🎤 音声生成中':'🎤 Generating voice…','📝 テキスト（.txt）':'📝 Text (.txt)','🔊 .aninovel（音声付き）':'🔊 .aninovel (with audio)','インポート完了':'Import complete','Wordインポート完了':'Word import complete','テキストインポート完了':'Text import complete','削除しますか？':'Delete this?','デフォルトは削除できません':'The default cannot be deleted','プロファイルを削除しました':'Profile deleted','作者推奨の設定に戻しました':'Reset to author defaults','新しいプロファイル名を入力':'Enter a new profile name','同名のプロファイルがあります':'A profile with that name already exists','生成対象のセリフがありません':'No dialogue to generate','全TTSエンドポイント失敗':'All TTS endpoints failed','フォント（日本語）':'Font (Japanese)','フォント':'Font',
   // --- ナビ / モード / ホーム ---
   'ホーム':'Home','アニノベル':'AniNovel','アニノベル - 作品ビューワ':'AniNovel — Viewer',
   '物語を、':'Stories,','もっと自由に。':'unbound.',
@@ -6746,9 +6856,20 @@ var state_lang_ready=true;
 /* つなぎ合わせて作る文言の断片。長いものから順に当てる。
  * 短い語ほど他の語の中に当たって文章を壊すので、ここには
  * 1〜2文字の普通名詞 (件・全・章・音声 など) を入れていない。 */
-var I18N_FRAG={'まだありません。色やアイコンを整えてから「今の設定を保存」を押すと、名前を付けてここに残せます（最大':'Nothing yet. Set the colours and icons the way you like, press “Save these settings”, and you can keep them here under a name (up to ',' 件の送信に失敗しました。\n公開後、その分は標準音声になります。もう一度依頼すれば再送されます。':' could not be sent.\nThose will use the standard voice after publishing. Request again and they are resent.','\n\n受け入れる形式: 先頭がアルファベット、続けて [A-Za-z0-9_-]（最大100文字）':'\n\nAllowed format: starts with a letter, then [A-Za-z0-9_-], up to 100 characters','2. 「CORS Policy Mode」を localapps → all に変更\n':'2. Change “CORS Policy Mode” from localapps to all\n','既存音声の一覧が取得できませんでした。全件を作り直してしまうため中止します。\n':'The list of existing audio could not be read. Stopping, so that everything is not regenerated.\n','これは機械による一つの読み方です。作品の値打ちを決めるものではありません。':'This is one machine reading of the work. It does not decide the work’s worth.','投稿はこの端末に保存されましたが、サーバーへの公開に失敗しました。\n':'Your post was saved on this device, but publishing to the server failed.\n','\n\n他の人が閲覧できるようにするには、もう一度「投稿」してください。':'\n\nTo let other people read it, press Post again.','【解決手順 — 最初の1回だけ設定すれば、以降ずっと使えます】\n\n':'[How to fix it — set this once and it keeps working]\n\n','1. これから VOICEVOX 設定画面を新しいタブで開きます\n':'1. We will open the VOICEVOX settings in a new tab\n','5つの観点で点数と講評がつきます。読み終わるまで少しかかります。\n':'You get a score and a critique on five counts. It takes a little while to read.\n','既定では公開しません。公開を選ぶと、運営者も読めるようになります。':'It is not published by default. If you publish it, the operator can read it too.','Auraの試聴に失敗しました（要デプロイ/AIバインディング）: ':'The Aura preview failed (it needs the deployment and the AI binding): ','先に「公開保存」で保存してから、もう一度お試しください。\n\n':'Please save it with “Publish” first, then try again.\n\n','オーナー権限で他の人の作品を上書き公開します。\n作品ID: ':'Republishing someone else’s work with operator rights.\nWork ID: ','この作品IDはサーバーに上書き公開できません。\n作品ID: ':'This work ID cannot be republished to the server.\nWork ID: ','投稿すれば音声はサーバーに保存され、読者にも配信されます。\n':'Once posted, the audio is saved on the server and served to readers.\n','\n\nこの文面をそのまま伝えていただければ原因を追えます。':'\n\nSend this text as it is and we can track down the cause.','\n\nこのURLを共有すれば、他の人もこの作品を読めます。':'\n\nShare this address and other people can read the work.','4. VOICEVOX 本体を一度終了し、再起動する\n':'4. Quit VOICEVOX and start it again\n','5. このページに戻って「🎤 音声生成」を再実行\n\n':'5. Come back to this page and press “🎤 Generate audio” again\n\n','この作品をAIに読んでもらい、講評を作りますか？\n\n':'Have the AI read this work and write a critique?\n\n','続きは、このボタンをもう一度押したときだけ進みます\n':'It carries on only when you press this button again\n','この大きさだとブラウザが落ちる可能性が高いです。\n\n':'At that size the browser is likely to crash.\n\n','   ※または「Allow Origin」欄に  ':'   * Or add this to the “Allow Origin” field:  ','AI講評は、サーバーに保存した作品が対象です。\n\n':'The AI critique works on a work saved on the server.\n\n','途中で本日の上限に達した場合はそこで停止します。\n':'If today’s limit is reached part way, it stops there.\n','この作品の変更を読者に公開します。\n作品ID: ':'Your changes will be published to readers.\nWork ID: ','VOICEVOX 設定画面を今すぐ開きますか?':'Open the VOICEVOX settings now?','この作品はまだこの端末の中にだけあります。\n':'This work is still only on this device.\n','日付が変わればまた5作品お読みいただけます。':'You can read five more works once the date changes.','採点の仕方を直したので、付け直しますか？\n':'The scoring has been fixed. Redo it?\n','保存に失敗したため、依頼を中止しました。\n':'Saving failed, so the request was cancelled.\n','それでも埋め込みエクスポートを続けますか？':'Export with the audio embedded anyway?','この作品には前の版の講評があります。\n\n':'There is a critique of this work from an earlier version.\n\n','人のキャラクターを自分好みに変えています':' characters changed to your liking','テスト音声です。１０階から見下ろします。':'This is a test voice, looking down from the tenth floor.','（書いた内容はこの端末に残っています）':'(What you wrote is kept on this device)','設定画面を手動で開いてください:\n':'Please open the settings yourself:\n','」は既にあります。上書きしますか？':'” already exists. Overwrite it?','」の登場人物が既に存在します。\n「':'” already exists as a character.\n“','AI話者判定が終わりました。\n\n':'Speaker detection has finished.\n\n','公開保存しました！\n作品ID: ':'Saved and published.\nWork ID: ','AI講評でつまずきました。\n\n':'The AI critique ran into trouble.\n\n','\n\nログイン画面へ移動します。':'\n\nTaking you to the sign-in screen.','3. 「保存」ボタンを押す\n':'3. Press Save\n','投稿しました！\n作品ID: ':'Posted.\nWork ID: ','MBのファイルになります。\n':'MB in size.\n','・規則と食い違った箇所: ':'· Disagreed with the rules: ','見込みの呼び出し回数: ':'Expected number of calls: ','保存できませんでした: ':'Could not save: ','動画アップロード失敗: ':'Video upload failed: ','画像アップロード失敗: ':'Image upload failed: ','表紙アップロード失敗: ':'Cover upload failed: ','音声を埋込み, サイズ約':'Audio embedded, about ','・AIも判断できず: ':'· The AI could not decide either: ','AIが話者を特定中… ':'The AI is working out who is speaking… ','依頼に失敗しました: ':'The request failed: ','」として登録します。':'” will be registered.','AIに聞く箇所: ':'Places to ask the AI about: ',' 件残っています。':' left.','公開保存エラー: ':'Publish error: ',' 件を埋め込むと約':' embedded comes to about ','」を読み込みました':'” loaded','」を削除しますか？':'” — delete it?','。テスト音声です。':'. This is a test voice.','削除しますか?\n[':'Delete this?\n[','・調べた箇所: ':'· Places checked: ','・話者を補正: ':'· Speakers corrected: ','\n続行しますか？':'\nCarry on?','🎨 読み方の設定':'🎨 Reading settings','」を保存しました':'” saved','　確認が必要: ':'  Needs checking: ',' 件 — 地の文':' — narration','・日本語セリフ ':'· Japanese lines ','保存エラー: ':'Save error: ','投稿エラー: ':'Post error: ','・英語セリフ ':'· English lines ','  を追加\n':'\n','作品ID: ':'Work ID: ','未処理が ':'Still to do: ','同じ名前「':'The name “','　作者: ':'  Author: ',' / 独白':' / inner voice',' / 会話':' / dialogue','_音声付_':'_with_audio_','作品: ':'Work: ','ページ ':'Page ','著：':'by '};
+var I18N_FRAG={'通信に失敗しました (HTTP ':'The connection failed (HTTP ','作品が見つかりません: ':'The work could not be found: ','投稿作品が見つかりません: ':'The posted work could not be found: ','manifest取得失敗: ':'The manifest could not be read: ','(前の版は、全作品が同じ点になる不具合がありました)':'(in the earlier version every work came out with the same score)','見られるのはあなただけで、公開するかどうかは後で選べます。':'Only you can see it, and you can decide later whether to show it.','件に反映しました。\n内容を確認して「📢 上書き公開」で保存してください。':' of them were applied.\nCheck them, then save with “📢 Republish”.','通信エラー':'connection error','保存先(pub_)が見つかりません: ':'The place to save it (pub_) was not found: ','設定を保存できませんでした(':'The settings could not be saved (','エラー (':'Error (','VOICEVOX Engine がエラーを返しました (':'The VOICEVOX engine returned an error (',')\n\nVOICEVOX を再起動してから再実行してください。':')\n\nRestart VOICEVOX and try again.','VOICEVOX Engine に接続できません (':'VOICEVOX cannot be reached (',')\n\nVOICEVOX が起動していません。\nVOICEVOX を起動してから再実行してください。':')\n\nVOICEVOX is not running.\nStart VOICEVOX and try again.','VOICEVOX でこの作品の全セリフ(':'VOICEVOX will voice every line of this work (','件)を音声生成します。\n数十秒〜数分かかります。続行しますか?':' lines).\nIt takes from a few seconds to a few minutes. Carry on?','クラウド(Aura)でこの作品の英訳セリフ(':'The cloud voice (Aura) will voice the English lines of this work (','件)を音声生成します。\nこのブラウザに保存されます。続行しますか?':' lines).\nThey are kept in this browser. Carry on?','音声生成完了\n新規=':'Audio done.\nNew=','英語音声生成完了\n新規=':'English audio done.\nNew=',' / 使い回し=':' / reused=',' / キャッシュ=':' / from cache=',' / 失敗=':' / failed=',' (合計':' (total ','この作品の音声を生成します。\n':'The audio for this work will be made.\n','件 → クラウド(Aura)\n':' lines → the cloud voice (Aura)\n','件 → VOICEVOX (要 localhost:50021 起動)\n':' lines → VOICEVOX (needs localhost:50021 running)\n','\n続行しますか?':'\nCarry on?','音声生成完了':'Audio done.','英語(Aura): 新規=':'English (Aura): new=','日本語(VOICEVOX): 新規=':'Japanese (VOICEVOX): new=','この作品に保存された生成音声を削除しますか?\n(ブラウザのIndexedDB から削除)':'Delete the generated audio kept for this work?\n(removed from the browser’s IndexedDB)','VOICEVOX は起動していますが、このサイト (':'VOICEVOX is running, but it does not allow this site (',') からの利用を許可していません。':') to use it.','この作品の原文を':'Set the original language of this work to ','に設定しますか？\n\n保存されている本文がその言語の原文として扱われ、もう一方の言語は翻訳として生成されます。':'?\n\nThe text that is stored is then treated as the original in that language, and the other language is produced as a translation.','この作品の講評は、別の言語で作られています。':'A critique of this work has been made in another language.','いま読んでいる言語のぶんを作りますか？':'Make one in the language you are reading in?','読み終わるまで少しかかります。':'It takes a little while to read.','まだありません。色やアイコンを整えてから「今の設定を保存」を押すと、名前を付けてここに残せます（最大':'Nothing yet. Set the colours and icons the way you like, press “Save these settings”, and you can keep them here under a name (up to ',' 件の送信に失敗しました。\n公開後、その分は標準音声になります。もう一度依頼すれば再送されます。':' could not be sent.\nThose will use the standard voice after publishing. Request again and they are resent.','\n\n受け入れる形式: 先頭がアルファベット、続けて [A-Za-z0-9_-]（最大100文字）':'\n\nAllowed format: starts with a letter, then [A-Za-z0-9_-], up to 100 characters','2. 「CORS Policy Mode」を localapps → all に変更\n':'2. Change “CORS Policy Mode” from localapps to all\n','既存音声の一覧が取得できませんでした。全件を作り直してしまうため中止します。\n':'The list of existing audio could not be read. Stopping, so that everything is not regenerated.\n','これは機械による一つの読み方です。作品の値打ちを決めるものではありません。':'This is one machine reading of the work. It does not decide the work’s worth.','投稿はこの端末に保存されましたが、サーバーへの公開に失敗しました。\n':'Your post was saved on this device, but publishing to the server failed.\n','\n\n他の人が閲覧できるようにするには、もう一度「投稿」してください。':'\n\nTo let other people read it, press Post again.','【解決手順 — 最初の1回だけ設定すれば、以降ずっと使えます】\n\n':'[How to fix it — set this once and it keeps working]\n\n','1. これから VOICEVOX 設定画面を新しいタブで開きます\n':'1. We will open the VOICEVOX settings in a new tab\n','5つの観点で点数と講評がつきます。読み終わるまで少しかかります。\n':'You get a score and a critique on five counts. It takes a little while to read.\n','既定では公開しません。公開を選ぶと、運営者も読めるようになります。':'It is not published by default. If you publish it, the operator can read it too.','Auraの試聴に失敗しました（要デプロイ/AIバインディング）: ':'The Aura preview failed (it needs the deployment and the AI binding): ','先に「公開保存」で保存してから、もう一度お試しください。\n\n':'Please save it with “Publish” first, then try again.\n\n','オーナー権限で他の人の作品を上書き公開します。\n作品ID: ':'Republishing someone else’s work with operator rights.\nWork ID: ','この作品IDはサーバーに上書き公開できません。\n作品ID: ':'This work ID cannot be republished to the server.\nWork ID: ','投稿すれば音声はサーバーに保存され、読者にも配信されます。\n':'Once posted, the audio is saved on the server and served to readers.\n','\n\nこの文面をそのまま伝えていただければ原因を追えます。':'\n\nSend this text as it is and we can track down the cause.','\n\nこのURLを共有すれば、他の人もこの作品を読めます。':'\n\nShare this address and other people can read the work.','4. VOICEVOX 本体を一度終了し、再起動する\n':'4. Quit VOICEVOX and start it again\n','5. このページに戻って「🎤 音声生成」を再実行\n\n':'5. Come back to this page and press “🎤 Generate audio” again\n\n','この作品をAIに読んでもらい、講評を作りますか？\n\n':'Have the AI read this work and write a critique?\n\n','続きは、このボタンをもう一度押したときだけ進みます\n':'It carries on only when you press this button again\n','この大きさだとブラウザが落ちる可能性が高いです。\n\n':'At that size the browser is likely to crash.\n\n','   ※または「Allow Origin」欄に  ':'   * Or add this to the “Allow Origin” field:  ','AI講評は、サーバーに保存した作品が対象です。\n\n':'The AI critique works on a work saved on the server.\n\n','途中で本日の上限に達した場合はそこで停止します。\n':'If today’s limit is reached part way, it stops there.\n','この作品の変更を読者に公開します。\n作品ID: ':'Your changes will be published to readers.\nWork ID: ','VOICEVOX 設定画面を今すぐ開きますか?':'Open the VOICEVOX settings now?','この作品はまだこの端末の中にだけあります。\n':'This work is still only on this device.\n','日付が変わればまた5作品お読みいただけます。':'You can read five more works once the date changes.','採点の仕方を直したので、付け直しますか？\n':'The scoring has been fixed. Redo it?\n','保存に失敗したため、依頼を中止しました。\n':'Saving failed, so the request was cancelled.\n','それでも埋め込みエクスポートを続けますか？':'Export with the audio embedded anyway?','この作品には前の版の講評があります。\n\n':'There is a critique of this work from an earlier version.\n\n','人のキャラクターを自分好みに変えています':' characters changed to your liking','テスト音声です。１０階から見下ろします。':'This is a test voice, looking down from the tenth floor.','（書いた内容はこの端末に残っています）':'(What you wrote is kept on this device)','設定画面を手動で開いてください:\n':'Please open the settings yourself:\n','」は既にあります。上書きしますか？':'” already exists. Overwrite it?','」の登場人物が既に存在します。\n「':'” already exists as a character.\n“','AI話者判定が終わりました。\n\n':'Speaker detection has finished.\n\n','公開保存しました！\n作品ID: ':'Saved and published.\nWork ID: ','AI講評でつまずきました。\n\n':'The AI critique ran into trouble.\n\n','\n\nログイン画面へ移動します。':'\n\nTaking you to the sign-in screen.','3. 「保存」ボタンを押す\n':'3. Press Save\n','投稿しました！\n作品ID: ':'Posted.\nWork ID: ','MBのファイルになります。\n':'MB in size.\n','・規則と食い違った箇所: ':'· Disagreed with the rules: ','見込みの呼び出し回数: ':'Expected number of calls: ','保存できませんでした: ':'Could not save: ','動画アップロード失敗: ':'Video upload failed: ','画像アップロード失敗: ':'Image upload failed: ','表紙アップロード失敗: ':'Cover upload failed: ','音声を埋込み, サイズ約':'Audio embedded, about ','・AIも判断できず: ':'· The AI could not decide either: ','AIが話者を特定中… ':'The AI is working out who is speaking… ','依頼に失敗しました: ':'The request failed: ','」として登録します。':'” will be registered.','AIに聞く箇所: ':'Places to ask the AI about: ',' 件残っています。':' left.','公開保存エラー: ':'Publish error: ',' 件を埋め込むと約':' embedded comes to about ','」を読み込みました':'” loaded','」を削除しますか？':'” — delete it?','。テスト音声です。':'. This is a test voice.','削除しますか?\n[':'Delete this?\n[','・調べた箇所: ':'· Places checked: ','・話者を補正: ':'· Speakers corrected: ','\n続行しますか？':'\nCarry on?','🎨 読み方の設定':'🎨 Reading settings','」を保存しました':'” saved','　確認が必要: ':'  Needs checking: ',' 件 — 地の文':' — narration','・日本語セリフ ':'· Japanese lines ','保存エラー: ':'Save error: ','投稿エラー: ':'Post error: ','・英語セリフ ':'· English lines ','  を追加\n':'\n','作品ID: ':'Work ID: ','未処理が ':'Still to do: ','同じ名前「':'The name “','　作者: ':'  Author: ',' / 独白':' / inner voice',' / 会話':' / dialogue','_音声付_':'_with_audio_','作品: ':'Work: ','ページ ':'Page ','著：':'by '};
 var I18N_FRAG_KEYS=Object.keys(I18N_FRAG).sort(function(a,b){return b.length-a.length;});
-function _trKey(s){ if(s==null) return s; var k=(''+s).trim(); if(!k) return s; var hit=I18N_DICT[k]; if(hit==null) return s; return (''+s).replace(k,hit); }
+/* 数のうしろに付く単位。数が前に無いと当たらないので、作品名を壊さない。
+   断片の表に「件」のような短い語を入れられないための逃げ道。 */
+var I18N_RX=[
+  [/^(\d+)\s*件$/, '$1'],
+  [/^(\d+)\s*枚$/, '$1'],
+  [/^(\d+)\s*人$/, '$1'],
+  [/^全\s*(\d+)\s*件$/, '$1 in all']
+];
+/* ここには _trKey(s) という辞書引きの関数があったが、消した。
+ * 6798行の _trKey(h)（翻訳キャッシュの鍵を作る方）と名前がぶつかっていて、
+ * あとに書いた方で上書きされていた。どこからも呼ばれていなかったので
+ * 実害は出ていないが、呼べば鍵の文字列が返る罠だった。 */
 function _trFull(s){
   if(s==null||state.lang!=='en') return s;
   var k=(''+s).trim();
@@ -6778,6 +6899,50 @@ function _trFrag(s){
   }
   return t;
 }
+/* 元で出し分ける。
+ * 辞書は「丸ごと一致」でしか引けないので、数や名前を挟んで作る文言
+ * （「全5件 — 地の文」など）には当たらない。断片の表に短い語を入れると
+ * 作品名を壊すので、そういう所はここで出し分ける。 */
+function _L(ja,en){ return (state && state.lang==='en') ? en : ja; }
+
+/* 英語モードで日本語が残っていないかを数える。
+ * 日本語の書体が入っていないパソコンでは、残った字は豆腐(□)になる。
+ * 目で見て探すのは当てにならないので、画面から数える手立てを置く。
+ *   コンソールで __i18nAudit() と打つと、残っている所を返す。 */
+window.__i18nAudit=function(){
+  var JA=/[぀-ヿ㐀-鿿！-｠、。「-』]/;
+  var SKIP={SCRIPT:1,STYLE:1,NOSCRIPT:1,TEMPLATE:1,CODE:1,PRE:1,TEXTAREA:1};
+  var out=[];
+  function inWork(n){
+    for(var e=n.nodeType===1?n:n.parentNode; e && e.nodeType===1; e=e.parentNode){
+      if(e.classList && (e.classList.contains('notranslate')||
+         e.hasAttribute('data-cid')||e.hasAttribute('data-work-text'))) return true;
+      if(e.getAttribute && e.getAttribute('translate')==='no') return true;
+    }
+    return false;
+  }
+  var w=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+  var n;
+  while(n=w.nextNode()){
+    var p=n.parentNode;
+    if(p && SKIP[p.tagName]) continue;
+    var t=(n.nodeValue||'').trim();
+    if(!t || !JA.test(t)) continue;
+    if(inWork(n)) continue;            // 作品本文は訳の対象ではない
+    out.push({where:(p&&p.tagName)||'?', text:t.slice(0,80)});
+  }
+  var els=document.querySelectorAll('[title],[placeholder],[aria-label],[alt]');
+  for(var i=0;i<els.length;i++){
+    ['title','placeholder','aria-label','alt'].forEach(function(a){
+      var v=els[i].getAttribute(a);
+      if(v && JA.test(v) && !inWork(els[i])) out.push({where:els[i].tagName+'['+a+']', text:v.slice(0,80)});
+    });
+  }
+  console.log('[i18n audit] 残り '+out.length+' 件');
+  if(out.length) console.table(out);
+  return out;
+};
+
 function setLang(l){ state.lang=l; try{localStorage.setItem('aninovel_lang',l);localStorage.setItem('aninovel_lang_v1',l);}catch(e){} render(); if(l==='en') maybeTranslateWork(); }
 function toggleLang(){ setLang(state.lang==='en'?'ja':'en'); }
 
@@ -6888,7 +7053,7 @@ function _ntitle(){
     if(t&&!(state.lang==='en'&&_hasJaChars(t)))return t;
     if(t)return t;
   }
-  return state.novel.title||'無題';
+  return state.novel.title||_L('無題','Untitled');
 }
 
 /* タブの題名を、いま開いている作品に合わせる。
@@ -7058,7 +7223,7 @@ function translateWork(hash){
   });
 }
 
-function applyI18n(){
+function applyI18n(rootEl){
   try{
     var html=document.documentElement; html.setAttribute('lang', state.lang==='en'?'en':'ja');
     if(state.lang!=='en') return;
@@ -7071,8 +7236,15 @@ function applyI18n(){
      *   ・AI講評のパネル (_critiqueShell が document.body に付ける)
      *   ・読み上げの告知領域 (#aninovel-live)
      * 辞書に言葉があっても、走査が届かないので日本語のまま残っていた。
-     * <script> と <style> は _skipNode が弾くので、body 全体で安全。 */
-    var root=document.body; if(!root) return;
+     * <script> と <style> は _skipNode が弾くので、body 全体で安全。
+     *
+     * 2026-10-22 追記: body 全体を見るようにしても、まだ足りなかった。
+     * この関数を呼ぶのは render() だけで、あとから body に足される
+     * ものには誰も訳をかけない。AI講評のパネルは押したときに作られ、
+     * そのあと render() は走らないので、日本語のまま出ていた。
+     * 下の _i18nWatch が、足されたところだけを後追いで訳す。
+     * rootEl を渡せば、その中だけを見る。 */
+    var root=rootEl||document.body; if(!root) return;
     // テキストノード走査
     //
     // <script> と <style> の中身も文字の塊なので、走査が当たると
@@ -7097,23 +7269,99 @@ function applyI18n(){
       var hit=I18N_DICT[k];
       if(hit!=null && hit!==k){ nodes[i].nodeValue=t.replace(k,hit); }
       // 丸ごと当たらないものは、断片で訳す (つなぎ合わせて作った文言)
-      else { var f=_trFrag(t); if(f!==t) nodes[i].nodeValue=f; }
+      else {
+        var f=_trFrag(t);
+        if(f!==t){ nodes[i].nodeValue=f; }
+        else {
+          /* 数と単位だけの札 (「12件」など)。数が前に付くことを条件にするので、
+             作品名の中の「件」には当たらない。他のファイル (server-save.js の
+             ギャラリーなど) が作る札まで面倒を見るために置いてある。 */
+          var r=t;
+          for(var ri=0;ri<I18N_RX.length;ri++) r=r.replace(I18N_RX[ri][0], I18N_RX[ri][1]);
+          if(r!==t) nodes[i].nodeValue=r;
+        }
+      }
     }
-    // 属性 (title / placeholder)
-    var els=root.querySelectorAll('[title],[placeholder]');
-    for(var j=0;j<els.length;j++){
-      ['title','placeholder'].forEach(function(a){
-        var v=els[j].getAttribute(a); if(v==null) return; var k2=v.trim(); var h2=I18N_DICT[k2];
-        if(h2!=null && h2!==k2) els[j].setAttribute(a, v.replace(k2,h2));
-      });
+    /* 属性。
+     * aria-label は画面に字としては出ないが、読み上げには出る。
+     * alt は画像が出ないときに字として出る。どちらも訳す。 */
+    var _ATTRS=['title','placeholder','aria-label','alt'];
+    var els=root.querySelectorAll('[title],[placeholder],[aria-label],[alt]');
+    var list=[];
+    for(var j0=0;j0<els.length;j0++) list.push(els[j0]);
+    if(root.nodeType===1 && root.hasAttribute &&
+       (root.hasAttribute('title')||root.hasAttribute('placeholder')||
+        root.hasAttribute('aria-label')||root.hasAttribute('alt'))) list.push(root);
+    for(var j=0;j<list.length;j++){
+      (function(el){
+        for(var k=0;k<_ATTRS.length;k++){
+          var a=_ATTRS[k];
+          var v=el.getAttribute(a); if(v==null) continue;
+          var k2=v.trim(); if(!k2) continue;
+          var h2=I18N_DICT[k2];
+          if(h2!=null && h2!==k2){ el.setAttribute(a, v.replace(k2,h2)); continue; }
+          var f2=_trFrag(v); if(f2!==v) el.setAttribute(a, f2);
+        }
+      })(list[j]);
     }
   }catch(e){ console.warn('[i18n]',e); }
 }
-// alert / confirm / showToast を翻訳ラップ (DOM外に出る通知も英語化)
+
+/* あとから足されたところを後追いで訳す
+ * ----------------------------------------------------------------------
+ * 2026-10-22 追加。
+ *
+ * applyI18n() を呼ぶのは render() だけだった。ところが画面に出るものの
+ * うち、次のものは render() を通らずに body へ直接足される。
+ *   ・AI講評のパネル (_critiqueShell)
+ *   ・進み具合の札 (_showProgress) と通知 (showToast)
+ *   ・地の文・独白・会話の確認、書き出しの献立、話者推定の札
+ * これらは、辞書に言葉があっても日本語のまま出ていた。
+ *
+ * 見張るのは childList だけにしてある。訳は nodeValue と属性しか
+ * 書き換えないので、自分の書き換えで自分が呼ばれることはない。
+ * #app そのものの入れ替えは render() が自分で訳すので見送る。 */
+var _i18nPend=[];
+var _i18nTimer=0;
+function _i18nFlush(){
+  _i18nTimer=0;
+  var q=_i18nPend; _i18nPend=[];
+  for(var i=0;i<q.length;i++){
+    var n=q[i];
+    if(!n || !n.isConnected) continue;
+    applyI18n(n.nodeType===1 ? n : n.parentNode);
+  }
+}
+function _i18nWatch(){
+  if(!window.MutationObserver || !document.body) return;
+  var app=document.getElementById('app');
+  var mo=new MutationObserver(function(recs){
+    if(state.lang!=='en') return;
+    for(var i=0;i<recs.length;i++){
+      var r=recs[i];
+      /* #app の中は render() が丸ごと訳すので見送る。
+         長い作品(4,700行)では読み上げや口パクで中が細かく動くため、
+         ここで毎回走らせると重くなる。 */
+      if(app && (r.target===app || app.contains(r.target))) continue;
+      for(var j=0;j<r.addedNodes.length;j++){
+        var n=r.addedNodes[j];
+        if(n.nodeType===1 || n.nodeType===3) _i18nPend.push(n);
+      }
+    }
+    if(_i18nPend.length && !_i18nTimer){
+      _i18nTimer=setTimeout(_i18nFlush, 0);
+    }
+  });
+  mo.observe(document.body, {childList:true, subtree:true});
+}
+// alert / confirm / prompt / showToast を翻訳ラップ (DOM外に出る通知も英語化)
+// prompt は 2026-10-22 に足した。「読み方の設定」の名前を聞くところで
+// 日本語のまま出ていた。
 (function(){
-  var _a=window.alert, _c=window.confirm;
+  var _a=window.alert, _c=window.confirm, _p=window.prompt;
   window.alert=function(m){ return _a.call(window, _trFull(m)); };
   window.confirm=function(m){ return _c.call(window, _trFull(m)); };
+  window.prompt=function(m,d){ return _p.call(window, _trFull(m), d); };
 })();
 if(typeof showToast==='function'){ var _origShowToast=showToast; showToast=function(m){ return _origShowToast(_trFull(m)); }; }
 
@@ -7560,7 +7808,8 @@ async function _submitDraftForReview(){
         }finally{_hideProgress(_pg);}
         if(_ar&&_ar.total){
             console.info('[Submit] 音声送信: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total);
-            if(_ar.fail>0)alert('音声'+_ar.fail+'件の送信に失敗しました。\n公開後、その分は標準音声になります。もう一度依頼すれば再送されます。');
+            if(_ar.fail>0)alert(_L('音声'+_ar.fail+'件の送信に失敗しました。\n公開後、その分は標準音声になります。もう一度依頼すれば再送されます。',
+              _ar.fail+' audio files could not be sent.\nAfter publishing, those lines use the standard voice. Ask again and they are sent again.'));
         }
     }catch(e){console.warn('[Submit] 音声送信エラー(依頼は続行):',e);}
 
@@ -7603,7 +7852,8 @@ async function publishMyWork(){
           }finally{_hideProgress(_pg);}
           if(_ar.total){
             console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' (送信'+Math.round(_ar.bytes/1e6)+'MB / 既存スキップ'+_ar.skipped+'件)');
-            if(_ar.fail>0)alert('音声'+_ar.fail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。');
+            if(_ar.fail>0)alert(_L('音声'+_ar.fail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。',
+              _ar.fail+' audio files could not be saved on the server.\nOn some devices those lines use the standard voice, at lower quality. Post again to retry.'));
           }
         }catch(e){console.warn('[Publish] 音声複製/アップロードエラー:',e);}
         try{
@@ -8076,6 +8326,7 @@ window.openReaderCritique = openReaderCritique;
 // ===== APP INITIALIZATION =====
 window.onload=function(){
     loadData();
+    try{ _i18nWatch(); }catch(e){}
     document.documentElement.setAttribute('data-theme',state.darkMode?'dark':'light');
     if(_workParam){loadReaderCustom(_workParam);_readerProfileSync(_workParam);
         // draft_ はサーバーの下書き置き場から読む。

@@ -67,9 +67,9 @@
       }
     }catch(_e){console.warn('[Publish] 表紙コピー失敗:',_e);}
     var p=getWorkPayload(); if(!p){ if(!silent) alert(_t('データ取得失敗','Failed to fetch data')); return false; }
-    var note=silent?'':prompt('保存メモ:',''); if(!silent && note===null) return false;
+    var note=silent?'':prompt(_t('保存メモ:','A note about this save:'),''); if(!silent && note===null) return false;
     var btn=document.querySelector('[data-srv-publish]'); var orig=btn?btn.textContent:'';
-    if(btn){ btn.textContent='⏳ 公開中...'; btn.disabled=true; }
+    if(btn){ btn.textContent=_t('⏳ 公開中...','⏳ Publishing…'); btn.disabled=true; }
     try {
       var body={ data:p, note:note||'公開保存' }; var m=getCatalogMeta(); if(m){ try{ var _src=(m.sourceLang||'ja'); var _tgt=(_src==='en')?'ja':'en'; var _sfx=(_tgt==='en')?'En':'Ja';
         // カード訳の方針: 手書きの訳は守り、原文が変わったフィールドだけ機械翻訳で更新する。
@@ -92,7 +92,7 @@
       }catch(_te){console.warn('[Publish] カードmeta翻訳スキップ:',_te);} body.meta=m; }
       var r=await fetch('/api/writer/works/'+encodeURIComponent(w),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       var d=await r.json();
-      if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert('✅ 保存完了\nv:'+(d.versionCount||0)); else showToast('✅ 公開保存完了'); return true; }
+      if(r.ok && d.ok){ try{ if(typeof saveData==='function') saveData(true); }catch(_e){} if(!silent) alert(_t('✅ 保存完了\nv:','✅ Saved.\nv:')+(d.versionCount||0)); else showToast(_t('✅ 公開保存完了','✅ Published')); return true; }
       else if(r.status===401){
         // Cloudflare Access の有効期限切れ。fetch の中ではログイン画面へ
         // 進めないので、別タブで開いてもらう。
@@ -165,7 +165,11 @@
   function findNativeSaveButton(){
     var bs=document.querySelectorAll('button');
     for(var i=0;i<bs.length;i++){ var btn=bs[i]; var oc=btn.getAttribute('onclick')||''; var t=(btn.textContent||'').trim();
-      if((oc==='saveData()'||oc.indexOf('saveData')!==-1||t==='💾 保存'||t==='保存') && t.indexOf('サーバー')===-1 && t.indexOf('公開')===-1) return btn;
+      /* 2026-10-22: 英語モードでは文字が '\u{1F4BE} Save' になるので、
+         日本語だけを見ていたこの判定は当たらず、版履歴(\u{1F4DC})が出なかった。 */
+      var _isSave=(oc==='saveData()'||oc.indexOf('saveData')!==-1||t==='\u{1F4BE} 保存'||t==='保存'||t==='\u{1F4BE} Save'||t==='Save');
+      var _isOther=(t.indexOf('サーバー')!==-1||t.indexOf('公開')!==-1||t.indexOf('Publish')!==-1||t.indexOf('Republish')!==-1);
+      if(_isSave && !_isOther) return btn;
     } return null;
   }
   // viewer.html がすでに「📤 公開保存 / 📢 上書き公開」を出しているので、
@@ -279,7 +283,7 @@
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99998;display:flex;align-items:center;justify-content:center';
     var box = document.createElement('div');
     box.style.cssText = 'background:#fff;padding:20px 30px;border-radius:12px;font-size:14px;font-weight:600';
-    box.textContent = '🎨 ギャラリー読込中...';
+    box.textContent = _t('🎨 ギャラリー読込中...','🎨 Loading the gallery…');
     ov.appendChild(box);
     document.body.appendChild(ov);
   }
@@ -304,7 +308,7 @@
     // ヘッダー
     var hdr = document.createElement('div');
     hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px';
-    var h3 = document.createElement('h3'); h3.textContent = '🎨 ギャラリー'; h3.style.cssText = 'margin:0;font-size:16px;font-weight:700';
+    var h3 = document.createElement('h3'); h3.textContent = _t('🎨 ギャラリー','🎨 Gallery'); h3.style.cssText = 'margin:0;font-size:16px;font-weight:700';
     var closeBtn = document.createElement('button'); closeBtn.textContent = '✕'; closeBtn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;color:#666';
     closeBtn.addEventListener('click', closeGalleryModal);
     hdr.appendChild(h3); hdr.appendChild(closeBtn);
@@ -332,7 +336,7 @@
       var lbl = document.createElement('div'); lbl.textContent = g.label || ''; lbl.style.cssText = 'font-size:11px;margin-top:4px;font-weight:600';
       btn.appendChild(lbl);
       
-      var cnt = document.createElement('div'); cnt.textContent = (g.items || []).length + '件'; cnt.style.cssText = 'font-size:10px;color:#666';
+      var cnt = document.createElement('div'); cnt.textContent = (g.items || []).length + _t('件',''); cnt.style.cssText = 'font-size:10px;color:#666';
       btn.appendChild(cnt);
       
       // クロージャでgroupを保持
@@ -367,7 +371,7 @@
     var hdr = document.createElement('div');
     hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px';
     var hdrLeft = document.createElement('div');
-    var backBtn = document.createElement('button'); backBtn.textContent = '← カテゴリ';
+    var backBtn = document.createElement('button'); backBtn.textContent = _t('← カテゴリ','← Categories');
     backBtn.style.cssText = 'background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px';
     backBtn.addEventListener('click', function(){ showCategories(allGroups, charId); });
     hdrLeft.appendChild(backBtn);
@@ -481,7 +485,8 @@
       input.addEventListener('change', function(e){
         if(!isAuthorMode()) return;
         if(window._srvCopyOk) return;
-        var ok=confirm('⚠️ 著作権に関する注意\n\nこの画像は作品の一部として公開されます。\n\n以下は使用しないでください:\n・著名人・芸能人の写真\n・アニメ/漫画/ゲームのキャラクター\n・他者の写真（無許可）\n・ロゴ・商標\n\n続行しますか？');
+        var ok=confirm(_t('⚠️ 著作権に関する注意\n\nこの画像は作品の一部として公開されます。\n\n以下は使用しないでください:\n・著名人・芸能人の写真\n・アニメ/漫画/ゲームのキャラクター\n・他者の写真（無許可）\n・ロゴ・商標\n\n続行しますか？',
+          '⚠️ About copyright\n\nThis image is published as part of the work.\n\nPlease do not use:\n· photographs of public figures or performers\n· characters from anime, manga or games\n· photographs of other people, without their permission\n· logos or trade marks\n\nCarry on?'));
         if(!ok){ input.value=''; e.preventDefault(); e.stopPropagation(); return false; }
         window._srvCopyOk=true;
       }, true);
