@@ -22,3 +22,7 @@ viewer.html.bak
 # 入れてしまうとサイトの一部として配信され、aninovel.com から
 # .exe が誰でも落とせる状態になる（GPLの再配布義務も生じる）。
 tools/gifsicle/
+
+aninovel.skill
+files.zip
+_preview_ux_p1.html
