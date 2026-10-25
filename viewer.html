@@ -6981,7 +6981,23 @@ function _contentHash(){
 // 表示言語 !== 原文言語 のときが「翻訳表示」。翻訳表示中は原文を編集させない。
 function _srcLang(){ return (state.novel&&state.novel.sourceLang)||'ja'; }
 function _isTranslatedView(){ return state.lang!==_srcLang(); }
-function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'6_'+h; }
+/* 英訳の控えの鍵。
+ * h は本文から作ったハッシュ(_contentHash)なので、本文が1文字でも
+ * 変われば別の鍵になる。つまり「作品が変わったのに古い訳が出る」ことは無い。
+ *
+ * 抜けていたのは逆の場合だった。本文はそのままで英訳だけ入れ替えたとき
+ * (手訳の注入がこれに当たる)、鍵が変わらないので、前に読んだ人の端末では
+ * 古い訳が出続ける。控えは期限も持たず、サーバーに確かめ直しもしない。
+ * 実際、私(Claude)の作業ウィンドウが数か月前の機械訳を出し続けていて、
+ * 『雪女』が直っていないと誤って報告した (2026-10-25)。
+ *
+ * 真ん中の数字は、そのための版である。ここを上げると、全員の端末の
+ * 控えが一度で無効になる。**英訳を入れ替えたら、ここを1つ上げること。**
+ *   6 → 7  2026-10-25 雪女ほかの手訳注入を、前からの読者にも届ける
+ *
+ * 分割して持つ大きい作品 (_trChunkLoad) は毎回サーバーに聞く作りなので、
+ * この問題は起きない。影響を受けるのは全文を一度に持つ作品だけ。 */
+function _trKey(h){ return 'aninovel_tr_'+(state.lang||'ja')+'7_'+h; }
 // 長い作品(猫は英文で約 3.6MB)は localStorage の 5MB 制限に入りきらず、
 // 保存に失敗して毎回 1.5MB を送り直していた。IndexedDB に退避する。
 var _TRDB='aninovel_trans',_TRDBV=1,_TRSTORE='trans';
