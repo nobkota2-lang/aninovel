@@ -62,12 +62,13 @@ function denyUnauth(env) {
   // 意味の分からない 503 が返っていた。画面側も 401 を見て
   // 「ログインしてください」を出す作りなので、案内が出なかった。
   //
-  // 運営者向けの情報は本文に添えるだけにして、状態は 401 に統一する。
-  const accessOn = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+  // 2026-10-24: accessConfigured を外した。未ログインの相手に、こちらの
+  // 設定の状態(Access を入れてあるかどうか)を教える必要は無い。
+  // 攻める側には「どの口が Access で守られていないか」の手掛かりになる。
+  // 運営者が知りたいときは Cloudflare の設定画面を見ればよい。
   return json({
     error: 'unauthorized',
     message: 'ログインが必要です。',
-    accessConfigured: accessOn,
   }, 401);
 }
 

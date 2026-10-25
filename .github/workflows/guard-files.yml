@@ -1,0 +1,36 @@
+# 配信してはいけないものがリポジトリに入っていないか見張る
+# ----------------------------------------------------------------------
+# 2026-10-24 追加。
+#
+# Cloudflare Pages はリポジトリに入れたものをそのまま配信する。
+# 実際に aninovel.skill(開発用の内部文書)・files.zip(古い viewer)・
+# _preview_ux_p1.html が aninovel.com から誰でも落とせる状態になっていた。
+#
+# この仕事は「落ちて知らせる」だけで、配信は止めない。
+# Cloudflare 側の配信は GitHub の仕事とは別に走るため、ここで止めることは
+# できない。気づくための仕掛けと割り切る。
+#
+# 中身は scripts/guard-files.sh にある。手元でも同じものを回せる:
+#     bash scripts/guard-files.sh
+name: Guard files
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    name: 配信してはいけないものが入っていないか
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 危ないファイル名と鍵らしき文字列
+        run: bash scripts/guard-files.sh
