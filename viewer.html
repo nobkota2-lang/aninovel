@@ -2095,14 +2095,8 @@ function _updateTTSDisplay(){
       // 上へ流した直後に下へ引き戻されて画面が上下する。
       if(te){
         te.classList.add('tts-highlight');
-        if(!(state.tts&&state.tts.active&&state.tts.karaoke)){
-          // 縦書きは寄せる軸が block ではなく inline になる。
-          var _uV=(state.displaySettings&&state.displaySettings.orientation==='vertical');
-          try{
-            if(_uV)te.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
-            else te.scrollIntoView({behavior:'smooth',block:'center'});
-          }catch(e){}
-        }
+        // スクロールはここではしない。_speakItem が
+        // 「追従が動くか」を見て一度だけ寄せる(二重に動かすと画面が上下する)。
       }
   }
   // ステータステキスト更新
@@ -2274,7 +2268,13 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
     var a=(typeof _ttsAudioElement==='function')?_ttsAudioElement():new Audio();  // iOS対策
   curAudio=a;a.src=url;
     try{var r=Math.max(0.5,Math.min(2.5,state.tts.rate||1.3));a.playbackRate=r;a.defaultPlaybackRate=r;}catch(e){}
-    a.onplay=function(){if(stale())return;if(!started){started=true;if(onStart)onStart();}};
+    a.onplay=function(){
+      if(stale())return;
+      if(!started){started=true;if(onStart)onStart();}
+      // 1かたまりで鳴るときだけ、音の長さで文を追える。
+      // 長文は複数に割って順に鳴らすので、全体の長さが分からず合わせられない。
+      if(chunks.length===1){try{_karaStart(item.id,text,a);}catch(e){}}
+    };
     a.onended=function(){if(stale())return;idx++;playNext();};
     a.onerror=function(){if(stale())return;if(onError)onError(new Error('aura audio error'));};
     var p;try{p=a.play();}catch(e){if(!stale()&&onError)onError(e);return;}
@@ -2282,7 +2282,7 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
   }
   function playNext(){
     if(stale())return;
-    if(idx>=chunks.length){if(onEnd)onEnd();return;}
+    if(idx>=chunks.length){try{_karaEndItem();}catch(e){}if(onEnd)onEnd();return;}
     var ctext=chunks[idx];
     var key=_simpleHashJS(ctext+'|aura|'+voice);
     if(_auraCache[key]){playUrl(_auraCache[key]);return;}
@@ -2292,7 +2292,7 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
       .catch(function(e){if(stale())return;if(onError)onError(e);});
   }
   playNext();
-  return {stop:function(){stopped=true;try{if(curAudio)curAudio.pause();}catch(e){}}};
+  return {stop:function(){stopped=true;try{_karaEndItem();}catch(e){}try{if(curAudio)curAudio.pause();}catch(e){}}};
 }
 function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||('id:'+id);}
 function _auraNameById(id){var n=null;_AURA_VOICES.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||id;}
@@ -2560,19 +2560,26 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
   var keys=await _idbKeysByWork(srcWorkId);
   var total=keys.length,sent=0,fail=0,bytes=0,skipped=0,oversize=0;
   if(!total)return {total:0,fail:0,bytes:0,skipped:0,oversize:0};
-  var already={};
+  // 「既にサーバにあるか」は言語ごとに持つ。
+  // 1つにまとめていたため、英語を送るときに日本語の記録と突き合わせてしまい、
+  // 同じ itemId の日本語音声を英語で上書きする状態だった。
+  var alreadyBy={ja:{},en:{}};
+  function _already(lang){ return alreadyBy[lang==='en'?'en':'ja']; }
   if(!opts.force){
     try{
       var mr=await fetch('/api/audio/'+encodeURIComponent(destWorkId),{cache:'no-store'});
       if(mr.ok){
         var mj=await mr.json();
         var _items=(mj&&mj.items)||{};
+        var _itemsEn=(mj&&mj.itemsEn)||{};
         // itemId の有無ではなく「ハッシュが一致するか」で判定する。
         // 有無だけで見ていたため、音声を作り直しても同じidなら送られず、
         // 新しい声がサーバに届かない事故が2度起きた。
         // 古いデータにはハッシュが無いので、その場合は従来どおり送らない。
-        Object.keys(_items).forEach(function(id){ already[id]=(_items[id]&&_items[id].hash)||1; });
-        if(Object.keys(already).length)console.info('[Upload] サーバに既に '+Object.keys(already).length+'件');
+        Object.keys(_items).forEach(function(id){ alreadyBy.ja[id]=(_items[id]&&_items[id].hash)||1; });
+        Object.keys(_itemsEn).forEach(function(id){ alreadyBy.en[id]=(_itemsEn[id]&&_itemsEn[id].hash)||1; });
+        var _n0=Object.keys(alreadyBy.ja).length,_n1=Object.keys(alreadyBy.en).length;
+        if(_n0||_n1)console.info('[Upload] サーバに既に 日本語'+_n0+'件 / 英語'+_n1+'件');
       }
     }catch(e){}
   }
@@ -2607,8 +2614,9 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
   }
   for(var i=0;i<total;i++){
     var kk=keys[i],rec=null;
+    var _alr=_already(kk.lang);
     // ハッシュを持っていない古い記録(値が 1)は従来どおり「あり」とみなす
-    var _srvH=already[kk.itemId];
+    var _srvH=_alr[kk.itemId];
     if(_srvH&&_srvH!==1&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){
       // 中身が同じか、ローカルのハッシュと突き合わせて決める
       var _lr=null; try{_lr=await _idbGet(srcWorkId,kk.itemId,kk.lang);}catch(e){}
@@ -2623,15 +2631,18 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
     if(opts.copyTo&&opts.copyTo!==srcWorkId){
       try{await _idbPut(opts.copyTo,rec.itemId,rec.blob,rec.meta||{});}catch(e){}
     }
-    if(already[kk.itemId]){skipped++;sent++;rec=null;continue;}
+    if(_alr[kk.itemId]){skipped++;sent++;rec=null;continue;}
     var sz=rec.blob.size;
     if(n&&(acc+sz>MAXB||n>=MAXN))await flush();     // 入れる前に溢れるなら先に送る
     if(sz>MAXB){
       oversize++;
       console.warn('[Upload] 単体で '+Math.round(sz/1e6)+'MB あります (item='+rec.itemId+')。単独で送ります');
     }
-    fd.append(rec.itemId,rec.blob,rec.itemId+'.wav');
-    if(rec.meta&&rec.meta.hash)fd.append('h:'+rec.itemId,String(rec.meta.hash));
+    // 項目名で言語を伝える。日本語は従来どおり itemId のまま
+    // (古いサーバに送っても壊れないように)。英語は "en:" を付ける。
+    var _fn=(kk.lang==='en'?'en:':'')+rec.itemId;
+    fd.append(_fn,rec.blob,rec.itemId+'.wav');
+    if(rec.meta&&rec.meta.hash)fd.append('h:'+_fn,String(rec.meta.hash));
     bytes+=sz;acc+=sz;n++;rec=null;
     if(acc>=MAXB||n>=MAXN)await flush();
   }
@@ -2703,7 +2714,8 @@ function _buildAudioSources(){
   var relIds=_relatedWorkIds(wid);
   var repo=(_audioManifest&&_audioManifest.items)||{};
   Object.keys(repo).forEach(function(id){var src={type:'repo'};_audioSourcesJa[id]=src;_audioSources[id]=src;});
-  // 投稿作品(pub_*)はサーバー(R2)のVOICEVOX音声マニフェストを取得 (JAのみ)
+  // 投稿作品(pub_*)はサーバー(R2)の音声マニフェストを取得。
+  // items が日本語、itemsEn が英語(2026-10-26 以降)。
   var serverP=(wid&&wid.indexOf('pub_')===0)
     ?fetch('/api/audio/'+encodeURIComponent(wid)).then(function(r){return r.ok?r.json():{items:{}};}).catch(function(){return {items:{}};})
     :Promise.resolve({items:{}});
@@ -2713,9 +2725,16 @@ function _buildAudioSources(){
     var lists=results.slice(1);
     Object.keys(serverManifest.items||{}).forEach(function(id){
       if(!_audioSourcesJa[id]||_audioSourcesJa[id].type==='repo'){
-        var src={type:'server',workId:wid,meta:serverManifest.items[id]||{}};
+        var src={type:'server',lang:'ja',itemId:id,workId:wid,meta:serverManifest.items[id]||{}};
         _audioSourcesJa[id]=src;
         _audioSources[id]=src;
+      }
+    });
+    // 英語。読者の端末で作っていなくても、サーバにあれば鳴る。
+    Object.keys(serverManifest.itemsEn||{}).forEach(function(id){
+      if(!_audioSourcesEn[id]||_audioSourcesEn[id].type==='repo'){
+        _audioSourcesEn[id]={type:'server',lang:'en',itemId:id,workId:wid,
+                             meta:serverManifest.itemsEn[id]||{}};
       }
     });
     lists.forEach(function(list,i){
@@ -2724,7 +2743,10 @@ function _buildAudioSources(){
         var bucket = (lang==='en') ? _audioSourcesEn : _audioSourcesJa;
         // 既に自workIdのIDBが埋まっていれば上書きしない (先勝ち)
         if(bucket[rec.itemId]&&bucket[rec.itemId].type==='idb'&&bucket[rec.itemId].workId===wid){return;}
-        var src={type:'idb',workId:rec.workId,blob:rec.blob,meta:rec.meta||{},fromWorkId:rec.workId};
+        // lang と itemId を持たせる。これが無いと _resolveAudioUrlAsync が
+        // 必ず日本語を取りに行き、英語音声が鳴らなかった。
+        var src={type:'idb',lang:lang,itemId:rec.itemId,workId:rec.workId,
+                 blob:rec.blob,meta:rec.meta||{},fromWorkId:rec.workId};
         bucket[rec.itemId]=src;
         // 後方互換のため _audioSources にも書く (lang=ja優先)
         if(lang==='ja'||!_audioSources[rec.itemId])_audioSources[rec.itemId]=src;
@@ -2735,6 +2757,24 @@ function _buildAudioSources(){
       if(it.audio){var src={type:'embedded'};_audioSourcesJa[it.id]=src;_audioSources[it.id]=src;}
     });
   });
+}
+// この台詞をカラオケ追従が動かすかどうかを、鳴らす前に判定する。
+// 動くならスクロールは追従ループに任せ、動かないなら _speakItem が寄せる。
+// 以前は state.tts.karaoke(既定ON)だけを見ていたため、追従が動かない場面でも
+// 「追従に任せる」と判断してしまい、結果として誰もスクロールしなかった。
+function _karaWillDrive(item){
+  if(!item)return false;
+  if(!(state.tts&&state.tts.karaoke))return false;
+  // 事前生成音声があれば、その長さで追える
+  if(typeof _hasPreAudio==='function'&&_hasPreAudio(item.id))return true;
+  // 英語のクラウド音声(Aura)も、1かたまりで鳴るなら追える
+  if(state.lang==='en'&&typeof _ttsChunk==='function'){
+    try{
+      var _t=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'').trim();
+      if(_t&&_ttsChunk(_t,1500).length===1)return true;
+    }catch(e){}
+  }
+  return false;
 }
 function _hasPreAudio(itemId){
   // state.lang に応じて参照するソースを分岐
@@ -2790,7 +2830,10 @@ function _resolveAudioUrl(itemId){
     return {url:_audioBaseUrl()+encodeURIComponent(itemId)+'.wav',revoke:false};
   }
   if(src.type==='server'){
-    return {url:'/api/audio/'+encodeURIComponent(src.workId)+'/'+encodeURIComponent(itemId)+_audioSignQS(),revoke:false};
+    // 日本語は従来どおり /api/audio/{work}/{item}。
+    // 英語は /api/audio/{work}/en/{item}(サーバ側で置き場が分かれている)。
+    var _lp=(src.lang&&src.lang!=='ja')?(encodeURIComponent(src.lang)+'/'):'';
+    return {url:'/api/audio/'+encodeURIComponent(src.workId)+'/'+_lp+encodeURIComponent(itemId)+_audioSignQS(),revoke:false};
   }
   if(src.type==='idb'&&src.blob){
     var u=URL.createObjectURL(src.blob);return {url:u,revoke:true};
@@ -3307,7 +3350,14 @@ async function clearGeneratedVoices(){
   await _buildAudioSources();
   alert('削除しました');
 }
+// コンソールからも呼べるようにする。
+//   generateVoicesAura()  … 英訳セリフの音声をクラウド(Aura)で作る
+//   generateVoices()      … 人物の voiceLang を見て日英を振り分ける
+//   generateVoicesLocal() … VOICEVOX で日本語を作る
+// 作ったあとは 📢 上書き公開 でサーバーへ送られる(言語ごとに別の置き場)。
 window.generateVoicesLocal=generateVoicesLocal;
+window.generateVoicesAura=generateVoicesAura;
+window.generateVoices=generateVoices;
 window.clearGeneratedVoices=clearGeneratedVoices;
 
 function _speakItem(item,onEnd){
@@ -3324,9 +3374,11 @@ function _speakItem(item,onEnd){
   // scrollIntoView({behavior:'smooth'}) はブラウザ側のアニメーションで、
   // 毎フレーム scrollTop を書くカラオケのループと取り合って位置が飛んでいた。
   try{
-    var _kOn=(state.tts&&state.tts.karaoke)&&(typeof _hasPreAudio==='function')&&_hasPreAudio(item.id);
-    if(!_kOn)scrollToItem(item.id,{top:true});
-  }catch(e){scrollToItem(item.id,{top:true});}
+    var _kOn=_karaWillDrive(item);
+    // force を付ける。scrollToItem は読み上げ中の呼び出しを
+    // 「追従に任せる」として止めるので、付けないとここが効かない。
+    if(!_kOn)scrollToItem(item.id,{top:true,force:true});
+  }catch(e){scrollToItem(item.id,{top:true,force:true});}
   // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
   state.tts.currentCharId=null;
   // 口パクアイコンは音声が実際に始まった瞬間に切り替える (ズレ防止)
@@ -5397,14 +5449,33 @@ function _markupToItem(v,data){
 // 事前生成音声は1ブロック=1ファイルなので文ごとの正確な時刻は持っていない。
 // そこで**文字数に句読点の間(ま)を加えた重み**で時間を按分する。
 // VOICEVOX の話速はほぼ一定なので、この近似で実用上ずれない。
+// 英語で「文末のピリオド」と紛らわしいもの。ここでは切らない。
+var _EN_ABBR=/(?:^|[\s\u201C"'(\[])(?:Mr|Mrs|Ms|Dr|Prof|Rev|St|Jr|Sr|vs|etc|Fig|No|Inc|Ltd|Co|Ave|approx|e\.g|i\.e)$/i;
 function _ttsSplitSentences(t){
   var s=String(t||''); if(!s)return [];
   var out=[],cur='';
   for(var i=0;i<s.length;i++){
     cur+=s[i];
-    if(/[\u3002\uFF01\uFF1F]/.test(s[i])){
+    var _end=/[\u3002\uFF01\uFF1F]/.test(s[i]);
+    // 英語の . ! ? も文末として扱う。
+    // ただし切るのは「次が空白か行末」のときだけ。3.5 や Mr. では切らない。
+    if(!_end&&/[.!?]/.test(s[i])){
+      // 閉じ引用符や括弧は飛ばしてから、その次が空白か行末かを見る。
+      // He said "Stop it." Then ... のような形で切れるようにする。
+      var _j=i+1;
+      while(_j<s.length&&/["'\)\]\u2019\u201D]/.test(s.charAt(_j)))_j++;
+      var _nx=s.charAt(_j);
+      if(_nx===''||/\s/.test(_nx)){
+        var _before=cur.slice(0,-1);
+        var _abbr=(s[i]==='.')&&(_EN_ABBR.test(_before)||/(?:^|\s)[A-Z]$/.test(_before));
+        if(!_abbr)_end=true;
+      }
+    }
+    if(_end){
       // 閉じ括弧が続くならそこまで含める
-      while(i+1<s.length&&/[\u300D\u300F\uFF09\u2019\u201D]/.test(s[i+1])){cur+=s[++i];}
+      while(i+1<s.length&&/[\u300D\u300F\uFF09\u2019\u201D"'\)\]]/.test(s[i+1])){cur+=s[++i];}
+      // 文のあとの空白も前の文に含める(印の間に隙間を作らない)
+      while(i+1<s.length&&/[ \t]/.test(s[i+1])){cur+=s[++i];}
       out.push(cur);cur='';
     }
   }
@@ -5419,6 +5490,8 @@ function _ttsSentenceMarks(t){
     for(var i=0;i<x.length;i++){
       var c=x[i];
       if(/[\u3002\uFF01\uFF1F]/.test(c))u+=10;        // 文末は長めの間
+      else if(/[.!?]/.test(c))u+=10;                  // 英語の文末も同じ扱い
+      else if(/[,;:]/.test(c))u+=4;                   // 英語の区切りは短い間
       else if(/[\u3001]/.test(c))u+=5;                // 読点は短い間
       else if(/\s/.test(c))u+=0.5;
       else u+=1;
@@ -5713,8 +5786,18 @@ function _karaStart(itemId,text,audio){
 function _dispRuby(item,query){
   var raw=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'');
   var rb=item&&item.ruby;
-  // 検索中と翻訳表示中は位置が合わないのでルビを付けない
-  if(query||raw!==item.text)return displayText(raw,query);
+  // 検索中は位置が合わないので、ルビも文の印も付けない
+  if(query)return displayText(raw,query);
+  // 翻訳を表示しているときはルビの位置が原文と合わないので付けない。
+  // ただし**文の印は付ける**。これが無いと英語モードでカラオケ表示が出ない。
+  if(raw!==item.text){
+    var _tss=_ttsSplitSentences(raw);
+    if(!_tss.length)return displayText(raw,query);
+    var _ten=(state.lang==='en');
+    return _tss.map(function(x,i){
+      return '<span class="ts" data-i="'+i+'">'+esc(_ten?x:toFullWidth(x))+'</span>';
+    }).join('');
+  }
   if(!rb||!rb.length||state.rubyOff){
     // ルビが無くても文の印は入れる(カラオケ表示のため)
     var ss=_ttsSplitSentences(raw);

@@ -12,10 +12,20 @@
  *     Variable name: AUDIO_R2  /  R2 bucket: aninovel-audio
  *
  * エンドポイント:
- *   GET /api/audio/{pubId}            … 音声マニフェスト {workId, items:{itemId:{}}}
- *   GET /api/audio/{pubId}/{itemId}   … 音声ファイル(audio/wav)
- *   PUT /api/audio/{pubId}            … 音声の一括アップロード
- *                                       (multipart/form-data, 各フィールド名=itemId)
+ *   GET /api/audio/{pubId}                  … 音声マニフェスト
+ *                                             {workId, items:{...}, itemsEn:{...}}
+ *   GET /api/audio/{pubId}/{itemId}         … 日本語の音声ファイル(audio/wav)
+ *   GET /api/audio/{pubId}/{lang}/{itemId}  … その言語の音声ファイル
+ *   PUT /api/audio/{pubId}                  … 音声の一括アップロード
+ *                                             (multipart/form-data)
+ *                                             フィールド名 = itemId        … 日本語
+ *                                             フィールド名 = en:itemId     … 英語
+ *
+ * 言語ごとの置き場 (2026-10-26 追加):
+ *   日本語 … pubId/itemId        これまでと同じ。既存の音声を動かさないため。
+ *   英語   … pubId/en/itemId
+ *   以前は言語の区別が無く、英語を送ると同じ itemId の日本語を
+ *   上書きする状態だった。鍵に言語を入れて分ける。
  *
  * 注: CORS / レート制限 は functions/_middleware.js が処理する。
  */
@@ -23,7 +33,7 @@
 // 作品ID。viewer 側の上書き公開が使う _OWNER_ID_RE と同じ形式を受け入れる。
 //   pub_1784818723945 … 投稿作品
 //   summer-adventure  … 同梱作品(スラッグ形式・ハイフンを含む)
-// R2のキーは pubId + '/' + itemId なので、'/' を含まないことだけが要件。
+// R2のキーは pubId + '/' + [lang + '/'] + itemId なので、'/' を含まないことだけが要件。
 import { requireWrite } from '../../_auth.js';
 import { signWork, verifyWork, SIGN_TTL_MS } from '../../_sign.js';
 
@@ -32,6 +42,28 @@ const ITEM_RE = /^[A-Za-z0-9_\-]{1,120}$/;
 
 // 1リクエストあたりの一括アップロード上限 (クライアントは25件ずつ送る)
 const MAX_BUNDLE = 30 * 1024 * 1024;
+
+// 受け付ける言語。日本語だけ鍵に言語を入れない (既存データをそのまま使うため)。
+const LANGS = ['ja', 'en'];
+
+function audioKey(pubId, lang, itemId) {
+  return (lang && lang !== 'ja')
+    ? pubId + '/' + lang + '/' + itemId
+    : pubId + '/' + itemId;
+}
+
+// R2の鍵から「言語とitemId」に戻す。pubId/ を外した残りを見る。
+// 残りに '/' があれば先頭が言語。itemId に '/' は入らない(ITEM_RE)。
+function parseKey(pubId, key) {
+  const rest = key.slice(pubId.length + 1);
+  if (!rest) return null;
+  const i = rest.indexOf('/');
+  if (i < 0) return { lang: 'ja', itemId: rest };
+  const lang = rest.slice(0, i);
+  const itemId = rest.slice(i + 1);
+  if (!LANGS.includes(lang) || !itemId || itemId.indexOf('/') >= 0) return null;
+  return { lang: lang, itemId: itemId };
+}
 
 function json(obj, status) {
   return new Response(JSON.stringify(obj), {
@@ -85,6 +117,7 @@ export async function onRequestGet(context) {
   // GET /api/audio/{pubId} — 音声マニフェスト
   if (parts.length === 1) {
     const items = {};
+    const itemsEn = {};
     let cursor;
     do {
       // customMetadata を含めて一覧する。ここにハッシュ(本文+話者)が入っている。
@@ -95,25 +128,31 @@ export async function onRequestGet(context) {
         include: ['customMetadata'],
       });
       for (const obj of listed.objects) {
-        const itemId = obj.key.slice(pubId.length + 1);
-        if (!itemId) continue;
+        const p = parseKey(pubId, obj.key);
+        if (!p) continue;
         const h = obj.customMetadata && obj.customMetadata.hash;
-        items[itemId] = h ? { hash: h } : {};
+        const entry = h ? { hash: h } : {};
+        if (p.lang === 'en') itemsEn[p.itemId] = entry;
+        else items[p.itemId] = entry;
       }
       cursor = listed.truncated ? listed.cursor : null;
     } while (cursor);
     // 署名を同梱する。ビューアはこれを音声URLに付けて取りに来る。
     // 取得のための往復を増やさないよう、マニフェストに載せる。
     const sign = await signWork(context.env, pubId, SIGN_TTL_MS);
-    return json({ workId: pubId, items: items, sign: sign, ttl: SIGN_TTL_MS });
+    // items は従来どおり日本語。古いビューアは itemsEn を見ないので影響しない。
+    return json({ workId: pubId, items: items, itemsEn: itemsEn, sign: sign, ttl: SIGN_TTL_MS });
   }
 
   // GET /api/audio/{pubId}?sign=1 — 署名だけ取り直す(期限切れ前の更新用)
   // ※ parts.length === 1 の分岐より前に置くと一覧が取れなくなるため、ここには来ない。
 
-  // GET /api/audio/{pubId}/{itemId} — 音声ファイル
-  if (parts.length === 2) {
-    const itemId = parts[1];
+  // GET /api/audio/{pubId}/{itemId}        — 日本語の音声ファイル
+  // GET /api/audio/{pubId}/{lang}/{itemId}  — その言語の音声ファイル
+  if (parts.length === 2 || parts.length === 3) {
+    const lang = (parts.length === 3) ? parts[1] : 'ja';
+    const itemId = (parts.length === 3) ? parts[2] : parts[1];
+    if (!LANGS.includes(lang)) return json({ error: 'invalid lang' }, 400);
     if (!ITEM_RE.test(itemId)) return json({ error: 'invalid item id' }, 400);
     // 期限付きの署名を確かめる。AUDIO_SIGN_KEY 未設定なら素通し(従来どおり)。
     const u = new URL(context.request.url);
@@ -124,7 +163,7 @@ export async function onRequestGet(context) {
         message: 'この音声URLは期限切れです。ページを開き直してください。',
       }, 403);
     }
-    const obj = await bucket.get(pubId + '/' + itemId);
+    const obj = await bucket.get(audioKey(pubId, lang, itemId));
     if (!obj) return json({ error: 'not found' }, 404);
     return new Response(obj.body, {
       status: 200,
@@ -164,33 +203,48 @@ export async function onRequestPut(context) {
     return json({ error: 'multipart/form-data として読み取れませんでした' }, 400);
   }
 
-  // 送信側は "h:<itemId>" という名前でハッシュを一緒に送る。
+  // 送信側は "h:<項目名>" という名前でハッシュを一緒に送る。
   // 音声そのものと同じ束に入れておけば、1往復で済む。
+  // 項目名は言語の接頭辞を含んだまま使う ("h:en:xxx" なら "en:xxx")。
   const hashes = {};
   for (const [k, v] of form.entries()) {
     if (typeof v === 'string' && k.indexOf('h:') === 0) hashes[k.slice(2)] = v.slice(0, 64);
   }
 
+  // 項目名から言語と itemId を取り出す。
+  //   "xxx"     … 日本語 (従来どおり)
+  //   "en:xxx"  … 英語
+  function parseField(name) {
+    const m = /^([a-z]{2}):(.+)$/.exec(name);
+    if (!m) return { lang: 'ja', itemId: name };
+    if (!LANGS.includes(m[1])) return null;
+    return { lang: m[1], itemId: m[2] };
+  }
+
   let saved = 0;
+  const savedEn = [];
   const errors = [];
-  for (const [itemId, file] of form.entries()) {
+  for (const [field, file] of form.entries()) {
     // ハッシュの項目は ITEM_RE に合わないので、ID検証より先に飛ばす。
     // 順序を逆にすると「不正なID」として弾かれ、ハッシュが記録されない。
-    if (itemId.indexOf('h:') === 0) continue;
-    if (!ITEM_RE.test(itemId)) { errors.push(itemId + ': 不正なID'); continue; }
-    if (typeof file === 'string' || !file.arrayBuffer) { errors.push(itemId + ': ファイルではありません'); continue; }
+    if (field.indexOf('h:') === 0) continue;
+    const p = parseField(field);
+    if (!p) { errors.push(field + ': 不明な言語'); continue; }
+    if (!ITEM_RE.test(p.itemId)) { errors.push(field + ': 不正なID'); continue; }
+    if (typeof file === 'string' || !file.arrayBuffer) { errors.push(field + ': ファイルではありません'); continue; }
     try {
       const buf = await file.arrayBuffer();
       const put = {
         httpMetadata: { contentType: file.type || 'audio/wav' },
       };
-      if (hashes[itemId]) put.customMetadata = { hash: hashes[itemId] };
-      await bucket.put(pubId + '/' + itemId, buf, put);
+      if (hashes[field]) put.customMetadata = { hash: hashes[field] };
+      await bucket.put(audioKey(pubId, p.lang, p.itemId), buf, put);
       saved++;
+      if (p.lang === 'en') savedEn.push(p.itemId);
     } catch (e) {
-      errors.push(itemId + ': ' + e.message);
+      errors.push(field + ': ' + e.message);
     }
   }
 
-  return json({ ok: true, saved: saved, errors: errors });
+  return json({ ok: true, saved: saved, savedEn: savedEn.length, errors: errors });
 }
