@@ -6,6 +6,7 @@
     "/works",
     "/works/*",
     "/work/*",
+    "/viewer",
     "/viewer.html",
     "/en",
     "/en/*"

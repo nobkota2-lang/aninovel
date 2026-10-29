@@ -777,6 +777,7 @@ const UI = {
     preparing: 'ただいま準備中です。',
     source: '出典: ', pd: '。著作権の保護期間が満了した作品です。',
     chars: (n) => '約' + n + '字', other: 'English',
+    guide: '使い方', guideUrl: '/guide.html',
   },
   en: {
     site: 'AniNovel', intros: 'The works',
@@ -792,6 +793,7 @@ const UI = {
     preparing: 'Coming soon.',
     source: 'Source: ', pd: '. The copyright on this work has expired.',
     chars: (n) => n + ' characters', other: 'Japanese',
+    guide: 'How to read', guideUrl: '/en/guide',
   },
 };
 
@@ -877,6 +879,7 @@ async function worksIndexPage(env, lang) {
         + '<p class="facts">' + t.lead + '</p>\n'
         + '<ul class="list">\n' + li + '</ul>\n'
         + '<p class="foot"><a href="/">' + t.works + '</a>　'
+        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
         + '<a href="/authors.html">' + t.writers + '</a></p>',
   }));
 }
@@ -969,6 +972,7 @@ async function workIntroPage(env, slug, lang) {
     body += '</ul></div>\n';
   }
   body += '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
+        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
         + '<a href="/">' + t.toTop + '</a></p>';
 
   const opts = {
