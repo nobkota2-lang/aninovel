@@ -2790,17 +2790,31 @@ function _buildAudioSources(){
 // 動くならスクロールは追従ループに任せ、動かないなら _speakItem が寄せる。
 // 以前は state.tts.karaoke(既定ON)だけを見ていたため、追従が動かない場面でも
 // 「追従に任せる」と判断してしまい、結果として誰もスクロールしなかった。
+// 端末内蔵の音声が読み上げ位置を知らせてくれるか。
+// null=まだ分からない / true=来る / false=来ないと確認済み。
+var _ttsBoundaryWorks=null;
 function _karaWillDrive(item){
   if(!item)return false;
   if(!(state.tts&&state.tts.karaoke))return false;
   // 事前生成音声があれば、その長さで追える
   if(typeof _hasPreAudio==='function'&&_hasPreAudio(item.id))return true;
-  // 英語のクラウド音声(Aura)も、1かたまりで鳴るなら追える
-  if(state.lang==='en'&&typeof _ttsChunk==='function'){
-    try{
-      var _t=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'').trim();
-      if(_t&&_ttsChunk(_t,1500).length===1)return true;
-    }catch(e){}
+  if(state.lang==='en'){
+    // クラウド音声(Aura)は1かたまりで鳴るときだけ追える。
+    // 無料枠が尽きているとそもそも鳴らないので、その場合は内蔵音声の話になる。
+    if(!_auraQuotaHit){
+      if(typeof _ttsChunk!=='function')return false;
+      try{
+        var _t=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'').trim();
+        if(_t&&_ttsChunk(_t,1500).length===1)return true;
+      }catch(e){}
+      return false;
+    }
+    // 端末内蔵の音声になる場面。読み上げ位置の通知(boundary)が来る端末なら
+    // 追従は動く。来ないと**分かった**端末だけ false にして即スクロールする。
+    // 分からないうちは true にしておき、外れたら _speakItem の安全網が拾う。
+    // ここで false にすると、通知が来る端末では即スクロールと追従ループが
+    // スクロールを取り合って位置が飛ぶ。
+    return _ttsBoundaryWorks!==false;
   }
   return false;
 }
@@ -3401,11 +3415,30 @@ function _speakItem(item,onEnd){
   // カラオケ追従が働く場面(事前生成音声＋追従ON)では**ここでスクロールしない**。
   // scrollIntoView({behavior:'smooth'}) はブラウザ側のアニメーションで、
   // 毎フレーム scrollTop を書くカラオケのループと取り合って位置が飛んでいた。
+  // 前の台詞が端末内蔵の音声で追従していた場合、その進み具合の箱は
+  // 誰にも止められないまま残る。色が残ったままになるので、ここで落とす。
+  // 本物の音声要素(事前生成音声やクラウド音声)は自分で終わりを知らせるので触らない。
+  try{
+    if(_kara&&_kara.audio&&_kara.audio._ttsKaraFake&&_kara.itemId!==item.id)_karaEndItem();
+  }catch(e){}
   try{
     var _kOn=_karaWillDrive(item);
     // force を付ける。scrollToItem は読み上げ中の呼び出しを
     // 「追従に任せる」として止めるので、付けないとここが効かない。
-    if(!_kOn)scrollToItem(item.id,{top:true,force:true});
+    if(!_kOn){
+      scrollToItem(item.id,{top:true,force:true});
+    }else{
+      // _karaWillDrive は鳴らす前の**予測**なので外れることがある。
+      // 外れた例: 英語のクラウド音声が無料枠切れで落ち、端末内蔵の音声に
+      // 移ったとき。追従ループは動かないのに「任せる」と判断してしまい、
+      // カラオケもスクロールも止まった。
+      // 少し待って掴んでいなければ、ここで寄せる。原因は問わない。
+      setTimeout(function(){
+        if(mySession!==_speakSessionId)return;
+        if(_kara&&_kara.itemId===item.id)return;   // 追従が動いている
+        try{scrollToItem(item.id,{top:true,force:true});}catch(e){}
+      },1200);
+    }
   }catch(e){scrollToItem(item.id,{top:true,force:true});}
   // 前アイテムの口パクを即座に停止 (音声が始まるまで無音・無口パクが正しい状態)
   state.tts.currentCharId=null;
@@ -3536,6 +3569,9 @@ var _disableNaturalForSession=false;
 var _sessionHasOnstart=false;
 function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   var chunks=_ttsChunk((state.lang==='en'?(_ctext(item)||item.text):_ttsJaText(item))||'',100);
+  // 追従ループへ渡すのは**画面に出ている文**。内蔵音声は日本語ではルビを
+  // 展開した読みで喋るので、その文字列だと文の数が画面の span と合わない。
+  var _kDisp=((typeof _ctext==='function'?_ctext(item):item.text)||item.text||'');
   if(!chunks.length){if(onEnd)onEnd();return;}
   var chId=ch&&ch.id||(item.characterId||'narrator');
   var fallbackVoice=_offlineFallbackVoice(ch);
@@ -3550,11 +3586,32 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
   }
   var switchedToFallback=(currentVoice===fallbackVoice);
   var idx=0,consecutiveErrors=0,startedOnce=false,_voiceTries={};
+  // 端末内蔵の音声(SpeechSynthesis)でもカラオケを出す。
+  // boundary の通知で「いま何文字目か」が分かるので、それを進み具合として
+  // 追従ループに渡す。ループは audio の currentTime/duration しか見ないので、
+  // その2つを持つだけの箱を渡せばよい。
+  // 通知が来ない音声もあるため、**最初の通知が来たときだけ**始める。
+  // 来なければ何も起きず、これまでと同じ動きになる。
+  var _kAll=chunks.join(''),_kFake=null,_kOff=0;
+  // 自分が渡した箱のときだけ色を消す。次の台詞が既に追従を始めていたら
+  // 触らない(消すと新しい台詞の色まで落ちる)。
+  function _kEnd(){
+    var f=_kFake; if(!f)return; _kFake=null;
+    if(_kara&&_kara.audio===f){try{_karaEndItem();}catch(e){}}
+  }
   function isStale(){return session!==_speakSessionId;}
   function remainingText(){return chunks.slice(idx).join('');}
   function speakNext(){
     if(isStale())return;
-    if(idx>=chunks.length){_ttsUtterance=null;if(onEnd)onEnd();return;}
+    if(idx>=chunks.length){
+      _ttsUtterance=null;
+      // 一度も通知が来ないまま喋り終わった端末は「来ない」と記録する。
+      // 次の台詞からは予測を false にでき、1.2秒待たずにスクロールできる。
+      if(_ttsBoundaryWorks===null&&startedOnce)_ttsBoundaryWorks=false;
+      _kEnd();
+      if(onEnd)onEnd();return;
+    }
+    _kOff=chunks.slice(0,idx).join('').length;
     // Edge: 前の utterance がキューに残ると二重発話になる。明示 cancel してキューを空にしてから発話
     if(speechSynthesis.speaking||speechSynthesis.pending){
       try{speechSynthesis.cancel();}catch(e){}
@@ -3571,6 +3628,20 @@ function _speakItemWebAPI(item,ch,session,onStart,onEnd,onError){
       if(isStale())return;
       thisStarted=true;_sessionHasOnstart=true;
       if(!startedOnce){startedOnce=true;if(onStart)onStart();}
+    };
+    utt.onboundary=function(ev){
+      if(isStale())return;
+      if(!(state.tts&&state.tts.karaoke))return;
+      var ci=(ev&&typeof ev.charIndex==='number')?ev.charIndex:0;
+      _ttsBoundaryWorks=true;
+      var f=(_kOff+ci)/Math.max(1,_kAll.length);
+      if(!_kFake){
+        // _ttsKaraFake:true は「本物の音声要素ではない」という印。
+        // 台詞が変わったときの取り違えを防ぐために見る。
+        _kFake={duration:1,currentTime:0,_ttsKaraFake:true};
+        try{_karaStart(item.id,_kDisp,_kFake);}catch(e2){_kFake=null;return;}
+      }
+      if(f>_kFake.currentTime)_kFake.currentTime=(f>1?1:f);
     };
     utt.onend=function(){
       if(settled||isStale())return;settled=true;
@@ -5540,7 +5611,9 @@ function _ttsSentenceMarks(t){
   if(!total)return [];
   return w.map(function(x){return x/total;});
 }
-var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,want:null,tries:0,lastMax:null,lastT:null,frac:0};
+// raf2 … rAF が回らない端末のための保険の setTimeout
+// tickAt … 最後に中身を進めた時刻(二重呼びの見送り判定)
+var _kara={itemId:null,marks:null,idx:-1,audio:null,spans:null,box:null,userAt:0,raf:null,raf2:null,tickAt:0,want:null,tries:0,lastMax:null,lastT:null,frac:0};
 function _karaUserScroll(){_kara.userAt=Date.now();}
 function _karaHookScroll(){
   var pa=document.getElementById('pageArea');
@@ -5566,6 +5639,8 @@ function _karaStop(){
     if(_kara.byTimer)clearTimeout(_kara.raf); else cancelAnimationFrame(_kara.raf);
     _kara.raf=null;_kara.byTimer=false;
   }
+  if(_kara.raf2){clearTimeout(_kara.raf2);_kara.raf2=null;}
+  _kara.tickAt=0;
   _karaClearMarks();
   _kara.itemId=null;_kara.marks=null;_kara.idx=-1;_kara.audio=null;
   _kara.spans=null;_kara.box=null;_kara.want=null;_kara.tries=0;_kara.lastMax=null;
@@ -5629,10 +5704,22 @@ function _karaEnsureLoop(){
     }else{
       _kara.raf=requestAnimationFrame(tick);
       _kara.byTimer=false;
+      // 画面に見えているはずでも rAF が回らない端末がある
+      // (実測: document.hidden は false のまま1度も呼ばれない)。
+      // 回らないと色も自動スクロールも止まったままになるので、
+      // 保険の setTimeout を一緒に仕掛ける。先に来た方だけが中身を進める。
+      // rAF が正常なら毎回ここで片付けられ、この保険は発火しない。
+      _kara.raf2=setTimeout(tick,250);
     }
   }
   function tick(){
+    // どちらの経路から来ても、進めるのは1回だけにする。
+    var _now=Date.now();
+    var _dup=(_kara.tickAt&&(_now-_kara.tickAt<12));
+    _kara.tickAt=_now;
+    if(_kara.raf2){clearTimeout(_kara.raf2);_kara.raf2=null;}
     _karaNext();
+    if(_dup)return;
     if(!state.tts||!state.tts.active){_karaStop();return;}
     var pa=document.getElementById('pageArea');
     if(!pa)return;
@@ -5831,7 +5918,10 @@ function _karaStart(itemId,text,audio){
   // 時間配分は**実際に合成した文字列**で計算する(ルビの多い文でずれないように)。
   // 文の数は 。！？ で切るので生本文と一致し、span との対応は崩れない。
   var it=(state.content||[]).filter(function(x){return x.id===itemId;})[0];
-  var say=(it&&typeof _ttsJaText==='function')?(_ttsJaText(it)||text):text;
+  // 英語モードでは渡された英文をそのまま使う。
+  // _ttsJaText() は日本語の読み方を返すので、英語の時間配分には使えない。
+  var say=(state.lang==='en')?text
+        :((it&&typeof _ttsJaText==='function')?(_ttsJaText(it)||text):text);
   var m=_ttsSentenceMarks(say);
   if(m.length!==_ttsSplitSentences(text).length)m=_ttsSentenceMarks(text);
   _kara.marks=m.length?m:[1];
