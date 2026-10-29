@@ -149,9 +149,13 @@ export async function onRequest(context) {
     }
     const workId = viewerWorkId(url);
     if (workId && isCrawler(request, url)) {
+      // 言語ごとに別のカードを作るので、キャッシュの鍵にも言語を入れる。
+      // 入れないと、最初に来たクローラの言語が両方に配られてしまう。
+      const cardLang = url.searchParams.get('lang') === 'en' ? 'en' : 'ja';
       try {
-        return await fromCache(context, '/_gen/ogcard/' + encodeURIComponent(workId),
-          () => workCard(context, workId, url));
+        return await fromCache(context,
+          '/_gen/ogcard/' + cardLang + '/' + encodeURIComponent(workId),
+          () => workCard(context, workId, url, cardLang));
       } catch (e) { console.warn('[middleware] workCard:', e); return next(); }
     }
     return next();
@@ -436,13 +440,19 @@ async function sitemapXml(env) {
   }
   for (const w of works) {
     if (!w || !w.id) continue;
-    out.push('  <url>');
-    out.push('    <loc>' + SITE + '/viewer.html?work=' + xmlEsc(w.id) + '</loc>');
     const d = String(w.updatedAt || w.createdAt || '').slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) out.push('    <lastmod>' + d + '</lastmod>');
-    out.push('    <changefreq>weekly</changefreq>');
-    out.push('    <priority>0.8</priority>');
-    out.push('  </url>');
+    const dated = /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // 英語の題名が入っている作品は、英語のURLも載せる。
+    // 載せないと英語版は検索側から見えない。
+    const langs = (w.titleEn || w.descriptionEn) ? ['ja', 'en'] : ['ja'];
+    for (const lang of langs) {
+      out.push('  <url>');
+      out.push('    <loc>' + xmlEsc(viewerUrl(w.id, lang, true)) + '</loc>');
+      if (dated) out.push('    <lastmod>' + d + '</lastmod>');
+      out.push('    <changefreq>weekly</changefreq>');
+      out.push('    <priority>' + (lang === 'ja' ? '0.8' : '0.7') + '</priority>');
+      out.push('  </url>');
+    }
   }
 
   out.push('</urlset>');
@@ -453,6 +463,16 @@ async function sitemapXml(env) {
       'Cache-Control': 'public, max-age=3600',
     },
   });
+}
+
+/**
+ * ビューアのURL。英語は ?lang=en を付ける。
+ * 日本語は付けない — 正規のURLを1つに保つため。
+ * ビューア側は ?lang= を端末の記憶より優先して読む。
+ */
+function viewerUrl(workId, lang, abs) {
+  return (abs ? SITE : '') + '/viewer.html?work=' + encodeURIComponent(workId)
+       + (lang === 'en' ? '&lang=en' : '');
 }
 
 /** /viewer.html?work=ID と /work/ID の両方から作品IDを取る。 */
@@ -496,7 +516,8 @@ function attrSafe(s) {
  * 作品ごとの共有カード。
  * 本文 (work:<id>) は大きいので読まない。カタログの1行で足りる。
  */
-async function workCard(context, workId, url) {
+async function workCard(context, workId, url, lang) {
+  const en = lang === 'en';
   const { env, next } = context;
   const res = await next();
   const ct = res.headers.get('Content-Type') || '';
@@ -508,18 +529,28 @@ async function workCard(context, workId, url) {
   const w = works.find(x => x && x.id === workId);
   if (!w) return res;
 
-  const title  = trim(w.title || w.titleEn, 80) || '無題';
-  const author = trim(w.author || w.authorEn, 40);
-  const headline = author ? (title + '｜' + author) : title;
+  // 英語版は英語の題名・著者を先に見る。無ければ原文に落ちる。
+  const title  = trim(en ? (w.titleEn || w.title) : (w.title || w.titleEn), 80)
+               || (en ? 'Untitled' : '無題');
+  const author = trim(en ? (w.authorEn || w.author) : (w.author || w.authorEn), 40);
+  const sep = en ? ' | ' : '｜';
+  const headline = author ? (title + sep + author) : title;
 
   // 概要が「題名 by 作者」のような自動生成文のときは、隣の行と同じことしか
   // 言わないので使わない (portal.js の _rankDesc と同じ考え方)。
-  let desc = trim(w.description || w.descriptionEn, 150);
+  let desc = trim(en ? (w.descriptionEn || w.description)
+                     : (w.description || w.descriptionEn), 150);
   if (desc && (desc === title || desc === title + ' by ' + author ||
                desc === title + ' / ' + author)) desc = '';
-  if (!desc) desc = 'アニメ風の吹き出しと読み上げで読めます。';
+  if (!desc) {
+    desc = en ? 'Read it with anime-style speech bubbles and narration.'
+              : 'アニメ風の吹き出しと読み上げで読めます。';
+  }
 
-  const canonical = SITE + '/viewer.html?work=' + encodeURIComponent(workId);
+  // 正規URLはその言語のURL。日本語版と英語版を別のページとして扱わせる。
+  const canonical = viewerUrl(workId, lang, true);
+  const altJa = viewerUrl(workId, 'ja', true);
+  const altEn = viewerUrl(workId, 'en', true);
 
   const setContent = v => ({
     element(el) { el.setAttribute('content', attrSafe(v)); }
@@ -539,6 +570,20 @@ async function workCard(context, workId, url) {
     .on('meta[property="og:url"]',         setContent(canonical))
     .on('link[rel="canonical"]', {
       element(el) { el.setAttribute('href', canonical); }
+    })
+    // 同じ本文の別言語版がどこにあるかを知らせる。
+    // これが無いと、英語で読めることが検索側に伝わらない。
+    .on('head', {
+      element(el) {
+        el.append(
+          '\n<link rel="alternate" hreflang="ja" href="' + attrSafe(altJa) + '">'
+          + '\n<link rel="alternate" hreflang="en" href="' + attrSafe(altEn) + '">'
+          + '\n<link rel="alternate" hreflang="x-default" href="' + attrSafe(altJa) + '">\n',
+          { html: true });
+      }
+    })
+    .on('html', {
+      element(el) { el.setAttribute('lang', en ? 'en' : 'ja'); }
     })
     .transform(res);
 
@@ -882,8 +927,11 @@ async function workIntroPage(env, slug, lang) {
 
   if (lead) body += '<blockquote><p>' + htmlEsc(lead) + '</p></blockquote>\n';
   body += '<div class="body">\n' + paragraphs(intro) + '\n</div>\n';
-  body += '<p class="cta"><a class="btn" href="/viewer.html?work='
-        + encodeURIComponent(work.id) + '">' + t.read + '</a></p>\n';
+  // 言語を必ず付ける。付けないとビューアは端末の記憶で言語を決めるため、
+  // 初回訪問の英語圏の読者 (記憶が空) は日本語の本文に落ちる。
+  // 英語の導線がここで切れていた。
+  body += '<p class="cta"><a class="btn" href="' + viewerUrl(work.id, lang) + '">'
+        + t.read + '</a></p>\n';
   if (src && lang === 'ja') {
     body += '<p class="src">' + t.source + htmlEsc(src) + t.pd + '</p>\n';
   } else if (lang === 'en') {

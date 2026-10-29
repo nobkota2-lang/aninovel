@@ -3,7 +3,28 @@
 <head>
     <meta charset="UTF-8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
-    <script>(function(){try{var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},6000);}}catch(e){}})();</script>
+    <!-- 表示言語をここで一度だけ決め、window.__aninovelLang に置く。
+         優先順は URL の ?lang= → 端末の記憶 → 既定(ja)。
+         URL を最優先にするのは、英語の紹介ページ (/en/works/...) から来た
+         読者や、英語の画面のURLを共有された人を日本語に落とさないため。
+         初回訪問者は端末の記憶が空なので、URLを見ないと必ず日本語になる。
+         この判定は**表示抑止より先**に要る。後にすると英語で来た読者に
+         日本語が一瞬見えてから英語に変わる。 -->
+    <script>(function(){
+      var l='ja',q=null;
+      try{ q=new URLSearchParams(location.search).get('lang'); }catch(e){}
+      if(q!=='ja'&&q!=='en')q=null;
+      if(q){
+        l=q;
+        // URLで指定された言語は端末にも覚えさせる。次からURL無しでも同じ言語で読める。
+        try{ localStorage.setItem('aninovel_lang',q); localStorage.setItem('aninovel_lang_v1',q); }catch(e){}
+      }else{
+        try{ l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja'; }catch(e){ l='ja'; }
+        if(l!=='ja'&&l!=='en')l='ja';
+      }
+      window.__aninovelLang=l;
+      try{ if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},6000);} }catch(e){}
+    })();</script>
     <style>html.i18n-pending #app{opacity:0!important;pointer-events:none!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -30,7 +51,7 @@
          日本語の書体が入っていないパソコンでは、タブの見出しが豆腐(□)に
          見えていた。lang を先に立てると html[lang="en"] の CSS も効く。 -->
     <script>(function(){try{
-      var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';
+      var l=window.__aninovelLang||(localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja');
       if(l==='en'){ document.documentElement.setAttribute('lang','en'); document.title='AniNovel - Viewer'; }
     }catch(e){}})();</script>
     <!-- 書き込みトークン。fetch を包むので、他のどのスクリプトよりも先に読む -->
@@ -70,7 +91,7 @@
          なる。id を両方に同じ値で持たせてあるので、Chrome は別のアプリ
          ではなく同じアプリの更新として扱う。 -->
     <script>(function(){try{
-      var l=localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';
+      var l=window.__aninovelLang||(localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja');
       if(l!=='en') return;
       var m=document.querySelector('link[rel="manifest"]');
       if(m) m.setAttribute('href','./manifest-en.json');
@@ -262,7 +283,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/p
 function toFullWidth(s){return s?s.replace(/[!-~]/g,function(c){return String.fromCharCode(c.charCodeAt(0)+0xFEE0)}):""}
 
 var state={
-lang:(function(){try{return localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja';}catch(e){return 'ja';}})(),
+lang:(function(){try{return window.__aninovelLang||(localStorage.getItem('aninovel_lang')||localStorage.getItem('aninovel_lang_v1')||'ja');}catch(e){return 'ja';}})(),
 workTrans:null,workTransMeta:null,workTransHash:null,translating:false,
 currentScreen:'home',isAuthorMode:false,sidebarOpen:false,settingsOpen:false,
 tocOpen:false,bookmarkListOpen:false,editModalOpen:false,colorPickerOpen:false,
@@ -7193,7 +7214,21 @@ window.__i18nAudit=function(){
   return out;
 };
 
-function setLang(l){ state.lang=l; try{localStorage.setItem('aninovel_lang',l);localStorage.setItem('aninovel_lang_v1',l);}catch(e){} render(); if(l==='en') maybeTranslateWork(); }
+// いま表示している言語をURLに表す。
+// これが無いと、英語で読んでいる画面のURLを共有しても相手には日本語で開き、
+// 検索エンジンも日本語版と英語版を別のページとして扱えない。
+// 日本語のときは ?lang= を落として、正規のURL(/viewer.html?work=…)に揃える。
+// replaceState なので「戻る」の履歴は増えない。
+function _syncLangUrl(l){
+  try{
+    document.documentElement.setAttribute('lang',l==='en'?'en':'ja');
+    if(!window.history||!history.replaceState)return;
+    var u=new URL(location.href);
+    if(l==='en')u.searchParams.set('lang','en'); else u.searchParams.delete('lang');
+    if(u.href!==location.href)history.replaceState(null,'',u.href);
+  }catch(e){}
+}
+function setLang(l){ state.lang=l; try{localStorage.setItem('aninovel_lang',l);localStorage.setItem('aninovel_lang_v1',l);}catch(e){} _syncLangUrl(l); render(); if(l==='en') maybeTranslateWork(); }
 function toggleLang(){ setLang(state.lang==='en'?'ja':'en'); }
 
 // ===== Phase2: 作品本文の自動翻訳 (Cloudflare Function /api/translate 経由) =====
@@ -7644,6 +7679,9 @@ function render(){
   document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();applyI18n();_maybeReveal();
   try{_syncDocTitle();}catch(e){}
+  // 端末の記憶で英語になっている場合もURLに表す(描き直しごとに揃える)。
+  // href が変わらないときは何もしないので、履歴も増えない。
+  try{_syncLangUrl(state.lang);}catch(e){}
   if(state._scrollToId){scrollToItem(state._scrollToId);state._scrollToId=null;}else{var _paEl=document.getElementById('pageArea');if(_paEl){_paEl.scrollTop=_paScroll;if(_paScrollX)_paEl.scrollLeft=_paScrollX;}}
   try{_flowHookRead();}catch(e){}
   // TTS再生中: ハイライト＆スクロール復元、リップシンク再起動
