@@ -401,7 +401,10 @@ async function sitemapXml(env) {
   }
 
   // 英語の入口。英語圏から来た人の着地点なので、紹介ページより高く置く。
-  for (const [path, pri] of [['/en/', '0.9'], ['/en/authors', '0.7']]) {
+  // 登録・ログイン・ポイントは検索から来る価値が無いので載せない。
+  // 作者申請は英語圏の作者を迎える入口なので載せる。
+  for (const [path, pri] of [['/en/', '0.9'], ['/en/authors', '0.7'],
+                             ['/en/apply', '0.5']]) {
     out.push('  <url>');
     out.push('    <loc>' + SITE + path + '</loc>');
     out.push('    <changefreq>weekly</changefreq>');
@@ -471,13 +474,17 @@ async function sitemapXml(env) {
  * ビューア側は ?lang= を端末の記憶より優先して読む。
  */
 function viewerUrl(workId, lang, abs) {
-  return (abs ? SITE : '') + '/viewer.html?work=' + encodeURIComponent(workId)
+  // 配るのは /viewer。Cloudflare Pages は /viewer.html を /viewer へ
+  // 転送するので、.html 付きを配ると必ず転送が1回挟まる。
+  return (abs ? SITE : '') + '/viewer?work=' + encodeURIComponent(workId)
        + (lang === 'en' ? '&lang=en' : '');
 }
 
 /** /viewer.html?work=ID と /work/ID の両方から作品IDを取る。 */
 function viewerWorkId(url) {
-  if (url.pathname === '/viewer.html') {
+  // 本番で実際に開かれるのは /viewer。Pages が .html を外すため、
+  // /viewer.html しか見ていないと転送後に何も動かなかった。両方受ける。
+  if (url.pathname === '/viewer' || url.pathname === '/viewer.html') {
     return url.searchParams.get('work') || '';
   }
   if (url.pathname.startsWith('/work/')) {
@@ -1213,15 +1220,64 @@ const EN_MIRROR = {
     ogDesc: 'Have your story read with speech bubbles and voices. The tools are '
           + 'free, and you share in what the site earns.',
   },
+  '/en/register': {
+    src: '/register.html',
+    url: SITE + '/en/register',
+    path: '/en/register',
+    jaUrl: '/register.html',
+    title: 'Sign up as a reader | AniNovel',
+    ogTitle: 'Sign up as a reader | AniNovel',
+    desc: 'Create a free reader account to keep your own character icons, bubble '
+        + 'colours and reading position. Without an account you can still read '
+        + 'five works a day.',
+    ogDesc: 'A free account keeps your own icons, colours and reading position.',
+  },
+  '/en/login': {
+    src: '/login.html',
+    url: SITE + '/en/login',
+    path: '/en/login',
+    jaUrl: '/login.html',
+    title: 'Sign in | AniNovel',
+    ogTitle: 'Sign in | AniNovel',
+    desc: 'Sign in to AniNovel. Readers and writers both use the email address '
+        + 'and password they registered with.',
+    ogDesc: 'Sign in to AniNovel.',
+  },
+  '/en/apply': {
+    src: '/author-apply.html',
+    url: SITE + '/en/apply',
+    path: '/en/apply',
+    jaUrl: '/author-apply.html',
+    title: 'Apply to become a writer | AniNovel',
+    ogTitle: 'Apply to become a writer | AniNovel',
+    desc: 'Apply to publish your fiction on AniNovel. The tools are free, you '
+        + 'keep the rights to your work, and part of what the site earns is '
+        + 'shared according to how much your work is read.',
+    ogDesc: 'Publish your fiction with speech bubbles and voices. The tools are '
+          + 'free and you keep your rights.',
+  },
+  '/en/points': {
+    src: '/points.html',
+    url: SITE + '/en/points',
+    path: '/en/points',
+    jaUrl: '/points.html',
+    title: 'Points | AniNovel',
+    ogTitle: 'Points | AniNovel',
+    desc: 'How much your work has been read, and what has been set aside for '
+        + 'you. One point is not one yen; the value of a point changes from '
+        + 'period to period.',
+    ogDesc: 'How much your work has been read, and what has been set aside for you.',
+  },
 };
 
 /** /en/... から、元になる日本語ページの設定を引く。末尾のスラッシュは許す。 */
 function enMirrorRoute(pathname) {
   if (pathname === '/en' || pathname === '/en/') return EN_MIRROR['/en/'];
-  if (pathname === '/en/authors' || pathname === '/en/authors/') {
-    return EN_MIRROR['/en/authors'];
-  }
-  return null;
+  // 末尾のスラッシュは許す。1ページずつ書き並べると足し忘れるので表で引く。
+  // hasOwnProperty で引くこと。素の [] だと '/constructor' のような
+  // パスで Object.prototype の中身が返り、設定のつもりで別物を渡してしまう。
+  const p = pathname.replace(/\/+$/, '');
+  return Object.prototype.hasOwnProperty.call(EN_MIRROR, p) ? EN_MIRROR[p] : null;
 }
 
 /**
@@ -1235,6 +1291,10 @@ const EN_LINKS = {
   '/works': '/en/works/',
   '/works/': '/en/works/',
   '/authors.html': '/en/authors',
+  '/register.html': '/en/register',
+  '/login.html': '/en/login',
+  '/author-apply.html': '/en/apply',
+  '/points.html': '/en/points',
 };
 
 /**
