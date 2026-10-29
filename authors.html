@@ -128,7 +128,9 @@ a{color:var(--accent)}
       t('あなたの物語を、吹き出しと声のある形で読んでもらえます。',
         'Have your story read with speech bubbles and voices.');
     document.getElementById('t-back').textContent = t('トップに戻る', 'Back to top');
-    document.getElementById('lang').textContent = t('English', '日本語');
+    document.getElementById('lang').textContent = t('English', 'Japanese');
+    // 英語で読んでいる人に日本語の文字を出さない。ポータル側の
+    // 切替 (js/i18n.js の renderSwitcher) も英語表記なので、そちらに揃えた。
 
     var h = '';
 

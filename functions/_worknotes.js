@@ -40,20 +40,43 @@ export const WORK_NOTES = [
   // ====================================================================
   {
     slug: 'jukkai-kara-tobioriru-businesswoman',
-    titleEn: '',
+    titleEn: 'The Businesswoman Who Jumps from the Tenth Floor',
     authorEn: 'Nobby',
-    leadEn: '',
-    introEn: '',
+    leadEn: 'She stepped off the roof of a ten-storey building without the '
+          + 'slightest hesitation \u2014 just took a single step, as though she '
+          + 'were walking down a staircase.',
+    introEn: 'A businesswoman in a black suit steps off the edge of a tenth-floor '
+           + 'roof. Aimi, who saw it happen, goes to the parapet braced for the '
+           + 'worst and finds the woman walking calmly along the street below. '
+           + 'That is where the story starts, and Masaru refuses to believe a word '
+           + 'of it. Ten storeys, thirty metres, a spine you never walk on again \u2014 '
+           + 'he has the numbers ready before she can finish.\n\n'
+           + 'Almost all of it is the two of them talking. No narrator steps in to '
+           + 'explain the science; it arrives through one friend wearing the other '
+           + 'down, and the sceptic asks exactly the questions a reader would. '
+           + 'Speech bubbles are not a layer added on top of this story. They are '
+           + 'the shape it already had.\n\n'
+           + '\u3010Add where the idea came from, and how you chose the two voices.\u3011',
     title: '10階から飛び降りるビジネスウーマン',
     author: 'Nobby',
     kind: 'original',
     year: '',
     source: '',
-    lead: '',
-    // 【全面的に要執筆】ここは Claude には書けません。作品の中身を知らないためです。
-    // 読んだ人に何を持ち帰ってほしいか、どこから書き始めたか、
-    // 登場人物の声をどう決めたかを、300〜500字でお願いします。
-    intro: ''
+    lead: '10階建ての建物の屋上から何のためらいもなく、'
+        + '靴を脱いで揃えるわけでもなく、まるで階段を降りるかのように'
+        + '一歩踏み出したんだよ！',
+    intro:
+      '黒いスーツのビジネスウーマンが、十階の屋上の端から一歩踏み出す。' +
+      'それを見ていた愛美が、潰れた死体を見る覚悟で下を覗くと、' +
+      'その人は平然と下の道を歩いている。そこから話が始まります。' +
+      'まさるは信じません。十階、三十メートル、普通なら即死だと、' +
+      '数字を並べて反論します。\n\n' +
+      'ほとんど全部が二人の会話です。語り手が出てきて説明することはなく、' +
+      '疑う側と解き明かす側のやりとりだけで話が進みます。' +
+      'まさるが訊くことは、読者が訊きたいことと同じです。' +
+      'この作品にとって吹き出しは、後から足した見せ方ではなく、' +
+      'もとからの形です。\n\n' +
+      '【要加筆】どこから思いついたか、二人の声をどう決めたかについて。'
   },
 
   // ====================================================================

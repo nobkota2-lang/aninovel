@@ -377,6 +377,7 @@ function xmlEsc(s) {
 const STATIC_PAGES = [
   ['/',                         'daily',   '1.0'],
   ['/authors.html',             'weekly',  '0.9'],
+  ['/guide.html',               'monthly', '0.7'],
   ['/author-apply.html',        'monthly', '0.6'],
   ['/manual.html',              'monthly', '0.5'],
   ['/legal/revenue.html',       'monthly', '0.4'],
@@ -403,8 +404,8 @@ async function sitemapXml(env) {
   // 英語の入口。英語圏から来た人の着地点なので、紹介ページより高く置く。
   // 登録・ログイン・ポイントは検索から来る価値が無いので載せない。
   // 作者申請は英語圏の作者を迎える入口なので載せる。
-  for (const [path, pri] of [['/en/', '0.9'], ['/en/authors', '0.7'],
-                             ['/en/apply', '0.5']]) {
+  for (const [path, pri] of [['/en/', '0.9'], ['/en/guide', '0.8'],
+                             ['/en/authors', '0.7'], ['/en/apply', '0.5']]) {
     out.push('  <url>');
     out.push('    <loc>' + SITE + path + '</loc>');
     out.push('    <changefreq>weekly</changefreq>');
@@ -790,7 +791,7 @@ const UI = {
     notPublished: 'This work is not currently published.',
     preparing: 'Coming soon.',
     source: 'Source: ', pd: '. The copyright on this work has expired.',
-    chars: (n) => n + ' characters', other: '日本語',
+    chars: (n) => n + ' characters', other: 'Japanese',
   },
 };
 
@@ -917,7 +918,13 @@ async function workIntroPage(env, slug, lang) {
   const both = hasBoth(note);
 
   const facts = [];
-  if (note.year) facts.push(htmlEsc(note.year));
+  // note.year は「1940年」のような日本語表記。英語のページでは
+  // 「年」を落として数字だけにする(そのまま出ると□になる環境がある)。
+  if (note.year) {
+    const y = (lang === 'en') ? String(note.year).replace(/年/g, '').trim()
+                              : note.year;
+    if (y) facts.push(htmlEsc(y));
+  }
   if (work.charCount) {
     facts.push(t.chars(Number(work.charCount).toLocaleString('en-US')));
   }
@@ -1268,6 +1275,19 @@ const EN_MIRROR = {
         + 'period to period.',
     ogDesc: 'How much your work has been read, and what has been set aside for you.',
   },
+  '/en/guide': {
+    src: '/guide.html',
+    url: SITE + '/en/guide',
+    path: '/en/guide',
+    jaUrl: '/guide.html',
+    title: 'How to read | AniNovel',
+    ogTitle: 'How to read | AniNovel',
+    desc: 'How to read on AniNovel: speech bubbles, a separate reading voice for '
+        + 'every character, switching between Japanese and English, and changing '
+        + 'the icons and bubble colours as you read.',
+    ogDesc: 'Speech bubbles, a voice for every character, and English or Japanese '
+          + 'at a switch.',
+  },
 };
 
 /** /en/... から、元になる日本語ページの設定を引く。末尾のスラッシュは許す。 */
@@ -1295,6 +1315,7 @@ const EN_LINKS = {
   '/login.html': '/en/login',
   '/author-apply.html': '/en/apply',
   '/points.html': '/en/points',
+  '/guide.html': '/en/guide',
 };
 
 /**

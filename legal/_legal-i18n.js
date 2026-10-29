@@ -32,7 +32,10 @@
     '特商法表記': 'Commercial Disclosure',
     '著作権窓口': 'Copyright Contact',
     'アクセシビリティ': 'Accessibility',
-    'トップに戻る': 'Back to top'
+    'トップに戻る': 'Back to top',
+    '作品': 'Works',
+    '作品を書く方へ': 'For writers',
+    '使い方': 'How to read'
   };
 
   var TITLE = {
@@ -41,7 +44,8 @@
     'privacy': 'Privacy Policy | AniNovel',
     'tokushoho': 'Commercial Disclosure | AniNovel',
     'dmca': 'Copyright Contact | AniNovel',
-    'accessibility': 'Accessibility Statement | AniNovel'
+    'accessibility': 'Accessibility Statement | AniNovel',
+    'guide': 'How to read | AniNovel'
   };
 
   function lang() {
