@@ -5,6 +5,8 @@ Disallow: /lipsync_batch.html
 Disallow: /scripts/
 Disallow: /data/audio/
 Disallow: /data/lipsync/
+Disallow: /_rl/
+Disallow: /_gen/
 
 # 海賊サイト構築ツールはブロック
 User-agent: HTTrack

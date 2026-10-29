@@ -40,6 +40,10 @@ export const WORK_NOTES = [
   // ====================================================================
   {
     slug: 'jukkai-kara-tobioriru-businesswoman',
+    titleEn: '',
+    authorEn: 'Nobby',
+    leadEn: '',
+    introEn: '',
     title: '10階から飛び降りるビジネスウーマン',
     author: 'Nobby',
     kind: 'original',
@@ -57,6 +61,10 @@ export const WORK_NOTES = [
   // ====================================================================
   {
     slug: 'hashire-merosu',
+    titleEn: 'Run, Melos!',
+    authorEn: 'Osamu Dazai',
+    leadEn: 'Melos was furious. He resolved that he must remove this king, this man of wicked cunning and violence.',
+    introEn: 'The opening line has already set the story running. Melos, a shepherd, loses his temper with a king who has stopped believing anyone, and is given three days on the condition that his closest friend stands as hostage. Miss the deadline and the friend dies. That is the whole plot.\n\nIt is short, and most of it is spoken aloud by people whose identity is never in doubt. Read in speech bubbles, the panic of Melos and the silence of the friend waiting for him sit side by side in a way that plain prose tends to smooth over. With voices it is sharper still.\n\n【Add a line about how you cast the three voices, and why this work sits near the front of the catalogue.】',
     title: '走れメロス',
     author: '太宰 治',
     kind: 'aozora',
@@ -76,6 +84,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'chumon-no-oi-ryoriten',
+    titleEn: 'The Restaurant of Many Orders',
+    authorEn: 'Kenji Miyazawa',
+    leadEn: 'Two young gentlemen, got up exactly like English soldiers, with glittering rifles on their shoulders and two dogs like white bears at their heels, were walking deep in the mountains.',
+    introEn: 'Two gentlemen, lost in the mountains, come upon a handsome Western restaurant. Each door they pass carries a new instruction. Comb your hair. Scrape the mud from your boots. Rub this cream on your face. They do as they are told, and only slowly begin to wonder why.\n\nThe story is driven by writing on doors. In an ordinary book those notices sit buried in the prose; here each one arrives on its own, in its own bubble, at the pace the gentlemen read it. You work it out exactly when they do.\n\n【Say how you handled the writing on the doors, and how you split the two gentlemen.】',
     title: '注文の多い料理店',
     author: '宮沢 賢治',
     kind: 'aozora',
@@ -98,6 +110,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'oshie-to-tabisuru-otoko',
+    titleEn: 'The Man Travelling with the Pasted-Picture',
+    authorEn: 'Edogawa Rampo',
+    leadEn: '',
+    introEn: 'On the train home from watching a mirage at Uozu, the narrator shares a carriage with a strange man carrying a framed picture made of pasted cloth. In it are an old man and a young woman. The old man, he says, is his brother.\n\nOf all Rampo wrote, this is the one where beauty outweighs horror. A man tells a story, and inside that story another time opens up. Keeping the frames apart by speaker makes it much easier to hold on to whose memory you are inside at any moment.\n\n【Add how you separated the narrator from the man, and anything about the dreamlike passages.】',
     title: '押絵と旅する男',
     author: '江戸川 乱歩',
     kind: 'aozora',
@@ -117,6 +133,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'rashomon',
+    titleEn: 'Rashōmon',
+    authorEn: 'Ryūnosuke Akutagawa',
+    leadEn: 'It was evening, and a servant was waiting under the Rashōmon gate for the rain to stop.',
+    introEn: 'A servant, dismissed and with nowhere to go, shelters from the rain under the ruined Rashōmon gate. Climbing to the upper floor he finds an old woman pulling hair from the dead. Challenged, she explains herself, and her explanation is what decides what he does next.\n\nMany Japanese readers meet this story at school. Hearing the exchange spoken changes it. The old woman is oddly persuasive, and that persuasiveness is exactly what the servant turns back on her. Following it in bubbles makes the turn easy to see.\n\n【Add your casting of the servant and the old woman, and what you want a first-time reader to notice.】',
     title: '羅生門',
     author: '芥川 龍之介',
     kind: 'aozora',
@@ -137,6 +157,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'yuki-onna',
+    titleEn: 'Yuki-onna (The Snow Woman)',
+    authorEn: 'Lafcadio Hearn',
+    leadEn: '',
+    introEn: 'Caught in a blizzard, two woodcutters shelter in a ferryman\'s hut. The younger, Minokichi, wakes to find a woman in white breathing over his sleeping companion. She spares him on one condition: that he never tell anyone what he saw. Years later, on an ordinary evening, he breaks his word.\n\nThe story is as Japanese as snow country gets, and it was written by a man born in Greece. Hearn collected it for Kwaidan in 1904, and the English you are reading here is closer to the source than the Japanese is.\n\n【Add how you cast O-Yuki. See also the note I left you about using Hearn\'s own English rather than a translation back from Japanese.】',
     title: '雪女',
     author: '小泉 八雲',
     kind: 'aozora',
@@ -155,6 +179,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'ginga-tetsudo-no-yoru',
+    titleEn: 'Night on the Galactic Railroad',
+    authorEn: 'Kenji Miyazawa',
+    leadEn: '',
+    introEn: 'Giovanni, a boy with too much work and too little money, finds himself aboard a train crossing the Milky Way. Campanella, his friend, is in the next seat. They follow the stars from station to station, talking with the passengers who come and go, until they reach a parting.\n\nMiyazawa revised this all his life and never finished it, and perhaps that is why it stays with readers as a series of places rather than a plot. There are many voices, and they change quickly, which is precisely the situation speech bubbles were made for.\n\n【Add how you divided a long work, and how you chose Campanella\'s voice.】',
     title: '銀河鉄道の夜',
     author: '宮沢賢治',
     kind: 'aozora',
@@ -175,6 +203,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'wagahai-wa-neko-de-aru',
+    titleEn: 'I Am a Cat',
+    authorEn: 'Sōseki Natsume',
+    leadEn: 'I am a cat. As yet I have no name.',
+    introEn: 'A nameless cat takes up residence with Kushami, a schoolmaster of English, and watches the people who drift through the house. Meitei the aesthete, Kangetsu the physicist, Tōfū the poet. They gather, they argue about nothing in particular at enormous length, and the cat reviews their performance. That is the book, for several hundred pages.\n\nThere is almost no plot and almost nothing but talk, which makes it one of the best possible fits for this format. Simply knowing at a glance who is speaking makes those long conversations far easier to stay inside.\n\nIt is the longest work on the site. Use the bookmark and take your time.\n\n【Add your casting of Kushami, Meitei and Kangetsu, and how you chose to handle 330,000 characters.】',
     title: '吾輩は猫である',
     author: '夏目漱石',
     kind: 'aozora',
@@ -197,6 +229,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'bocchan',
+    titleEn: 'Botchan',
+    authorEn: 'Sōseki Natsume',
+    leadEn: 'Ever since I was a child, the recklessness I inherited from my parents has brought me nothing but trouble.',
+    introEn: 'A headstrong Tokyoite takes a post teaching mathematics at a middle school in Shikoku. Redshirt, Clown, Porcupine, Hubbard Squash: he hands out nicknames, and then collides with every one of them, telling the whole thing himself at speed.\n\nBecause it is all in one voice from beginning to end, it suits narration unusually well. Lines that run away with you on the page turn comic when they are spoken. Watching that cast of nicknames line up in bubbles is its own pleasure.\n\n【Add how you chose the narrator\'s voice.】',
     title: '坊ちゃん',
     author: '夏目漱石',
     kind: 'aozora',
@@ -218,6 +254,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'butai-no-kotoba',
+    titleEn: 'Words of the Stage',
+    authorEn: 'Kunio Kishida',
+    leadEn: '',
+    introEn: 'The playwright Kunio Kishida on the words that are spoken on a stage: what happens to a written line once it passes through an actor, and how the speech of a play differs from the speech of a room.\n\nThis is not fiction. It is an essay about language itself, which makes it an odd and slightly pointed thing to find on a site that puts lines in bubbles and reads them aloud. Come to it after a few of the stories and it reads differently.\n\n【This is the one work whose place in the catalogue a reader will not guess. Please say in your own words why it is here.】',
     title: '舞台の言葉',
     author: '岸田國士',
     kind: 'aozora',
@@ -238,6 +278,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'kido-mukashigatari',
+    titleEn: 'Kidō\'s Tales of Times Past',
+    authorEn: 'Kidō Okamoto',
+    leadEn: '',
+    introEn: 'Kidō Okamoto, best known for the Hanshichi detective stories, remembering the Tokyo he grew up in as it turned from Edo into Meiji. The smell of the streets, the noise of the theatres, fires, earthquakes. Not invented: recorded.\n\nIt is the second longest work here, and it rewards dipping in at whatever chapter catches your eye rather than reading straight through. The voice is unhurried, which makes it good listening.\n\n【Add which chapter you would start someone on. Note: the English title here is my suggestion, replacing the machine-translated "Good old talk." Please confirm or change it.】',
     title: '綺堂むかし語り',
     author: '岡本綺堂',
     kind: 'aozora',
@@ -256,6 +300,10 @@ export const WORK_NOTES = [
   },
   {
     slug: 'ai-to-bi-ni-tsuite',
+    titleEn: 'On Love and Beauty',
+    authorEn: 'Osamu Dazai',
+    leadEn: '',
+    introEn: 'Five siblings take turns carrying a single story forward. The eldest brother is solemn and theoretical, the second affects sophistication, the sister tells it her way. The cast stays the same and the tale bends a little further out of shape with every handover. The bending is the point.\n\nWith five narrators, seeing at a glance which one has the floor does a great deal of work. It is also Dazai in a bright and funny mood, which surprises people who only know him by reputation.\n\n【Add how you shared out the five voices.】',
     title: '愛と美について',
     author: '太宰治',
     kind: 'aozora',
