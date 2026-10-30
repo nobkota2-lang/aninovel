@@ -3390,7 +3390,10 @@ async function generateVoicesAura(opts){
       if(/[\u3040-\u30ff\u3400-\u9fff]/.test(srcText)){
         console.warn('[Aura] 英訳未取得 → スキップ item='+it.id);failed++;_updateProgress(progressBox,i+1,total,'skip(no-trans) '+it.id);continue;
       }
-      var hash=_simpleHashJS(srcText+'|aura1='+voice);
+      // 指紋にモデル名を入れる。実態と合わせておかないと、モデルを変えたのに
+      // 古い音声を使い続ける。ここを後から直すと全件作り直しになるので、
+      // 英語音声が0件のうちに実態(aura-2-en)に合わせておく。
+      var hash=_simpleHashJS(srcText+'|aura2='+voice);
       var prev=await _idbGet(wid,it.id,'en');
       if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
       _updateProgress(progressBox,i+1,total,it.id);
