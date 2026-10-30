@@ -2468,6 +2468,32 @@ function _playTestBlob(b,rate){
   try{a.playbackRate=rate;a.defaultPlaybackRate=rate;}catch(e){}
   var p;try{p=a.play();}catch(e){}if(p&&p.catch)p.catch(function(){});
 }
+// 日本語の声だけを試聴する(母語の設定に関係なく)。
+function _testVoiceJa(){
+  var v=state.editingItem&&state.editingItem.data;if(!v)return;
+  _stopAllSpeech();
+  var rate=Math.max(0.5,Math.min(2.0,state.tts.rate||1.3));
+  var sampleJa=(v.name?v.name+'。':'')+'テスト音声です。１０階から見下ろします。';
+  var spk=_voicevoxSpeakerFor(v);
+  _voicevoxSynthBlob(sampleJa,spk).then(function(b){_playTestBlob(b,rate);}).catch(function(err){
+    console.info('[TTS] VOICEVOX未起動 → 標準TTSで試聴 ('+(err&&err.message||err)+')');
+    var utt=new SpeechSynthesisUtterance(sampleJa);utt.lang='ja-JP';var fv=_ttsVoice(v);if(fv)utt.voice=fv;
+    utt.rate=rate;speechSynthesis.cancel();speechSynthesis.speak(utt);
+  });
+}
+// 英語の声だけを試聴する。母語の設定は見ない。
+// 英語の声は「読者が英語モードのとき」に使われるもので、母語とは別だから。
+function _testVoiceEn(){
+  var v=state.editingItem&&state.editingItem.data;if(!v)return;
+  _stopAllSpeech();
+  var nm=_auraNameById(_auraVoiceFor(v));
+  var line='This is '+nm+'. '+(v.name?('I will be reading for '+v.name+'. '):'')
+          +'She looked down from the tenth floor, and stepped off.';
+  _auraCtrl=_speakItemAura({id:'__testen',text:line},v,++_speakSessionId,
+    function(){},function(){_auraCtrl=null;},
+    function(e){_auraCtrl=null;
+      alert(_L('英語の試聴に失敗しました: ','Could not play the English sample: ')+(e&&e.message||e));});
+}
 function _testVoice(){
   var v=state.editingItem&&state.editingItem.data;if(!v)return;
   _stopAllSpeech();
@@ -3219,11 +3245,13 @@ function _voicePickerHtml(data){
   s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:4px">標準音声フォールバック時の言語</div></div>';
   // 日本語の音声（VOICEVOX）— 常に表示
   s+='<div style="margin-top:10px"><label '+L+'>🎙 日本語の音声（VOICEVOX）</label>';
-  s+='<select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="width:100%">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null,data.gender)+'</select></div>';
+  s+='<div style="display:flex;gap:6px"><select onchange="state.editingItem.data.voicevoxSpeaker=this.value?parseInt(this.value,10):null" style="flex:1">'+_vvSpeakerOptions(typeof data.voicevoxSpeaker==='number'?data.voicevoxSpeaker:null,data.gender)+'</select>'
+    +'<button onclick="_testVoiceJa()" class="btn btn-ghost" style="font-size:12px;white-space:nowrap">▶ 試聴</button></div></div>';
   // 英語の音声（Aura）— 常に表示
   s+='<div style="margin-top:10px"><label '+L+'>🎙 英語の音声（Aura）</label>';
-  s+='<select onchange="state.editingItem.data.auraVoice=this.value||null" style="width:100%">'+_auraVoiceOptions(data.auraVoice||null,data.gender)+'</select></div>';
-  s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:6px">読者の言語設定に合わせて音声が選ばれます。<br>日本語表示時=VOICEVOX、英語表示時=クラウド(Aura)。未導入/未生成のPCでは性別・言語に合った標準音声を自動使用。</div>';
+  s+='<div style="display:flex;gap:6px"><select onchange="state.editingItem.data.auraVoice=this.value||null;render()" style="flex:1">'+_auraVoiceOptions(data.auraVoice||null,data.gender)+'</select>'
+    +'<button onclick="_testVoiceEn()" class="btn btn-ghost" style="font-size:12px;white-space:nowrap">▶ 試聴</button></div></div>';
+  s+='<div style="font-size:11px;color:var(--text-muted,#888);margin-top:6px">音声は<strong>読者の言語</strong>で選ばれます。日本語表示=VOICEVOX、英語表示=クラウド(Aura)。上の「母語 / 国籍」は、どちらも使えないPCで端末内蔵の音声に落ちたときの言語です。<br>英語の試聴はクラウドを呼ぶので、1日の無料枠を少し使います。</div>';
   return s;
 }
 // VOICEVOX 接続診断: 正常 / CORS拒否 / オフライン を切り分ける
@@ -6167,7 +6195,7 @@ function renderReader(){var pc=getPC(),tp=getTP(),isV=state.displaySettings.orie
     // 立ち読み・登録読者・他の人の作品を読んでいる作者には出さない。
     // その人たちは本文のアイコンを押して、自分用の見た目だけを変える。
     if(!_showChars)state.sidebarOpen=false;
-    h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border);'+(_showChars?'':'display:none')+'"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';else h+='<p style="font-size:12px;color:var(--text-muted);background:var(--bg-secondary);padding:9px 11px;border-radius:8px;margin:0 0 14px 0;line-height:1.6">登場人物の<strong>追加・削除・編集</strong>は、右上の「✏️ 作者モード」に切り替えると行えます。<br>いまは読者として読んでいるので、アイコンを押すと<strong>自分用の見た目</strong>だけを変えられます。</p>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(_cname(ch))+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(ch.description)+'</p>':'')+'</div>'});h+='</div></div></div></div>';// 縦書きは右から左へ読むので、ページ送りも左右を入れ替える。
+    h+='<div class="panel-slide '+(state.sidebarOpen?'open':'')+'" style="border-left:1px solid var(--border);'+(_showChars?'':'display:none')+'"><div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:'+(state.isAuthorMode?'rgba(142,68,173,.08)':'var(--bg-secondary)')+'"><span style="font-weight:700;font-size:15px">👥 登場人物</span><button onclick="state.sidebarOpen=false;render()" class="btn-icon" style="color:var(--text-primary)">✕</button></div><div style="padding:16px">';if(state.isAuthorMode)h+='<button onclick="addCharacter()" class="btn btn-author" style="width:100%;margin-bottom:16px;justify-content:center">＋ キャラクター追加</button>';else h+='<p style="font-size:12px;color:var(--text-muted);background:var(--bg-secondary);padding:9px 11px;border-radius:8px;margin:0 0 14px 0;line-height:1.6">登場人物の<strong>追加・削除・編集</strong>は、右上の「✏️ 作者モード」に切り替えると行えます。<br>いまは読者として読んでいるので、アイコンを押すと<strong>自分用の見た目</strong>だけを変えられます。</p>';h+='<div style="display:flex;flex-direction:column;gap:12px">';state.characters.forEach(function(ch){var ek=cacheForEdit('character',ch);h+='<div class="char-card"'+(state.isAuthorMode&&ch.id!=='narrator'?' draggable="true" data-dragchar="'+ch.id+'"':'')+'><div style="display:flex;align-items:center;gap:10px">'+rIcon(ch.id,42)+'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">'+esc(_cname(ch))+'</div><div style="font-size:11px;color:var(--text-muted)">'+(ch.gender==='male'?'男性':ch.gender==='female'?'女性':'語り手')+'</div></div>';if(state.isAuthorMode){var a=_acts.length;_acts.push(function(){triggerEdit(ek)});h+='<button onclick="act('+a+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">✏️</button>';if(ch.id!=='narrator'){_acts.push(function(){deleteItem(ch.id,'character')});h+='<button onclick="event.stopPropagation();act('+(a+1)+')" class="btn-icon" style="width:28px;height:28px;font-size:12px;color:var(--text-secondary)">🗑️</button>'}};h+='</div>'+(ch.description?'<p style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">'+esc(_cdesc(ch))+'</p>':'')+'</div>'});h+='</div></div></div></div>';// 縦書きは右から左へ読むので、ページ送りも左右を入れ替える。
   // 縦書き: 左に「次」、右に「前」。矢印も逆向きにする。
   var _pvPrev=state.currentPage-1, _pvNext=state.currentPage+1;
   var _pvL=isV?_pvNext:_pvPrev, _pvR=isV?_pvPrev:_pvNext;
@@ -6986,7 +7014,9 @@ function renderDupModal(){
 // render() 後に DOM を走査し、辞書に一致する UI 文字列を翻訳する方式。
 // 作品本文(ナレーション/セリフ)は辞書に無いので翻訳されない(Phase2で対応)。
 // ============================================================
-var I18N_DICT={
+var I18N_DICT={'▶ 試聴':'▶ Preview',
+'音声は<strong>読者の言語</strong>で選ばれます。日本語表示=VOICEVOX、英語表示=クラウド(Aura)。上の「母語 / 国籍」は、どちらも使えないPCで端末内蔵の音声に落ちたときの言語です。':'The voice is chosen by <strong>the reader\u2019s language</strong>: VOICEVOX in Japanese, the cloud voice (Aura) in English. \u201cFirst language\u201d above only decides which built-in voice is used on a machine where neither is available.',
+'英語の試聴はクラウドを呼ぶので、1日の無料枠を少し使います。':'Previewing an English voice calls the cloud, which uses a little of the daily free allowance.',
   'この英語の講評に日本語が残っています。「もう一度みてもらう」を押すと、名前をローマ字にして作り直します。':'This English critique still has Japanese in it. Press \u201cHave it read again\u201d and it is made again with the names in roman letters.',
   '🎤 音声生成中':'🎤 Making the audio','🔊 音声データ取込中':'🔊 Reading the audio in',
   /* js/drafts-client.js と js/services.js が投げる文言。
@@ -7467,6 +7497,46 @@ var _EN_FONTS=[["Georgia, 'Times New Roman', serif","Georgia（コンパクト�
 function _fontOpts(list,cur){var o='';for(var i=0;i<list.length;i++){var sel=(list[i][0]===cur)?' selected':'';o+='<option value="'+list[i][0]+'"'+sel+'>'+list[i][1]+'</option>';}return o;}
 function _enVoice(gender){try{var vs=speechSynthesis.getVoices()||[];var en=vs.filter(function(v){return /^en/i.test(v.lang);});if(!en.length)return null;var us=en.filter(function(v){return /^en[-_]US/i.test(v.lang);});var pool=us.length?us:en;if(gender&&gender!=='neutral'){var gv=pool.filter(function(v){return _voiceGender(v)===gender;});if(gv.length)return gv[0];}return pool[0];}catch(e){return null;}}
 function _langToggle(){var ja=state.lang!=='en',on='background:#FAF6F0;color:#1a1a2e',off='background:transparent;color:#FAF6F0';return '<div style="display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.5);border-radius:20px;overflow:hidden;font-size:13px;line-height:1" title="Language / 言語切替"><button onclick="setLang(&#39;ja&#39;)" class="btn" style="border:none!important;border-radius:0;margin:0;padding:7px 15px;font-weight:700;'+(ja?on:off)+'">'+(ja?'日本語':'Japanese')+'</button><button onclick="setLang(&#39;en&#39;)" class="btn" style="border:none!important;border-radius:0;margin:0;padding:7px 15px;font-weight:700;'+(ja?off:on)+'">English</button></div>';}
+// 人物の紹介文の訳。本文とは別の呼び出しで取る(鍵を分けるため)。
+var _cdescTrans=null,_cdescHash=null,_cdescBusy=false;
+function _cdesc(ch){
+  if(!ch)return '';
+  var d=ch.description||'';
+  if(!d)return '';
+  if(_isTranslatedView()&&_cdescTrans&&_cdescHash===state._curHash&&_cdescTrans[ch.id])
+    return _cdescTrans[ch.id];
+  return d;
+}
+function _ensureCharDescs(){
+  try{
+    if(!_isTranslatedView()||_cdescBusy)return;
+    var hash=state._curHash;
+    if(!hash||_cdescHash===hash)return;
+    var list=(state.characters||[]).filter(function(c){
+      return c&&c.id!=='narrator'&&(c.description||'').trim();});
+    if(!list.length){_cdescTrans={};_cdescHash=hash;return;}
+    var key='aninovel_cdesc_'+state.lang+'_'+hash;
+    try{var c0=localStorage.getItem(key);
+      if(c0){_cdescTrans=JSON.parse(c0);_cdescHash=hash;return;}}catch(e){}
+    _cdescBusy=true;
+    // items に紹介文だけを入れる。本文もタイトルも人物名も送らないので、
+    // 本文の翻訳キャッシュとは別の鍵になる。本文側は影響を受けない。
+    fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({target:state.lang,source:_srcLang(),sourceLang:_srcLang(),
+        title:'',author:'',characters:[],
+        items:list.map(function(c){return {id:c.id,text:c.description};})})})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(j){
+        if(!j||!j.items)return;
+        var m={};j.items.forEach(function(x){m[x.id]=x.text;});
+        _cdescTrans=m;_cdescHash=hash;
+        try{localStorage.setItem(key,JSON.stringify(m));}catch(e){}
+        render();
+      })
+      .catch(function(e){console.warn('[translate] 人物紹介の訳に失敗:',e&&e.message||e);})
+      .then(function(){_cdescBusy=false;});
+  }catch(e){_cdescBusy=false;}
+}
 function _cname(ch){if(!ch)return '';if(_isTranslatedView()&&ch.id==='narrator')return 'Narrator';var jp=ch.shortName||ch.name||'';if(_isTranslatedView()&&state.charTrans&&state.charTransHash===state._curHash&&state.charTrans[ch.id])return state.charTrans[ch.id];return jp;}
 function _editName(d){if(!d)return '';return d.name||'';}
 function _editShort(d){if(!d)return '';return d.shortName||'';}
@@ -7767,6 +7837,9 @@ function render(){
   document.getElementById('app').innerHTML=(state.currentScreen==='home'?renderHome():renderReader())+renderEditModal()+renderMetaModal()+renderReaderCustomModal()+renderTTSBar()+renderDupModal();
   bindHandlers();setupDnD();applyI18n();_maybeReveal();
   try{_syncDocTitle();}catch(e){}
+  // 人物の紹介文は本文と別に訳す。取れていなければここで取りに行く。
+  // 取れたら render() し直すが、同じ内容なら二度目は走らない。
+  try{_ensureCharDescs();}catch(e){}
   // 端末の記憶で英語になっている場合もURLに表す(描き直しごとに揃える)。
   // href が変わらないときは何もしないので、履歴も増えない。
   try{_syncLangUrl(state.lang);}catch(e){}

@@ -330,7 +330,14 @@ export function buildCatalogEntry(draft, pubId) {
   tags.push(charCount > 5000 ? '長編' : '短編');
 
   const title = (draft.data && draft.data.novel && draft.data.novel.title) || draft.title || '無題の作品';
-  const author = draft.penName || (draft.data && draft.data.novel && draft.data.novel.author) || '名無しの作者';
+  // 作品自身の著者欄を先に見る。penName はそれが空のときの控え。
+  // 逆にしていたため、青空文庫作品のように「公開する人」と「作品の著者」が
+  // 別のときに必ず取り違えた(『綺堂むかし語り』『愛と美について』の
+  // authorEn が "Oonaa" = 「オーナー」のローマ字になっていた原因のひとつ)。
+  // 誰が編集してよいかは ownerEmail が持っているので、
+  // ここを入れ替えても権限の守りは変わらない。
+  const author = (draft.data && draft.data.novel && draft.data.novel.author)
+              || draft.penName || '名無しの作者';
 
   return {
     id: pubId,
@@ -368,12 +375,34 @@ export async function publishDraft(store, draft) {
   // 英訳の題(titleEn/descriptionEn/authorEn)、表紙の画像、sourceLang、
   // 公開停止の印などは作らない。置き換えると、それらが消える。
   // 作り直した項目だけを上から重ね、知らない項目はそのまま残す。
-  const row = Object.assign({}, (i >= 0 ? catalog[i] : {}), entry,
+  const prevRow = (i >= 0 && catalog[i]) ? catalog[i] : {};
+  const row = Object.assign({}, prevRow, entry,
                             { updatedAt: new Date().toISOString() });
+
+  // ただし「残す」をそのまま適用すると、原文を直したのに英語名が古いまま残る。
+  // 実測でそうなっていた: author は「岡本綺堂」に直っているのに
+  // authorEn が "Oonaa"(「オーナー」のローマ字)のまま数週間残っていた。
+  // 原文が変わった項目の英訳は落とし、次に英語で読まれたときに
+  // 作り直させる(消費側は「訳がまだ無い → 生成」の分岐を持っている)。
+  const staleEn = [];
+  [['title', 'titleEn'], ['author', 'authorEn'], ['description', 'descriptionEn']]
+    .forEach(function (pair) {
+      const src = pair[0], en = pair[1];
+      if ((prevRow[src] || '') === (entry[src] || '')) return;   // 変わっていない
+      if (!row[en]) return;                                      // そもそも無い
+      delete row[en];
+      staleEn.push(en);
+    });
+  if (staleEn.length) {
+    console.warn('[publishDraft] 原文が変わったので英訳を落としました: '
+      + staleEn.join(', ') + ' (work=' + pubId + ')。'
+      + '手で付けた英語名があった場合は付け直してください。');
+  }
+
   if (i >= 0) catalog[i] = row; else catalog.push(row);
   await store.put(CATALOG_KEY, JSON.stringify(catalog));
 
-  return { pubId, entry: row, meta: {
+  return { pubId, entry: row, staleEn: staleEn, meta: {
     workId: pubId, draftId: draft.id, ownerEmail: draft.ownerEmail,
     title: entry.title, status: 'published',
     createdAt: draft.createdAt, publishedAt: row.updatedAt,
