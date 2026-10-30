@@ -3985,8 +3985,14 @@ function setTTSRate(v){
 function renderTTSBar(){
   if(!state.tts.active)return'';
   var r=state.tts.rate;
+  // 音が鳴っている間ずっと見える場所に、合成音声である断りを出す。
+  // 使い方ページにしか書かないと、作品に直接来た読者は一度も目にしない。
+  var _synth=(state.lang==='en')
+    ? {s:'Synthesized', t:'This narration is synthesized speech. It was not recorded by a voice actor.'}
+    : {s:'合成音声', t:'読み上げは合成音声です。声優が読んだ録音ではありません。'};
   return'<div class="tts-bar" id="tts-bar">'+
     '<span style="font-size:16px">🔊</span>'+
+    '<span class="tts-label" style="opacity:.55;font-size:11px;border:1px solid currentColor;border-radius:9px;padding:1px 7px" title="'+esc(_synth.t)+'">'+esc(_synth.s)+'</span>'+
     '<button onclick="pauseTTS()" class="tts-bar-btn tts-pause-btn'+(state.tts.paused?'':' tts-active')+'" style="min-width:80px">'+(state.tts.paused?'▶ 再生':'⏸ 一時停止')+'</button>'+
     '<button onclick="stopTTS()" class="tts-bar-btn" title="停止">⏹ 停止</button>'+
     '<span class="tts-label">速度: <strong id="tts-rate-disp">'+r.toFixed(1)+'x</strong></span>'+

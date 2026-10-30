@@ -568,7 +568,9 @@ async function workCard(context, workId, url, lang) {
     .on('title', {
       // setInnerContent なら中身をまるごと差し替えられる。text ハンドラだと
       // 題名が複数のチャンクに割れたときに重複する。
-      element(el) { el.setInnerContent(headline + '｜アニノベル'); }
+      // 末尾も言語に合わせる。英語のまま「｜アニノベル」を付けていたため、
+      // 英語の共有カードの題名が最後だけ日本語になっていた。
+      element(el) { el.setInnerContent(headline + (en ? ' | AniNovel' : '｜アニノベル')); }
     })
     .on('meta[property="og:title"]',       setContent(headline))
     .on('meta[name="twitter:title"]',      setContent(headline))
@@ -778,6 +780,7 @@ const UI = {
     source: '出典: ', pd: '。著作権の保護期間が満了した作品です。',
     chars: (n) => '約' + n + '字', other: 'English',
     guide: '使い方', guideUrl: '/guide.html',
+    synth: '読み上げは合成音声です。声優が読んだ録音ではありません。',
   },
   en: {
     site: 'AniNovel', intros: 'The works',
@@ -794,6 +797,7 @@ const UI = {
     source: 'Source: ', pd: '. The copyright on this work has expired.',
     chars: (n) => n + ' characters', other: 'Japanese',
     guide: 'How to read', guideUrl: '/en/guide',
+    synth: 'The narration is synthesized speech, not a recording by a voice actor.',
   },
 };
 
@@ -954,6 +958,8 @@ async function workIntroPage(env, slug, lang) {
   } else if (lang === 'en') {
     body += '<p class="src">' + t.source + 'Aozora Bunko' + t.pd + '</p>\n';
   }
+  // 読み上げを売りにしているページなので、合成音声である断りもここに置く。
+  body += '<p class="src">' + t.synth + '</p>\n';
 
   // 内部リンク。孤立したページを作らないため、他の紹介へも必ず繋ぐ。
   const others = (await introEntries(env, lang))
