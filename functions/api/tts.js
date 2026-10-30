@@ -6,6 +6,20 @@
 
 const AURA1_VOICES = ['angus','asteria','arcas','orion','orpheus','athena','luna','zeus','perseus','helios','hera','stella'];
 
+// aura-2-en が受け付ける声。素通しで渡していたため、綴りが違うと
+// Workers AI が enum エラーを返し、ここが 500 になっていた。
+// ビューアはそれを「音声の失敗」と見て端末内蔵の音声に落ちるので、
+// 1文字の違いでクラウド音声が使えなくなる。外れたら既定へ寄せる。
+const AURA2_VOICES = [
+  'amalthea','andromeda','apollo','arcas','aries','asteria','athena','atlas','aurora',
+  'callista','cora','cordelia','delia','draco','electra','harmonia','helena','hera',
+  'hermes','hyperion','iris','janus','juno','jupiter','luna','mars','minerva','neptune',
+  'odysseus','ophelia','orion','orpheus','pandora','phoebe','pluto','saturn','thalia',
+  'theia','vesta','zeus',
+];
+// aura-1 にしか無い声の移し替え。古いデータがそのまま送られてきても鳴るように。
+const AURA1_TO_AURA2 = { angus: 'arcas', stella: 'asteria', perseus: 'orion', helios: 'apollo' };
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   const cors = {
@@ -33,8 +47,10 @@ export async function onRequestPost(context) {
       if (!AURA1_VOICES.includes(voice)) voice = 'angus';
       input = { text, speaker: voice };
     } else {
-      // aura-2-en（最新）。voice はモデル側のデフォルトに委ねる（指定があれば渡す）。
+      // aura-2-en（最新）。受け付ける名前かを必ず確かめてから渡す。
       modelId = '@cf/deepgram/aura-2-en';
+      if (voice && AURA1_TO_AURA2[voice]) voice = AURA1_TO_AURA2[voice];
+      if (voice && !AURA2_VOICES.includes(voice)) voice = 'asteria';
       input = voice ? { text, speaker: voice } : { text };
     }
 

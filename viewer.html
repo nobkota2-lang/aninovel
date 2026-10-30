@@ -2273,9 +2273,10 @@ function _stopAllSpeech(){
 // ===== 英語クラウドTTS (Deepgram Aura via /api/tts) =====
 var _auraCtrl=null,_auraCache={};
 function _auraVoiceFor(ch){
-  if(ch&&ch.auraVoice)return ch.auraVoice;
+  if(ch&&ch.auraVoice)return _auraVoiceId(ch.auraVoice);
   var g=ch?(ch.gender||'neutral'):'neutral';
-  return (g==='male')?'angus':'asteria';
+  // aura-2 に angus は無い。男性の既定は arcas(米・男性)にする。
+  return (g==='male')?'arcas':'asteria';
 }
 // Workers AI の無料枠(1日10,000ニューロン)を使い切ると /api/tts が 500 と
 // {"error":"4006: you have used up your daily free allocation..."} を返す。
@@ -2326,7 +2327,7 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
     // すでに上限と分かっているときは叩かない。1ブロックごとに500を踏むと
     // 待ち時間だけ増えて、読者には「読み上げが遅い」としか見えない。
     if(_auraQuotaHit){ if(onError)onError(new Error('aura quota reached')); return; }
-    fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ctext,voice:voice,model:'aura-1'})})
+    fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ctext,voice:voice,model:'aura-2-en'})})
       .then(function(res){
         if(!res.ok){
           // 本文まで読む。4006 は無料枠切れ。
@@ -2343,7 +2344,7 @@ function _speakItemAura(item,ch,session,onStart,onEnd,onError){
   playNext();
   return {stop:function(){stopped=true;try{_karaEndItem();}catch(e){}try{if(curAudio)curAudio.pause();}catch(e){}}};
 }
-function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||('id:'+id);}
+function _vvNameById(id){var n=null;_VV_SPEAKERS.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=_vvName(it[0],it[1]);});});return n||('id:'+id);}
 function _auraNameById(id){var n=null;_AURA_VOICES.forEach(function(g){g.items.forEach(function(it){if(it[0]===id)n=it[1];});});return n||id;}
 var _testAudio=null;
 // ===== VOICEVOX 合成の共通処理 =====
@@ -3125,30 +3126,84 @@ function _voicevoxSpeakerFor(ch){
   var fb=list[h%list.length];_vvAssigned[ch.id]=fb;return fb;
 }
 var _VV_SPEAKERS=[
-  {g:'女性',items:[[2,'四国めたん'],[0,'四国めたん（あまあま）'],[6,'四国めたん（ツンツン）'],[4,'四国めたん（セクシー）'],[8,'春日部つむぎ'],[10,'雨晴はう'],[9,'波音リツ'],[14,'冥鳴ひまり'],[16,'九州そら'],[20,'もち子さん'],[23,'WhiteCUL'],[29,'No.7'],[43,'櫻歌ミコ'],[46,'小夜/SAYO'],[54,'春歌ナナ'],[55,'猫使アル'],[67,'栗田まろん'],[74,'琴詠ニア']]},
-  {g:'中性',items:[[3,'ずんだもん'],[1,'ずんだもん（あまあま）'],[7,'ずんだもん（ツンツン）'],[75,'ずんだもん（ヘロヘロ）']]},
-  {g:'男性',items:[[13,'青山龍星'],[11,'玄野武宏'],[12,'白上虎太郎'],[21,'剣崎雌雄'],[42,'ちび式じい'],[52,'雀松朱司'],[53,'麒ヶ島宗麟'],[81,'青山龍星（熱血）']]}
+  {g:'女性',gEn:'Female',items:[[2,'四国めたん'],[0,'四国めたん（あまあま）'],[6,'四国めたん（ツンツン）'],[4,'四国めたん（セクシー）'],[8,'春日部つむぎ'],[10,'雨晴はう'],[9,'波音リツ'],[14,'冥鳴ひまり'],[16,'九州そら'],[20,'もち子さん'],[23,'WhiteCUL'],[29,'No.7'],[43,'櫻歌ミコ'],[46,'小夜/SAYO'],[54,'春歌ナナ'],[55,'猫使アル'],[67,'栗田まろん'],[74,'琴詠ニア']]},
+  {g:'中性',gEn:'Neutral',items:[[3,'ずんだもん'],[1,'ずんだもん（あまあま）'],[7,'ずんだもん（ツンツン）'],[75,'ずんだもん（ヘロヘロ）']]},
+  {g:'男性',gEn:'Male',items:[[13,'青山龍星'],[11,'玄野武宏'],[12,'白上虎太郎'],[21,'剣崎雌雄'],[42,'ちび式じい'],[52,'雀松朱司'],[53,'麒ヶ島宗麟'],[81,'青山龍星（熱血）']]}
 ];
+// VOICEVOX の話者名のヘボン式。固有名詞なので訳さずローマ字にする。
+// 読みは VOICEVOX 公式サイトの /dormitory/<slug>/ に拠る。
+// (「雀松朱司」は suzumatsu ではなく wakamatsu。推測は取り違える)
+var _VV_EN={
+  2:'Shikoku Metan',0:'Shikoku Metan (Sweet)',6:'Shikoku Metan (Blunt)',
+  4:'Shikoku Metan (Sultry)',8:'Kasukabe Tsumugi',10:'Amehare Hau',9:'Namine Ritsu',
+  14:'Meimei Himari',16:'Ky\u016bsh\u016b Sora',20:'Mochiko-san',23:'WhiteCUL',29:'No.7',
+  43:'\u014cka Miko',46:'Sayo / SAYO',54:'Haruka Nana',55:'Nekotsuka Aru',
+  67:'Kurita Maron',74:'Kotoyomi Nia',
+  3:'Zundamon',1:'Zundamon (Sweet)',7:'Zundamon (Blunt)',75:'Zundamon (Weary)',
+  13:'Aoyama Ry\u016bsei',11:'Kurono Takehiro',12:'Shirakami Kotar\u014d',
+  21:'Kenzaki Mesuo',42:'Chibishiki Jii',52:'Wakamatsu Akashi',53:'Kigashima S\u014drin',
+  81:'Aoyama Ry\u016bsei (Fiery)'
+};
+function _vvName(id,ja){
+  if(state.lang==='en'&&_VV_EN[id])return _VV_EN[id];
+  return ja;
+}
 function _vvSpeakerOptions(sel,gender){
   var defId=_VOICEVOX_DEFAULTS[gender||'neutral'];if(defId==null)defId=_VOICEVOX_DEFAULTS.neutral;
-  var s='<option value="">（自動：'+_vvNameById(defId)+'）</option>';
+  var _en=(state.lang==='en');
+  var s='<option value="">'+(_en?('(Auto: '+_vvNameById(defId)+')')
+                                :('（自動：'+_vvNameById(defId)+'）'))+'</option>';
   _VV_SPEAKERS.forEach(function(grp){
-    s+='<optgroup label="'+grp.g+'">';
-    grp.items.forEach(function(it){ s+='<option value="'+it[0]+'"'+(sel===it[0]?' selected':'')+'>'+it[1]+'（id:'+it[0]+'）</option>'; });
+    s+='<optgroup label="'+(_en?(grp.gEn||grp.g):grp.g)+'">';
+    grp.items.forEach(function(it){
+      s+='<option value="'+it[0]+'"'+(sel===it[0]?' selected':'')+'>'
+        +_vvName(it[0],it[1])+(_en?(' (id:'+it[0]+')'):('（id:'+it[0]+'）'))+'</option>';
+    });
     s+='</optgroup>';
   });
   return s;
 }
+// Deepgram Aura-2 (英語) の声。40種。アクセントは米が既定で、それ以外だけ添える。
+// 一覧は本番の /api/tts が返す enum と Deepgram の資料で突き合わせた。
 var _AURA_VOICES=[
-  {g:'女性',items:[['asteria','Asteria'],['luna','Luna'],['athena','Athena'],['hera','Hera'],['stella','Stella']]},
-  {g:'男性',items:[['angus','Angus'],['arcas','Arcas'],['orion','Orion'],['zeus','Zeus'],['perseus','Perseus']]}
+  {g:'女性',gEn:'Female',items:[
+    ['asteria','Asteria'],['andromeda','Andromeda'],['athena','Athena'],['aurora','Aurora'],
+    ['callista','Callista'],['cora','Cora'],['cordelia','Cordelia'],['delia','Delia'],
+    ['electra','Electra'],['harmonia','Harmonia'],['helena','Helena'],['hera','Hera'],
+    ['iris','Iris'],['janus','Janus'],['juno','Juno'],['luna','Luna'],
+    ['minerva','Minerva'],['ophelia','Ophelia'],['phoebe','Phoebe'],['thalia','Thalia'],
+    ['vesta','Vesta'],
+    ['pandora','Pandora（英）'],['theia','Theia（豪）'],['amalthea','Amalthea（フィリピン）']]},
+  {g:'男性',gEn:'Male',items:[
+    ['arcas','Arcas'],['apollo','Apollo'],['aries','Aries'],['atlas','Atlas'],
+    ['hermes','Hermes'],['jupiter','Jupiter'],['mars','Mars'],['neptune','Neptune'],
+    ['odysseus','Odysseus'],['orion','Orion'],['orpheus','Orpheus'],['pluto','Pluto'],
+    ['saturn','Saturn'],['zeus','Zeus'],
+    ['draco','Draco（英）'],['hyperion','Hyperion（豪）']]}
 ];
+// aura-1 にしか無かった声の移し替え。保存済みの値をそのまま送ると
+// サーバーに弾かれて英語音声が鳴らなくなるため、ここで読み替える。
+var _AURA_LEGACY={angus:'arcas',stella:'asteria',perseus:'orion',helios:'apollo'};
+function _auraVoiceId(v){
+  if(!v)return '';
+  v=String(v).toLowerCase();
+  if(_AURA_LEGACY[v])return _AURA_LEGACY[v];
+  return v;
+}
 function _auraVoiceOptions(sel,gender){
-  var defV=(gender==='male')?'angus':'asteria';
-  var s='<option value="">（自動：'+_auraNameById(defV)+'）</option>';
+  var _en=(state.lang==='en');
+  var defV=(gender==='male')?'arcas':'asteria';
+  var cur=_auraVoiceId(sel);
+  var s='<option value="">'+(_en?('(Auto: '+_auraNameById(defV)+')')
+                                :('（自動：'+_auraNameById(defV)+'）'))+'</option>';
   _AURA_VOICES.forEach(function(grp){
-    s+='<optgroup label="'+grp.g+'">';
-    grp.items.forEach(function(it){ s+='<option value="'+it[0]+'"'+(sel===it[0]?' selected':'')+'>'+it[1]+'</option>'; });
+    s+='<optgroup label="'+(_en?grp.gEn:grp.g)+'">';
+    grp.items.forEach(function(it){
+      // 括弧のアクセント表示は日本語だけ。英語では綴りをそのまま出す。
+      var nm=_en?it[1].replace(/（英）/,' (British)').replace(/（豪）/,' (Australian)')
+                      .replace(/（フィリピン）/,' (Filipino)') : it[1];
+      s+='<option value="'+it[0]+'"'+(cur===it[0]?' selected':'')+'>'+nm+'</option>';
+    });
     s+='</optgroup>';
   });
   return s;
@@ -3340,7 +3395,7 @@ async function generateVoicesAura(opts){
       if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
       _updateProgress(progressBox,i+1,total,it.id);
       try{
-        var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:srcText,voice:voice,model:'aura-1'})});
+        var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:srcText,voice:voice,model:'aura-2-en'})});
         if(!res.ok)throw new Error('tts http '+res.status);
         var blob=await res.blob();
         if(!blob||blob.size<200)throw new Error('empty audio '+(blob&&blob.size));
@@ -4715,21 +4770,45 @@ async function _aiRefineSpeakers(opts){
     all.forEach(function(it5,i5){it5.order=i5;});
     // 完了報告。何件見て、何件変えて、どこが怪しいかを必ず伝える
     if(!opts.quiet){
-      var _msg='AI話者判定が終わりました。\n\n'
-        +'・調べた箇所: '+_report.checked+' 件 ('+_report.calls+' 回の呼び出し)\n'
-        +'・話者を補正: '+_report.changed+' 件\n'
-        +'・AIも判断できず: '+_report.unknown+' 件\n'
-        +'・規則と食い違った箇所: '+_report.suspect.length+' 件\n';
-      var _rest=_aiSpeakerProgress().remaining;
-      if(_rest>0)_msg+='\n未処理が '+_rest+' 件残っています。'+(_report.quota?'本日の上限に達したためです。日本時間の翌朝9時以降にもう一度実行すると、続きから処理します。':'もう一度実行すると続きから処理します。');
-      if(_report.suspect.length){
-        _msg+='\n\n【確認をおすすめする箇所】(先頭10件)\n';
-        _report.suspect.slice(0,10).forEach(function(s){
-          _msg+=' @'+s.order+' 規則='+s.rule+' → AI='+s.ai+' 「'+s.text+'」\n';
-        });
-        console.info('[AI話者] 食い違った全'+_report.suspect.length+'件:',_report.suspect);
+      // 数を挟む文は丸ごと一致の辞書では当たらない。短い断片を辞書に足すと
+      // 他の文を壊すので(「件」のような語)、組み立てる側を言語で分ける。
+      var _en=(state.lang==='en');
+      var _msg,_rest=_aiSpeakerProgress().remaining;
+      if(_en){
+        _msg='The AI speaker pass has finished.\n\n'
+          +'\u00b7 Blocks examined: '+_report.checked+' ('+_report.calls+' calls)\n'
+          +'\u00b7 Speakers corrected: '+_report.changed+'\n'
+          +'\u00b7 AI could not decide: '+_report.unknown+'\n'
+          +'\u00b7 Disagreed with the rules: '+_report.suspect.length+'\n';
+        if(_rest>0)_msg+='\n'+_rest+' still to go. '+(_report.quota?'Today\u2019s limit has been reached. Run it again after 9am Japan time and it will carry on from here.':'Run it again and it will carry on from here.');
+        if(_report.suspect.length){
+          _msg+='\n\nWorth checking (first 10)\n';
+          _report.suspect.slice(0,10).forEach(function(s){
+            _msg+=' @'+s.order+' rule='+s.rule+' \u2192 AI='+s.ai+' \u201c'+s.text+'\u201d\n';
+          });
+        }
+        _msg+='\n* To keep this result, press \uD83D\uDCE2 Publish (overwrite).';
+      }else{
+        /* i18n-ok:start 言語で分岐済み。ここは日本語の枝なので日本語で正しい */
+        _msg='AI話者判定が終わりました。\n\n'
+          +'・調べた箇所: '+_report.checked+' 件 ('+_report.calls+' 回の呼び出し)\n'
+          +'・話者を補正: '+_report.changed+' 件\n'
+          +'・AIも判断できず: '+_report.unknown+' 件\n'
+          +'・規則と食い違った箇所: '+_report.suspect.length+' 件\n';
+        if(_rest>0)_msg+='\n未処理が '+_rest+' 件残っています。'+(_report.quota?'本日の上限に達したためです。日本時間の翌朝9時以降にもう一度実行すると、続きから処理します。':'もう一度実行すると続きから処理します。');
+        if(_report.suspect.length){
+          _msg+='\n\n【確認をおすすめする箇所】(先頭10件)\n';
+          _report.suspect.slice(0,10).forEach(function(s){
+            _msg+=' @'+s.order+' 規則='+s.rule+' → AI='+s.ai+' 「'+s.text+'」\n';
+          });
+        }
+        _msg+='\n※ この結果を残すには 📢 上書き公開 を押してください。';
+        /* i18n-ok:end */
       }
-      _msg+='\n※ この結果を残すには 📢 上書き公開 を押してください。';
+      // 食い違いの全件はコンソールへ(言語に関係なく出す)
+      if(_report.suspect.length){
+        console.info('[AI speaker] disagreements: '+_report.suspect.length,_report.suspect);
+      }
       alert(_msg);
     }
     if(failed&&!opts.quiet){

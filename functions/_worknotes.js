@@ -133,7 +133,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'oshie-to-tabisuru-otoko',
-    titleEn: 'The Man Travelling with the Pasted-Picture',
+    titleEn: 'The Traveler with the Pasted Rag Picture',
     authorEn: 'Edogawa Rampo',
     leadEn: '',
     introEn: 'On the train home from watching a mirage at Uozu, the narrator shares a carriage with a strange man carrying a framed picture made of pasted cloth. In it are an old man and a young woman. The old man, he says, is his brother.\n\nOf all Rampo wrote, this is the one where beauty outweighs horror. A man tells a story, and inside that story another time opens up. Keeping the frames apart by speaker makes it much easier to hold on to whose memory you are inside at any moment.\n\n【Add how you separated the narrator from the man, and anything about the dreamlike passages.】',
