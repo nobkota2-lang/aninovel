@@ -259,36 +259,10 @@ export async function onRequestPost(context) {
         items: pItems.map(i => [i.id, i.text]), chars: pChars.map(c => [c.id, c.name]) });
       const pKey = `worktr7:${pTarget}:${(await sha256hex(pCanon)).slice(0, 40)}`;
 
-      // 訳の置き場は2つある。全文キーと、長編向けの分割キャッシュ。
-      // 以前はここで全文キーだけを見ていたため、分割の側にしか入っていない
-      // 銀河鉄道・猫・坊っちゃん・綺堂の4作を「未翻訳」と誤報していた。
-      // 点検の道具が嘘をつくと、無事なものを作り直しに行くことになる。
-      const pEnItems = {}, pEnChars = {};
-      let pFrom = null, pParts = 0;
-      try {
-        const g = await KV0.get(pKey);
-        if (g) {
-          const h = JSON.parse(g);
-          for (const x of (h.items || [])) if (x && x.id) pEnItems[x.id] = x.text;
-          for (const x of (h.characters || [])) if (x && x.id) pEnChars[x.id] = x.name;
-          pFrom = 'key';
-        }
-      } catch (e) { /* 壊れていたら分割の側を見る */ }
-      if (!pFrom) {
-        let pTotal = 0;
-        for (let pt = 0; pt < 60; pt++) {
-          const g2 = await KV0.get(`worktr_chunk:${pTarget}:${wid}:${pt}`);
-          if (!g2) break;
-          try {
-            const h2 = JSON.parse(g2);
-            Object.assign(pEnItems, h2.items || {});
-            Object.assign(pEnChars, h2.chars || {});
-            if (h2.total) pTotal = parseInt(h2.total, 10) || pTotal;
-          } catch (e) { /* この分だけ飛ばす */ }
-          pParts = pt + 1; pFrom = 'chunk';
-          if (pTotal && pParts >= pTotal) break;
-        }
-      }
+      const pRead = await readStored(KV0, pTarget, wid, pKey);
+      const pEnItems = pRead.items, pEnChars = pRead.chars;
+      const pFrom = pRead.from === 'none' ? null : pRead.from;
+      const pParts = pRead.parts;
 
       if (!pFrom) {
         return json({ workId: wid, title: pTitle, key: pKey, cached: false,
@@ -318,7 +292,7 @@ export async function onRequestPost(context) {
       }
       const ng = bad + missing;
       return json({ workId: wid, title: pTitle, key: pKey, cached: true,
-        取り出し元: pFrom, 分割数: pParts,
+        取り出し元: pFrom, 分割数: pParts, 別の置き場: pRead['別の置き場'],
         blocks: pItems.length, 訳がある: pItems.length - missing,
         原文のまま: bad, 訳が無い: missing, 人物名が未訳: badChars,
         割合: pItems.length ? Math.round(ng / pItems.length * 1000) / 10 + '%' : '0%',
@@ -373,37 +347,10 @@ export async function onRequestPost(context) {
         items: dItems.map(i => [i.id, i.text]), chars: dChars.map(c => [c.id, c.name]) });
       const dKey = `worktr7:${dTarget}:${(await sha256hex(dCanon)).slice(0, 40)}`;
 
-      // 訳の置き場は2つある。全文キーを先に見て、無ければ分割キャッシュ。
-      // 猫のような長編は分割の側にしか入っていない。
-      const enItems = {}, enChars = {};
-      let from = null, trTitle = '', trAuthor = '', parts = 0;
-      try {
-        const g = await KV1.get(dKey);
-        if (g) {
-          const h = JSON.parse(g);
-          for (const x of (h.items || [])) if (x && x.id) enItems[x.id] = x.text;
-          for (const x of (h.characters || [])) if (x && x.id) enChars[x.id] = x.name;
-          trTitle = h.title || ''; trAuthor = h.author || '';
-          from = 'key';
-        }
-      } catch (e) { /* 壊れていたら分割の側を見る */ }
-      if (!from) {
-        let total = 0;
-        for (let pt = 0; pt < 60; pt++) {
-          const g2 = await KV1.get(`worktr_chunk:${dTarget}:${wid}:${pt}`);
-          if (!g2) break;
-          try {
-            const h2 = JSON.parse(g2);
-            Object.assign(enItems, h2.items || {});
-            Object.assign(enChars, h2.chars || {});
-            if (h2.title) trTitle = h2.title;
-            if (h2.author) trAuthor = h2.author;
-            if (h2.total) total = parseInt(h2.total, 10) || total;
-          } catch (e) { /* この分だけ飛ばす */ }
-          parts = pt + 1; from = 'chunk';
-          if (total && parts >= total) break;
-        }
-      }
+      const dRead = await readStored(KV1, dTarget, wid, dKey);
+      const enItems = dRead.items, enChars = dRead.chars;
+      const from = dRead.from === 'none' ? null : dRead.from;
+      const trTitle = dRead.title, trAuthor = dRead.author, parts = dRead.parts;
 
       // 本文が多いと1回の応答に収まらないので、頼まれた範囲だけ返す。
       const size = Math.min(3000, Math.max(50, parseInt(body.dump.size, 10) || 1200));
@@ -427,6 +374,7 @@ export async function onRequestPost(context) {
 
       return json({
         ok: true, workId: wid, key: dKey, from: from || 'none', chunkParts: parts,
+        別の置き場: dRead['別の置き場'],
         target: dTarget, sourceLang: dSource,
         title: dTitle, titleTr: trTitle, author: dAuthor, authorTr: trAuthor,
         blocks: blocks, chars: chars,
@@ -716,6 +664,57 @@ export async function onRequestPost(context) {
   } catch (e) {
     return json({ error:'exception', message: String((e && e.message) || e), _debug: debug?dbg:undefined }, 500);
   }
+}
+
+// 英訳の置き場は2つある。全文キー(worktr7:)と、作品IDを鍵にした
+// 分割キャッシュ(worktr_chunk:)。読む順序は**ビューアと同じ**にすること。
+// ビューアは _trChunkLoad(分割) を先に見て、見つからなければ
+// translateWork(全文キー) を叩く。点検がこれと逆の順序だと、
+// 読者が実際に見ているのと違う訳を見て「健全」と報告してしまう。
+// 2026-10-31 まで逆になっていた。
+// もう一方の置き場の件数も返すので、食い違いに気づける。
+async function readStored(KV, target, workId, fullKey) {
+  const chunkItems = {}, chunkChars = {};
+  let chunkTitle = '', chunkAuthor = '', parts = 0, total = 0;
+  for (let p = 0; p < 60; p++) {
+    const g = await KV.get(`worktr_chunk:${target}:${workId}:${p}`);
+    if (!g) break;
+    try {
+      const h = JSON.parse(g);
+      Object.assign(chunkItems, h.items || {});
+      Object.assign(chunkChars, h.chars || {});
+      if (h.title) chunkTitle = h.title;
+      if (h.author) chunkAuthor = h.author;
+      if (h.total) total = parseInt(h.total, 10) || total;
+    } catch (e) { /* この分だけ飛ばす */ }
+    parts = p + 1;
+    if (total && parts >= total) break;
+  }
+  const keyItems = {}, keyChars = {};
+  let keyTitle = '', keyAuthor = '', hasKey = false;
+  try {
+    const g = await KV.get(fullKey);
+    if (g) {
+      const h = JSON.parse(g);
+      for (const x of (h.items || [])) if (x && x.id) keyItems[x.id] = x.text;
+      for (const x of (h.characters || [])) if (x && x.id) keyChars[x.id] = x.name;
+      keyTitle = h.title || ''; keyAuthor = h.author || '';
+      hasKey = true;
+    }
+  } catch (e) { /* 壊れていれば無いものとして扱う */ }
+
+  const useChunk = parts > 0;
+  return {
+    from: useChunk ? 'chunk' : (hasKey ? 'key' : 'none'),
+    parts: parts,
+    items: useChunk ? chunkItems : keyItems,
+    chars: useChunk ? chunkChars : keyChars,
+    title: useChunk ? chunkTitle : keyTitle,
+    author: useChunk ? chunkAuthor : keyAuthor,
+    別の置き場: useChunk
+      ? (hasKey ? { 置き場: 'key', 件数: Object.keys(keyItems).length } : null)
+      : null,
+  };
 }
 
 function json(obj, status = 200){ return new Response(JSON.stringify(obj), { status, headers: JSON_HEADERS }); }
