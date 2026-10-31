@@ -25,6 +25,11 @@
 //
 // 点検: POST {probe:true, workId:'pub_xxx'} で、その作品のキャッシュに
 //       原文がどれだけ残っているかを返す。AI は使わないので何度でも呼べる。
+//
+// 退避: POST {dump:{part:0,size:1200}, workId:'pub_xxx'} で、入っている英訳を
+//       原文と対にして返す。AI は使わない。tools/BACKUP_en.js がこれを使って
+//       全作品をディスクへ退避する。復元は本文テキストで照合するので、
+//       ja と en を必ず対で持つこと。
 
 import { requireWriter } from '../_owner.js';
 
@@ -169,6 +174,117 @@ export async function onRequestPost(context) {
         割合: hItems.length ? Math.round(bad / hItems.length * 1000) / 10 + '%' : '0%',
         判定: bad === 0 && badChars === 0 ? '健全' : (bad > hItems.length * 0.1 ? '要修復' : '一部に残存'),
         例: samples });
+    }
+
+    // ===== 退避: 入っている英訳を原文と対にして取り出す =====
+    // AI は使わない。KV を読むだけなので何度でも呼べる。
+    //
+    // なぜ要るか: 手訳は「本文・ブロックid・人物名」から作る鍵の下にしか無い。
+    // 本文を1文字直すだけ、取り込み直すだけで鍵が変わり、訳が孤児になる。
+    // 実際に注文の多い料理店と猫でそれが起きた。先に退避してあれば
+    // INJECT_bytext_loader.js で戻せる。
+    //
+    // 戻すときは id ではなく**原文テキスト**で照合する(取り込みのたびに
+    // id も話者判別の結果も変わるため)。だからここは必ず ja と en を
+    // 対にして返す。en だけ持っていても復元できない。
+    if (body.dump) {
+      const w1 = await requireWriter(context);
+      if (w1.deny) return w1.deny;
+      const KV1 = env.WORKS || env.WORKS_KV;
+      if (!KV1) return json({ error: 'no_kv' }, 500);
+      const wid = String(body.workId || '').slice(0, 100);
+      if (!wid) return json({ error: 'bad_work', message: 'workId を指定してください。' }, 400);
+
+      let work = null;
+      try {
+        const raw = await KV1.get('work:' + wid);
+        work = raw ? JSON.parse(raw) : null;
+      } catch (e) { work = null; }
+      if (!work || !Array.isArray(work.content)) {
+        return json({ error: 'not_found', workId: wid }, 404);
+      }
+
+      // probe と同じ組み立て。ここがずれると別の鍵を見て「訳が無い」と
+      // 誤報する。片方だけ直すと食い違うので、両方を同時に直すこと。
+      const TYPES = ['narration', 'dialogue', 'chapter_break', 'section_break'];
+      const dItems = work.content
+        .filter((it) => it && it.text && TYPES.indexOf(it.type) >= 0)
+        .map((it) => ({ id: it.id, type: it.type, text: it.text }));
+      const dChars = (work.characters || [])
+        .filter((c) => c && c.id !== 'narrator' && c.name)
+        .map((c) => ({ id: c.id, name: c.name }));
+      const dTarget = (body.target || 'en').toLowerCase();
+      const dSource = (work.sourceLang || body.source || 'ja').toLowerCase();
+      const dTitle = (work.novel && work.novel.title) || '';
+      const dAuthor = (work.novel && work.novel.author) || '';
+
+      const dCanon = JSON.stringify({ v:4, t:dTarget, s:dSource, title: dTitle,
+        items: dItems.map(i => [i.id, i.text]), chars: dChars.map(c => [c.id, c.name]) });
+      const dKey = `worktr7:${dTarget}:${(await sha256hex(dCanon)).slice(0, 40)}`;
+
+      // 訳の置き場は2つある。全文キーを先に見て、無ければ分割キャッシュ。
+      // 猫のような長編は分割の側にしか入っていない。
+      const enItems = {}, enChars = {};
+      let from = null, trTitle = '', trAuthor = '', parts = 0;
+      try {
+        const g = await KV1.get(dKey);
+        if (g) {
+          const h = JSON.parse(g);
+          for (const x of (h.items || [])) if (x && x.id) enItems[x.id] = x.text;
+          for (const x of (h.characters || [])) if (x && x.id) enChars[x.id] = x.name;
+          trTitle = h.title || ''; trAuthor = h.author || '';
+          from = 'key';
+        }
+      } catch (e) { /* 壊れていたら分割の側を見る */ }
+      if (!from) {
+        let total = 0;
+        for (let pt = 0; pt < 60; pt++) {
+          const g2 = await KV1.get(`worktr_chunk:${dTarget}:${wid}:${pt}`);
+          if (!g2) break;
+          try {
+            const h2 = JSON.parse(g2);
+            Object.assign(enItems, h2.items || {});
+            Object.assign(enChars, h2.chars || {});
+            if (h2.title) trTitle = h2.title;
+            if (h2.author) trAuthor = h2.author;
+            if (h2.total) total = parseInt(h2.total, 10) || total;
+          } catch (e) { /* この分だけ飛ばす */ }
+          parts = pt + 1; from = 'chunk';
+          if (total && parts >= total) break;
+        }
+      }
+
+      // 本文が多いと1回の応答に収まらないので、頼まれた範囲だけ返す。
+      const size = Math.min(3000, Math.max(50, parseInt(body.dump.size, 10) || 1200));
+      const part = Math.max(0, parseInt(body.dump.part, 10) || 0);
+      const totalParts = Math.max(1, Math.ceil(dItems.length / size));
+      const slice = dItems.slice(part * size, part * size + size);
+
+      let missing = 0, stale = 0;
+      const blocks = slice.map((it) => {
+        const en = Object.prototype.hasOwnProperty.call(enItems, it.id) ? enItems[it.id] : null;
+        if (en == null || en === '') missing++;
+        else if (hasSourceScript(en, dSource)) stale++;
+        return { id: it.id, type: it.type, ja: it.text, en: en };
+      });
+
+      // 人物は件数が少ないので毎回まとめて返す。復元時に要る。
+      const chars = dChars.map((c) => ({
+        id: c.id, ja: c.name,
+        en: Object.prototype.hasOwnProperty.call(enChars, c.id) ? enChars[c.id] : null,
+      }));
+
+      return json({
+        ok: true, workId: wid, key: dKey, from: from || 'none', chunkParts: parts,
+        target: dTarget, sourceLang: dSource,
+        title: dTitle, titleTr: trTitle, author: dAuthor, authorTr: trAuthor,
+        blocks: blocks, chars: chars,
+        part: part, size: size, totalParts: totalParts, totalBlocks: dItems.length,
+        訳が無い: missing, 原文のまま: stale,
+        判定: !from ? '退避できる訳がありません'
+             : (missing === 0 && stale === 0 ? '健全'
+             : (missing + stale > slice.length * 0.1 ? '要修復' : '一部に欠け')),
+      });
     }
 
     const target = (body.target || 'en').toLowerCase();
