@@ -113,6 +113,114 @@ export async function onRequestPost(context) {
       return new Response(got, { headers: { ...JSON_HEADERS, 'X-Cache': 'HIT-CHUNK' } });
     }
 
+    // ===== 迷子探し: どの作品からも参照されていない英訳を見つける =====
+    //
+    // 鍵は「本文・ブロックid・人物名」から作る。だから本文を直すか、
+    // 人物が増減するだけで鍵が変わり、前の英訳は KV に残ったまま
+    // 誰からも参照されなくなる(孤児化)。読者には機械翻訳が出る。
+    // 雪女がこれで、手訳22件が参照されない状態になっていた
+    // (再取り込みで お雪・茂作 が消え、人物名が鍵に入っているため)。
+    //
+    // 消えてはいないので、拾い直せば訳し直す必要はない。
+    // ここでは worktr7: の鍵を全部並べ、いまの各作品から計算した鍵と
+    // 突き合わせて、合わないものを「迷子」として返す。
+    // AI は使わない。読むだけで、KV は1バイトも書き換えない。
+    if (body.orphans) {
+      const w2 = await requireWriter(context);
+      if (w2.deny) return w2.deny;
+      const KVo = env.WORKS || env.WORKS_KV;
+      if (!KVo) return json({ error: 'no_kv' }, 500);
+
+      const oTarget = (body.target || 'en').toLowerCase();
+      const TYPES2 = ['narration', 'dialogue', 'chapter_break', 'section_break'];
+
+      // 鍵を1つ指定されたら、その中身をそのまま返す。
+      // 迷子だと分かった訳を取り出して、いまの鍵へ書き戻すために使う。
+      // 生きている鍵の計算をしないので軽い。
+      if (body.orphans.key) {
+        const ok1 = String(body.orphans.key);
+        if (!/^worktr7:[a-z]{2}:[0-9a-f]{40}$/.test(ok1)) {
+          return json({ error: 'bad_key', message: 'worktr7:<言語>:<40桁> の形で指定してください。' }, 400);
+        }
+        const g = await KVo.get(ok1);
+        if (!g) return json({ error: 'not_found', key: ok1 }, 404);
+        return new Response(g, { headers: { ...JSON_HEADERS, 'X-Cache': 'HIT-ORPHAN' } });
+      }
+
+      // いま生きている鍵を作る。カタログに載っている作品ぶん。
+      const live = Object.create(null);
+      let catalog = [];
+      try {
+        const c = await KVo.get('__catalog__');
+        catalog = c ? JSON.parse(c) : [];
+        if (!Array.isArray(catalog)) catalog = [];
+      } catch (e) { catalog = []; }
+      for (const row of catalog) {
+        const id = row && row.id;
+        if (!id) continue;
+        let wk = null;
+        try { const raw = await KVo.get('work:' + id); wk = raw ? JSON.parse(raw) : null; }
+        catch (e) { wk = null; }
+        if (!wk || !Array.isArray(wk.content)) continue;
+        const li = wk.content.filter((it) => it && it.text && TYPES2.indexOf(it.type) >= 0)
+                             .map((it) => [it.id, it.text]);
+        const lc = (wk.characters || []).filter((c) => c && c.id !== 'narrator' && c.name)
+                                        .map((c) => [c.id, c.name]);
+        const ls = (wk.sourceLang || 'ja').toLowerCase();
+        const lt = (wk.novel && wk.novel.title) || '';
+        const canon = JSON.stringify({ v:4, t:oTarget, s:ls, title:lt, items:li, chars:lc });
+        live[`worktr7:${oTarget}:${(await sha256hex(canon)).slice(0, 40)}`] =
+          { id: id, title: lt, blocks: li.length };
+      }
+
+      // 鍵を並べる。1回で見きれない場合は cursor で続ける。
+      const lim = Math.min(30, Math.max(1, parseInt(body.orphans.limit, 10) || 10));
+      const lst = await KVo.list({ prefix: `worktr7:${oTarget}:`,
+        cursor: body.orphans.cursor || undefined });
+
+      const orphanKeys = [], liveKeys = [];
+      for (const k of (lst.keys || [])) {
+        if (Object.prototype.hasOwnProperty.call(live, k.name)) liveKeys.push(k.name);
+        else orphanKeys.push(k.name);
+      }
+
+      // 中身を読むのは重いので、頼まれた件数だけ。題名と先頭の数件が
+      // 分かれば、どの作品の訳かは人が見て判別できる。
+      const detail = [];
+      for (const k of orphanKeys.slice(0, lim)) {
+        let v = null;
+        try { const g = await KVo.get(k); v = g ? JSON.parse(g) : null; } catch (e) { v = null; }
+        if (!v) { detail.push({ key: k, 読めません: true }); continue; }
+        const its = Array.isArray(v.items) ? v.items : [];
+        let srcLeft = 0;
+        for (const it of its) if (hasSourceScript(it && it.text, (v.source || 'ja'))) srcLeft++;
+        detail.push({
+          key: k, title: v.title || '', author: v.author || '',
+          source: v.source || '', 件数: its.length,
+          人物: Array.isArray(v.characters) ? v.characters.length : 0,
+          原文のまま: srcLeft,
+          手訳らしさ: its.length && srcLeft === 0 ? '全件が訳されている' : '原文が残っている',
+          先頭: its.slice(0, 3).map((x) => String((x && x.text) || '').slice(0, 70)),
+        });
+      }
+
+      return json({
+        ok: true, target: oTarget,
+        カタログの作品数: catalog.length,
+        生きている鍵: Object.keys(live).length,
+        この頁で見た鍵: (lst.keys || []).length,
+        内_生きている: liveKeys.length,
+        内_迷子: orphanKeys.length,
+        迷子の中身: detail,
+        迷子の鍵: orphanKeys,
+        続きがある: !lst.list_complete,
+        cursor: lst.cursor || null,
+        注意: 'これは読むだけです。KV は書き換えていません。'
+            + '件数と題名でどの作品の訳か見当をつけ、/api/translate の '
+            + 'providedTranslations で現在の鍵へ書き戻してください。',
+      });
+    }
+
     // ===== 点検: どの作品のキャッシュが壊れているかを調べる =====
     // AI は使わない。KV を読んで、原文の文字が残っている件数を数えるだけ。
     // 作品IDを渡すと、ビューアが送るのと同じ形の本文・人物を KV から
