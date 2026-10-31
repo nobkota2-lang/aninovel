@@ -151,29 +151,72 @@ export async function onRequestPost(context) {
         items: pItems.map(i => [i.id, i.text]), chars: pChars.map(c => [c.id, c.name]) });
       const pKey = `worktr7:${pTarget}:${(await sha256hex(pCanon)).slice(0, 40)}`;
 
-      let hit = null;
-      try { const g = await KV0.get(pKey); hit = g ? JSON.parse(g) : null; } catch (e) { hit = null; }
+      // 訳の置き場は2つある。全文キーと、長編向けの分割キャッシュ。
+      // 以前はここで全文キーだけを見ていたため、分割の側にしか入っていない
+      // 銀河鉄道・猫・坊っちゃん・綺堂の4作を「未翻訳」と誤報していた。
+      // 点検の道具が嘘をつくと、無事なものを作り直しに行くことになる。
+      const pEnItems = {}, pEnChars = {};
+      let pFrom = null, pParts = 0;
+      try {
+        const g = await KV0.get(pKey);
+        if (g) {
+          const h = JSON.parse(g);
+          for (const x of (h.items || [])) if (x && x.id) pEnItems[x.id] = x.text;
+          for (const x of (h.characters || [])) if (x && x.id) pEnChars[x.id] = x.name;
+          pFrom = 'key';
+        }
+      } catch (e) { /* 壊れていたら分割の側を見る */ }
+      if (!pFrom) {
+        let pTotal = 0;
+        for (let pt = 0; pt < 60; pt++) {
+          const g2 = await KV0.get(`worktr_chunk:${pTarget}:${wid}:${pt}`);
+          if (!g2) break;
+          try {
+            const h2 = JSON.parse(g2);
+            Object.assign(pEnItems, h2.items || {});
+            Object.assign(pEnChars, h2.chars || {});
+            if (h2.total) pTotal = parseInt(h2.total, 10) || pTotal;
+          } catch (e) { /* この分だけ飛ばす */ }
+          pParts = pt + 1; pFrom = 'chunk';
+          if (pTotal && pParts >= pTotal) break;
+        }
+      }
 
-      if (!hit) {
+      if (!pFrom) {
         return json({ workId: wid, title: pTitle, key: pKey, cached: false,
-          blocks: pItems.length,
+          blocks: pItems.length, 取り出し元: 'none',
           判定: '未翻訳', 説明: 'キャッシュがありません。まだ訳していないか、本文が変わって鍵が変わりました。' });
       }
-      const hItems = Array.isArray(hit.items) ? hit.items : [];
-      let bad = 0; const samples = [];
-      for (const it of hItems) {
-        if (hasSourceScript(it && it.text, pSource)) {
+
+      // 本文の側から数える。訳の側だけ見ていると「訳が1件も無いブロック」を
+      // 見落とす(夏の日の冒険がその形だった)。
+      let bad = 0, missing = 0; const samples = [], misses = [];
+      for (const it of pItems) {
+        const en = Object.prototype.hasOwnProperty.call(pEnItems, it.id) ? pEnItems[it.id] : null;
+        if (en == null || en === '') {
+          missing++;
+          if (misses.length < 3) misses.push({ id: it.id, text: String(it.text).slice(0, 60) });
+          continue;
+        }
+        if (hasSourceScript(en, pSource)) {
           bad++;
-          if (samples.length < 3) samples.push({ id: it.id, text: String(it.text).slice(0, 60) });
+          if (samples.length < 3) samples.push({ id: it.id, text: String(en).slice(0, 60) });
         }
       }
       let badChars = 0;
-      for (const c of (hit.characters || [])) if (hasSourceScript(c && c.name, pSource)) badChars++;
+      for (const c of pChars) {
+        const en = Object.prototype.hasOwnProperty.call(pEnChars, c.id) ? pEnChars[c.id] : null;
+        if (en == null || en === '' || hasSourceScript(en, pSource)) badChars++;
+      }
+      const ng = bad + missing;
       return json({ workId: wid, title: pTitle, key: pKey, cached: true,
-        blocks: hItems.length, 原文のまま: bad, 人物名が原文のまま: badChars,
-        割合: hItems.length ? Math.round(bad / hItems.length * 1000) / 10 + '%' : '0%',
-        判定: bad === 0 && badChars === 0 ? '健全' : (bad > hItems.length * 0.1 ? '要修復' : '一部に残存'),
-        例: samples });
+        取り出し元: pFrom, 分割数: pParts,
+        blocks: pItems.length, 訳がある: pItems.length - missing,
+        原文のまま: bad, 訳が無い: missing, 人物名が未訳: badChars,
+        割合: pItems.length ? Math.round(ng / pItems.length * 1000) / 10 + '%' : '0%',
+        判定: ng === 0 && badChars === 0 ? '健全'
+            : (ng > pItems.length * 0.1 ? '要修復' : '一部に残存'),
+        例: samples, 訳が無い例: misses });
     }
 
     // ===== 退避: 入っている英訳を原文と対にして取り出す =====
