@@ -3424,22 +3424,110 @@ async function generateVoicesAura(opts){
   if(!opts.noAlert)alert('英語音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
   return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
 }
+// 小さな選択ダイアログ。confirm を何度も出す代わりに、1回で選ばせる。
+// 文字列は呼び出し側で言語を決めて渡すので、ここでは訳さない。
+function _askChoice(title,lines,buttons){
+  return new Promise(function(resolve){
+    var done=false;
+    function fin(v){
+      if(done)return; done=true;
+      try{document.removeEventListener('keydown',onKey,true);}catch(e){}
+      if(ov&&ov.parentNode)ov.parentNode.removeChild(ov);
+      resolve(v===undefined?null:v);
+    }
+    function onKey(e){ if(e.key==='Escape'){e.preventDefault();fin(null);} }
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);'+
+      'z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    var box=document.createElement('div');
+    box.style.cssText='background:var(--bg-primary,#fff);color:var(--text-primary,#000);'+
+      'border-radius:12px;padding:20px 22px;max-width:32em;width:100%;'+
+      'box-shadow:0 10px 40px rgba(0,0,0,.3);font-size:.95rem;line-height:1.7';
+    var h=document.createElement('div');
+    h.style.cssText='font-weight:700;font-size:1.05rem;margin-bottom:10px';
+    h.textContent=title||'';
+    box.appendChild(h);
+    (lines||[]).forEach(function(t){
+      var d=document.createElement('div');
+      d.style.cssText='margin:2px 0;white-space:pre-wrap';
+      d.textContent=t; box.appendChild(d);
+    });
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:16px';
+    (buttons||[]).forEach(function(b){
+      var el=document.createElement('button');
+      el.type='button'; el.textContent=b.label;
+      el.style.cssText='flex:1 1 auto;min-width:8em;padding:10px 14px;border-radius:8px;'+
+        'cursor:pointer;font-size:.95rem;font-weight:600;border:1px solid var(--border,#ccc);'+
+        (b.primary?'background:var(--accent,#6366F1);color:#fff;border-color:transparent'
+                  :'background:transparent;color:inherit');
+      el.onclick=function(){fin(b.key);};
+      row.appendChild(el);
+    });
+    box.appendChild(row);
+    ov.appendChild(box);
+    ov.addEventListener('click',function(e){if(e.target===ov)fin(null);});
+    document.body.appendChild(ov);
+    document.addEventListener('keydown',onKey,true);
+    try{(row.querySelector('button')||box).focus();}catch(e){}
+  });
+}
 // ===== 統合ディスパッチャ: 英語=Aura(クラウド) / 日本語=VOICEVOX を一括 =====
 async function generateVoices(){
   var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
   var total=items.length;
   if(!total){alert(_L('生成対象のセリフがありません','There are no lines to generate.'));return;}
 
+  var _en=(state.lang==='en');
+
   // 作る言語は「登場人物の母語」ではなく「読者の言語」で決まる。
   // 日本語音声=日本語モードの読者向け、英語音声=英語モードの読者向けで、
-  // どの登場人物にも両方が要る。以前はここで母語を見て振り分けていたため、
-  // 日本人キャラだけの作品では英語を作ろうとしても VOICEVOX しか動かなかった。
-  var doEn=confirm(_L(
-    '英語の音声を作りますか？\n\n対象: '+total+'件（英語モードの読者に使われます）\n作り方: クラウド(Aura)。1日の無料枠を使います。\n\n※先にこの作品を英語表示にしておくと、英訳の取得で枠を余分に使いません。',
-    'Generate the English audio?\n\nLines: '+total+' (used for readers in English)\nHow: the cloud voice (Aura). This uses the daily free allowance.\n\nTip: open this work in English first, so fetching the translation does not spend extra allowance.'));
-  var doJa=confirm(_L(
-    '日本語の音声を作りますか？\n\n対象: '+total+'件（日本語モードの読者に使われます）\n作り方: VOICEVOX。このPCで localhost:50021 が起動している必要があります。',
-    'Generate the Japanese audio?\n\nLines: '+total+' (used for readers in Japanese)\nHow: VOICEVOX. It must be running on this computer at localhost:50021.'));
+  // どの登場人物にも両方が要る。
+  //
+  // 聞く前に VOICEVOX が使えるかを調べる。日本語音声は作者のPCで
+  // VOICEVOX が動いている必要があり、英語には使えない。英語圏の作者は
+  // それを持っていないので、「日本語の音声を作りますか？」と聞かれても
+  // 答えようがない。使えると分かったときだけ選択肢に出す。
+  var hc=null;
+  try{ hc=await _voicevoxHealthCheck('http://localhost:50021'); }catch(e){}
+  var vvOk=!!(hc&&hc.ok);
+
+  /* i18n-ok:start 言語で分岐済み。下は日本語の枝 */
+  var ql=[(_en?'Lines in this work: ':'この作品のセリフ: ')+total+(_en?'':'件')];
+  ql.push(_en?'English — the cloud voice (Aura). This uses today\u2019s free allowance.'
+             :'英語 — クラウド(Aura)。1日の無料枠を使います。');
+  ql.push(_en?'    Open this work in English first and fetching the translation costs nothing extra.'
+             :'　　先にこの作品を英語表示にしておくと、英訳の取得で枠を余分に使いません。');
+  if(vvOk){
+    ql.push((_en?'Japanese — VOICEVOX on this computer':'日本語 — このPCの VOICEVOX')
+      +(hc.version?' ('+hc.version+')':''));
+  }else if(hc&&hc.reason==='cors'){
+    ql.push(_en?'Japanese — VOICEVOX is running, but it does not allow this site yet.'
+               :'日本語 — VOICEVOX は起動していますが、このサイトからの利用が許可されていません。');
+  }else{
+    ql.push(_en?'Japanese — not available. It needs VOICEVOX running on this computer.'
+               :'日本語 — いまは作れません。このPCで VOICEVOX を起動してください。');
+  }
+  ql.push('');
+  ql.push(_en?'Whichever you pick, the audio stays in this browser until you publish it.'
+             :'どちらを選んでも、作った音声は 📢 上書き公開 を押すまでこのブラウザの中だけに残ります。');
+
+  var qb=[];
+  if(vvOk){
+    qb.push({key:'both',primary:true,label:_en?'Both':'両方つくる'});
+    if(_en){ qb.push({key:'en',label:'English only'}); qb.push({key:'ja',label:'Japanese only'}); }
+    else   { qb.push({key:'ja',label:'日本語だけ'});    qb.push({key:'en',label:'英語だけ'}); }
+  }else{
+    qb.push({key:'en',primary:true,label:_en?'Make the English audio':'英語の音声をつくる'});
+    if(hc&&hc.reason==='cors')qb.push({key:'vvhelp',label:_en?'Fix VOICEVOX':'VOICEVOXの設定を直す'});
+  }
+  qb.push({key:null,label:_en?'Cancel':'やめる'});
+  var pick=await _askChoice(_en?'Make the audio':'音声をつくる',ql,qb);
+  /* i18n-ok:end */
+
+  if(pick==='vvhelp'){ try{_showVoicevoxCorsHelp('http://localhost:50021');}catch(e){} return; }
+  var doEn=(pick==='both'||pick==='en');
+  var doJa=(pick==='both'||pick==='ja');
   if(!doEn&&!doJa)return;
 
   var pg=_showProgress('🎤 音声生成中');
@@ -3456,7 +3544,6 @@ async function generateVoices(){
   }finally{_hideProgress(pg);}
   await _buildAudioSources();
   /* i18n-ok:start 言語で分岐済み。下は日本語の枝 */
-  var _en=(state.lang==='en');
   var lines=[_en?'Audio generation finished':'音声生成完了'];
   if(doEn)lines.push((_en?'English (Aura): new=':'英語(Aura): 新規=')+rEn.generated
     +(_en?' / cached=':' / キャッシュ=')+rEn.cached+(_en?' / failed=':' / 失敗=')+rEn.failed);
