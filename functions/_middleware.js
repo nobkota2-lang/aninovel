@@ -871,6 +871,11 @@ function introHome(lang) { return lang === 'en' ? '/en/works/' : '/works/'; }
 // 押すと全面的に日本語のトップに着地していた。
 function siteHome(lang) { return lang === 'en' ? '/en/' : '/'; }
 
+// 区切りの空き。U+3000(全角空白)は CJK の文字なので、日本語の書体が
+// 入っていないPCでは □ になったり字送りが崩れたりする。
+// 英語のページには出さない。&nbsp; 2つで同じくらいの空きになる。
+function sep(lang) { return lang === 'en' ? ' &nbsp; ' : '\u3000'; }
+
 async function worksIndexPage(env, lang) {
   const t = UI[lang];
   const entries = await introEntries(env, lang);
@@ -905,13 +910,13 @@ async function worksIndexPage(env, lang) {
     url: urls[lang],
     altJa: urls.ja, altEn: urls.en,
     body: '<p class="crumb"><a href="' + siteHome(lang) + '">' + t.site + '</a> › ' + t.intros
-        + '　<a href="' + introHome(lang === 'en' ? 'ja' : 'en') + '">'
+        + sep(lang) + '<a href="' + introHome(lang === 'en' ? 'ja' : 'en') + '">'
         + t.other + '</a></p>\n'
         + '<h1>' + t.intros + '</h1>\n'
         + '<p class="facts">' + t.lead + '</p>\n'
         + '<ul class="list">\n' + li + '</ul>\n'
-        + '<p class="foot"><a href="' + siteHome(lang) + '">' + t.works + '</a>　'
-        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
+        + '<p class="foot"><a href="' + siteHome(lang) + '">' + t.works + '</a>' + sep(lang)
+        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>' + sep(lang)
         + '<a href="' + (lang === 'en' ? '/en/authors' : '/authors.html') + '">'
         + t.writers + '</a></p>',
   }));
@@ -929,7 +934,7 @@ async function workIntroPage(env, slug, lang) {
     url: SITE + introHome(lang),
     body: '<h1>' + t.notFound + '</h1>'
         + '<p>' + t.notFoundBody + '</p>'
-        + '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
+        + '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>' + sep(lang)
         + '<a href="' + siteHome(lang) + '">' + t.toTop + '</a></p>',
   }), 404);
 
@@ -981,12 +986,12 @@ async function workIntroPage(env, slug, lang) {
 
   let body = '<p class="crumb"><a href="' + siteHome(lang) + '">' + t.site + '</a> › '
     + '<a href="' + introHome(lang) + '">' + t.intros + '</a> › ' + htmlEsc(title)
-    + (both ? '　<a href="' + (lang === 'en' ? urls.ja : urls.en) + '">'
+    + (both ? sep(lang) + '<a href="' + (lang === 'en' ? urls.ja : urls.en) + '">'
               + t.other + '</a>' : '')
     + '</p>\n'
     + '<h1>' + htmlEsc(title) + '</h1>\n'
     + (author ? '<p class="by">' + htmlEsc(author) + '</p>\n' : '')
-    + (facts.length ? '<p class="facts">' + facts.join('　·　') + '</p>\n' : '');
+    + (facts.length ? '<p class="facts">' + facts.join(lang === 'en' ? ' · ' : '\u3000·\u3000') + '</p>\n' : '');
 
   if (lead) body += '<blockquote><p>' + htmlEsc(lead) + '</p></blockquote>\n';
   body += '<div class="body">\n' + paragraphs(intro) + '\n</div>\n';
@@ -1019,8 +1024,8 @@ async function workIntroPage(env, slug, lang) {
     }
     body += '</ul></div>\n';
   }
-  body += '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
-        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
+  body += '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>' + sep(lang)
+        + '<a href="' + t.guideUrl + '">' + t.guide + '</a>' + sep(lang)
         + '<a href="' + siteHome(lang) + '">' + t.toTop + '</a></p>';
 
   const opts = {
