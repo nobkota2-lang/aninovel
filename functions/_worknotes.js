@@ -210,6 +210,7 @@ export const WORK_NOTES = [
     author: '宮沢賢治',
     kind: 'aozora',
     year: '1934年（没後発表）',
+    yearEn: '1934 (published posthumously)',
     source: '青空文庫（底本・入力者・校正者は【要確認】',
     lead: '「ではみなさんは、そういうふうに川だと云われたり、' +
           '乳の流れたあとだと云われたりしていたこのぼんやりと白いものが' +

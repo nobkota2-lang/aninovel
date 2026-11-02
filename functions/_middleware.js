@@ -866,6 +866,11 @@ function hasBoth(note) {
 
 function introHome(lang) { return lang === 'en' ? '/en/works/' : '/works/'; }
 
+// サイトのトップ。英語のページから日本語トップへ落とさないための言語別。
+// パンくずの「AniNovel」が / 固定になっていて、英語で読んでいる人が
+// 押すと全面的に日本語のトップに着地していた。
+function siteHome(lang) { return lang === 'en' ? '/en/' : '/'; }
+
 async function worksIndexPage(env, lang) {
   const t = UI[lang];
   const entries = await introEntries(env, lang);
@@ -876,9 +881,9 @@ async function worksIndexPage(env, lang) {
     title: t.intros + ' — ' + t.site,
     desc: t.preparing,
     url: urls[lang],
-    body: '<p class="crumb"><a href="/">' + t.site + '</a> › ' + t.intros + '</p>'
+    body: '<p class="crumb"><a href="' + siteHome(lang) + '">' + t.site + '</a> › ' + t.intros + '</p>'
         + '<h1>' + t.intros + '</h1><p>' + t.preparing + '</p>'
-        + '<p class="foot"><a href="/">' + t.works + '</a></p>',
+        + '<p class="foot"><a href="' + siteHome(lang) + '">' + t.works + '</a></p>',
   }));
 
   let li = '';
@@ -899,15 +904,16 @@ async function worksIndexPage(env, lang) {
     desc: t.indexDesc,
     url: urls[lang],
     altJa: urls.ja, altEn: urls.en,
-    body: '<p class="crumb"><a href="/">' + t.site + '</a> › ' + t.intros
+    body: '<p class="crumb"><a href="' + siteHome(lang) + '">' + t.site + '</a> › ' + t.intros
         + '　<a href="' + introHome(lang === 'en' ? 'ja' : 'en') + '">'
         + t.other + '</a></p>\n'
         + '<h1>' + t.intros + '</h1>\n'
         + '<p class="facts">' + t.lead + '</p>\n'
         + '<ul class="list">\n' + li + '</ul>\n'
-        + '<p class="foot"><a href="/">' + t.works + '</a>　'
+        + '<p class="foot"><a href="' + siteHome(lang) + '">' + t.works + '</a>　'
         + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
-        + '<a href="/authors.html">' + t.writers + '</a></p>',
+        + '<a href="' + (lang === 'en' ? '/en/authors' : '/authors.html') + '">'
+        + t.writers + '</a></p>',
   }));
 }
 
@@ -924,7 +930,7 @@ async function workIntroPage(env, slug, lang) {
     body: '<h1>' + t.notFound + '</h1>'
         + '<p>' + t.notFoundBody + '</p>'
         + '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
-        + '<a href="/">' + t.toTop + '</a></p>',
+        + '<a href="' + siteHome(lang) + '">' + t.toTop + '</a></p>',
   }), 404);
 
   const works = await readCatalog(env);
@@ -951,8 +957,21 @@ async function workIntroPage(env, slug, lang) {
   // note.year は「1940年」のような日本語表記。英語のページでは
   // 「年」を落として数字だけにする(そのまま出ると□になる環境がある)。
   if (note.year) {
-    const y = (lang === 'en') ? String(note.year).replace(/年/g, '').trim()
-                              : note.year;
+    let y;
+    if (lang === 'en') {
+      // yearEn があればそれを使う。無ければ日本語表記から機械的に直す。
+      // 「年」だけ落としていたので「1934（没後発表）」「1905〜1906」が
+      // そのまま英語ページに出ていた。〜(U+301C)と全角括弧は、日本語の
+      // 書体が入っていないPCでは□になる。
+      y = String(note.yearEn || note.year)
+        .replace(/年/g, '')
+        .replace(/[\u301C\uFF5E]/g, '\u2013')      // 〜 ～ → –
+        .replace(/[\uFF08(]/g, ' (').replace(/[\uFF09)]/g, ')')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } else {
+      y = note.year;
+    }
     if (y) facts.push(htmlEsc(y));
   }
   if (work.charCount) {
@@ -960,7 +979,7 @@ async function workIntroPage(env, slug, lang) {
   }
   const src = publicSource(note.source);
 
-  let body = '<p class="crumb"><a href="/">' + t.site + '</a> › '
+  let body = '<p class="crumb"><a href="' + siteHome(lang) + '">' + t.site + '</a> › '
     + '<a href="' + introHome(lang) + '">' + t.intros + '</a> › ' + htmlEsc(title)
     + (both ? '　<a href="' + (lang === 'en' ? urls.ja : urls.en) + '">'
               + t.other + '</a>' : '')
@@ -1002,7 +1021,7 @@ async function workIntroPage(env, slug, lang) {
   }
   body += '<p class="foot"><a href="' + introHome(lang) + '">' + t.toList + '</a>　'
         + '<a href="' + t.guideUrl + '">' + t.guide + '</a>　'
-        + '<a href="/">' + t.toTop + '</a></p>';
+        + '<a href="' + siteHome(lang) + '">' + t.toTop + '</a></p>';
 
   const opts = {
     lang: lang,
