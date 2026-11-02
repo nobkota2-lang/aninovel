@@ -121,6 +121,28 @@ export async function onRequest(context) {
       try { return await fromCache(context, '/_gen/sitemap', () => sitemapXml(env)); }
       catch (e) { console.warn('[middleware] sitemap:', e); return next(); }
     }
+    // 英語モードのまま日本語のURLへ来た人を、英語版へ送る。
+    // ビューアは言語を切り替えると ?lang=en を自分のURLに書き込む。
+    // その状態で 作品紹介 やトップへのリンクを踏むと、英語版が別のURL
+    // (/en/...) にあるため、全面的に日本語のページに落ちていた。
+    // 共有された /works?lang=en も同じ。実測で日本語41か所。
+    // ビューアだけは自分で ?lang= を見るので、ここでは触らない。
+    try {
+      const want = (url.searchParams.get('lang') || '').toLowerCase();
+      if (want === 'en' || want === 'ja') {
+        const to = langSwap(url.pathname, want);
+        if (to && to !== url.pathname) {
+          const u = new URL(url.toString());
+          u.pathname = to;
+          u.searchParams.delete('lang');
+          return new Response(null, { status: 302, headers: {
+            Location: u.pathname + (u.search || ''),
+            'Cache-Control': 'no-store',
+          } });
+        }
+      }
+    } catch (e) { console.warn('[middleware] langSwap:', e); }
+
     // 作品紹介。日本語は /works/、英語は /en/works/。
     // 英訳はあるのに英語のURLが無く、英語圏の検索に一切出ていなかった。
     // 英語の入口。/en/ は日本語トップそのものを英語で出す。
@@ -130,7 +152,8 @@ export async function onRequest(context) {
       try { return await enMirror(context, enConf); }
       catch (e) {
         console.warn('[middleware] enMirror:', e);
-        return new Response(null, { status: 302, headers: { Location: '/?lang=en' } });
+        // 戻り先に ?lang=en を付けない。上の langSwap と往復になる。
+        return new Response(null, { status: 302, headers: { Location: '/' } });
       }
     }
 
@@ -1300,6 +1323,36 @@ const EN_MIRROR = {
   },
 };
 
+/**
+ * ?lang= で来たときに送るべき、同じ内容の別言語のパスを返す。無ければ null。
+ * ビューアは自分で ?lang= を読んで表示を切り替えるので、ここでは扱わない
+ * (扱うと言語切替のたびに画面が再読み込みされてしまう)。
+ */
+function langSwap(pathname, want) {
+  const p = (pathname || '/').replace(/\/+$/, '') || '/';
+  if (p === '/viewer' || p === '/viewer.html') return null;   // ビューアは自前で処理する
+  if (p.startsWith('/api/')) return null;
+
+  if (want === 'en') {
+    if (p === '/' || p === '/index.html') return '/en/';
+    if (p === '/works') return '/en/works';
+    if (p.startsWith('/works/')) return '/en' + p;
+    if (p.startsWith('/en/') || p === '/en') return null;     // すでに英語
+    for (const k of Object.keys(EN_MIRROR)) {
+      const ja = (EN_MIRROR[k].jaUrl || '').replace(/\/+$/, '') || '/';
+      if (ja === p) return EN_MIRROR[k].path;
+    }
+    return null;
+  }
+
+  // want === 'ja'
+  if (p === '/en' || p === '/en/') return '/';
+  if (p === '/en/works') return '/works';
+  if (p.startsWith('/en/works/')) return p.slice('/en'.length);
+  if (Object.prototype.hasOwnProperty.call(EN_MIRROR, p)) return EN_MIRROR[p].jaUrl || null;
+  return null;
+}
+
 /** /en/... から、元になる日本語ページの設定を引く。末尾のスラッシュは許す。 */
 function enMirrorRoute(pathname) {
   if (pathname === '/en' || pathname === '/en/') return EN_MIRROR['/en/'];
@@ -1337,11 +1390,14 @@ async function enMirror(context, conf) {
 
   const ct = res ? (res.headers.get('Content-Type') || '') : '';
   if (!res || res.status !== 200 || !ct.includes('text/html')) {
-    // 元のページに辿り着けないとき。英語で来た人を日本語のまま放り出さない
-    // ための最後の逃げ道。?lang=en は js/i18n.js が解釈する。
+    // 元のページに辿り着けないときの最後の逃げ道。
+    // ここで ?lang=en を付けてはいけない。langSwap が /?lang=en を /en/ へ
+    // 送り返すので、この経路が失敗し続けるかぎり無限に往復する。
+    // 英語のまま出せるページがもう無いので、日本語のトップへ降ろす。
     console.warn('[en] 元のページが HTML 200 で返りませんでした:',
                  conf.src, res && res.status);
-    return new Response(null, { status: 302, headers: { Location: '/?lang=en' } });
+    return new Response(null, { status: 302, headers: {
+      Location: '/', 'Cache-Control': 'no-store' } });
   }
 
   // いちばん最初に走らせる。index.html の目隠し script より前に置く必要がある。
