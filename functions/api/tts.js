@@ -82,7 +82,16 @@ export async function onRequestPost(context) {
       },
     });
   } catch (e) {
-    return json({ error: String((e && e.message) || e) }, 500, cors);
+    const msg = String((e && e.message) || e);
+    // 1日の無料枠を使い切ったときは、呼ぶ側が「今日はもう無理」と
+    // 判別できる形で返す。これが無いと、ビューアは1件の失敗としか
+    // 見えず、残り全件に同じ失敗を投げ続ける。猫(4,726件)では
+    // 枠切れのあと約4,700回の無駄打ちになっていた。
+    // Workers AI は枠切れを code 4006 で返す。
+    if (/\b4006\b|quota|limit exceeded|rate limit|too many requests|capacity/i.test(msg)) {
+      return json({ error: msg, limit: true }, 429, cors);
+    }
+    return json({ error: msg }, 500, cors);
   }
 }
 

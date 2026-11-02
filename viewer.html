@@ -3381,16 +3381,39 @@ async function generateVoicesAura(opts){
   var trMap={};
   if(state.workTrans&&state.workTransHash===state._curHash){
     Object.assign(trMap,state.workTrans);
-  }else{
+  }
+  // 長編の英訳は分割キャッシュ(作品IDが鍵)にしか入っていない。
+  // 全文を送る経路は本文が 2.8MB を超えて 503 になるので、先にこちらを見る。
+  // これが無いと猫は英訳を1件も拾えず、全件「英訳未取得」で飛ばされていた。
+  if(Object.keys(trMap).length<enItems.length&&wid){
+    try{
+      var _cp=0,_ctot=0;
+      for(;;){
+        var _cr=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({target:'en',workId:wid,chunk:{part:_cp}})});
+        if(!_cr.ok)break;
+        var _cj=await _cr.json();
+        Object.assign(trMap,_cj.items||{});
+        _ctot=_cj.total||_ctot; _cp++;
+        if(_ctot&&_cp>=_ctot)break;
+        if(_cp>60)break;
+      }
+      if(_cp)console.info('[Aura] 分割キャッシュから英訳 '+Object.keys(trMap).length+'件');
+    }catch(e){console.warn('[Aura] 分割キャッシュ取得失敗:',e);}
+  }
+  if(Object.keys(trMap).length<enItems.length){
     try{
       var _trRes=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:'en',source:'ja',items:items.map(function(it){return {id:it.id,text:it.text};}),characters:(state.characters||[]).filter(function(c){return c.id!=='narrator'&&c.name;}).map(function(c){return {id:c.id,name:c.name};})})});
-      if(_trRes.ok){var _trJson=await _trRes.json();(_trJson.items||[]).forEach(function(x){trMap[x.id]=x.text;});}
+      if(_trRes.ok){var _trJson=await _trRes.json();(_trJson.items||[]).forEach(function(x){if(x&&x.id&&trMap[x.id]==null)trMap[x.id]=x.text;});}
     }catch(e){console.warn('[Aura] 英訳取得失敗:',e);}
   }
   if(!opts.noConfirm){
     if(!confirm('クラウド(Aura)でこの作品の英訳セリフ('+total+'件)を音声生成します。\nこのブラウザに保存されます。続行しますか?'))return {ok:false,cancelled:true};
   }
-  var generated=0,cached=0,failed=0;
+  var generated=0,cached=0,failed=0,notrans=0,done=0;
+  // 途中で止まった理由。null なら最後まで回った。
+  // 枠切れのあとも投げ続けると、猫(4,726件)で約4,700回の無駄打ちになる。
+  var stopped=null,streak=0,stopAt=-1;
   var progressBox=opts.progressBox||_showProgress('\u2601\uFE0F 英語音声生成中 (Aura)');
   try{
     for(var i=0;i<enItems.length;i++){
@@ -3399,30 +3422,90 @@ async function generateVoicesAura(opts){
       var voice=_auraVoiceFor(ch);
       var srcText=trMap[it.id]||it.text||'';
       if(/[\u3040-\u30ff\u3400-\u9fff]/.test(srcText)){
-        console.warn('[Aura] 英訳未取得 → スキップ item='+it.id);failed++;_updateProgress(progressBox,i+1,total,'skip(no-trans) '+it.id);continue;
+        // 英訳が無いものは、作っても日本語を英語の声で読むことになる。
+        // 失敗とは別に数える(枠切れと混ざると残り件数が分からなくなる)。
+        console.warn('[Aura] 英訳未取得 → スキップ item='+it.id);notrans++;_updateProgress(progressBox,i+1,total,'skip(no-trans) '+it.id);continue;
       }
       // 指紋にモデル名を入れる。実態と合わせておかないと、モデルを変えたのに
       // 古い音声を使い続ける。ここを後から直すと全件作り直しになるので、
       // 英語音声が0件のうちに実態(aura-2-en)に合わせておく。
       var hash=_simpleHashJS(srcText+'|aura2='+voice);
       var prev=await _idbGet(wid,it.id,'en');
-      if(prev&&prev.meta&&prev.meta.hash===hash){cached++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
+      if(prev&&prev.meta&&prev.meta.hash===hash){cached++;done++;_updateProgress(progressBox,i+1,total,'cached '+it.id);continue;}
       _updateProgress(progressBox,i+1,total,it.id);
       try{
         var res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:srcText,voice:voice,model:'aura-2-en'})});
-        if(!res.ok)throw new Error('tts http '+res.status);
+        if(!res.ok){
+          // 本文を読んで、今日の枠切れかどうかを見分ける。
+          // 読まずに失敗として次へ進むと、残り全件に同じ失敗を投げ続ける。
+          var _msg='tts http '+res.status,_lim=(res.status===429);
+          try{
+            var _ct=(res.headers.get('Content-Type')||'');
+            if(_ct.indexOf('json')>=0){
+              var _ej=await res.json();
+              if(_ej&&_ej.limit)_lim=true;
+              if(_ej&&_ej.error){
+                _msg+=' '+String(_ej.error).slice(0,160);
+                if(/\b4006\b|quota|limit exceeded|rate limit|too many requests|capacity/i.test(String(_ej.error)))_lim=true;
+              }
+            }
+          }catch(e2){}
+          if(_lim){ stopped='limit'; stopAt=i; throw new Error('__limit__ '+_msg); }
+          throw new Error(_msg);
+        }
         var blob=await res.blob();
         if(!blob||blob.size<200)throw new Error('empty audio '+(blob&&blob.size));
         await _idbPut(wid,it.id,blob,{lang:'en',engine:'aura',voice:voice,hash:hash,chars:srcText.length,bytes:blob.size});
-        generated++;
+        generated++;done++;streak=0;
       }catch(e){
-        console.warn('[Aura] 失敗 item='+it.id,e&&e.message||e);failed++;
+        var _em=(e&&e.message)||String(e);
+        if(stopped==='limit'){
+          console.warn('[Aura] 今日の無料枠を使い切りました。ここで止めます。'+(i+1)+'/'+total);
+          break;
+        }
+        console.warn('[Aura] 失敗 item='+it.id,_em);failed++;streak++;
+        // 同じ失敗が続くなら、残りも同じ結果になる。投げ続けない。
+        if(streak>=5){ stopped='errors'; stopAt=i; 
+          console.warn('[Aura] 失敗が5件続いたので止めます。'+(i+1)+'/'+total);
+          break; }
       }
     }
   }finally{if(!opts.progressBox)_hideProgress(progressBox);}
   if(!opts.noRebuild)await _buildAudioSources();
-  if(!opts.noAlert)alert('英語音声生成完了\n新規='+generated+' / キャッシュ='+cached+' / 失敗='+failed+' (合計'+total+')');
-  return {ok:true,generated:generated,cached:cached,failed:failed,total:total};
+  var remain=total-done-notrans;
+  if(remain<0)remain=0;
+  if(!opts.noAlert){
+    /* i18n-ok:start 言語で分岐済み。下は日本語の枝 */
+    var _en=(state.lang==='en');
+    var L=[_en?'English audio':'英語音声'];
+    L.push((_en?'new=':'新規=')+generated+(_en?' / already made=':' / 作成済み=')+cached
+      +(_en?' / failed=':' / 失敗=')+failed
+      +(notrans?((_en?' / no translation=':' / 英訳なし=')+notrans):'')
+      +' ('+(_en?'of ':'合計')+total+')');
+    if(stopped==='limit'){
+      L.push('');
+      L.push(_en?('Stopped at '+(stopAt+1)+' of '+total+': today\u2019s free allowance is used up.')
+                :('合計'+total+'件のうち'+(stopAt+1)+'件目で止まりました。今日の無料枠を使い切りました。'));
+      L.push(_en?('Remaining: '+remain+'. Press the same button again tomorrow and it carries on from here.')
+                :('残り'+remain+'件です。日付が変わってから同じボタンを押すと、続きから進みます。'));
+    }else if(stopped==='errors'){
+      L.push('');
+      L.push(_en?('Stopped at '+(stopAt+1)+' of '+total+': five failures in a row.')
+                :('合計'+total+'件のうち'+(stopAt+1)+'件目で止まりました。失敗が5件続いたためです。'));
+      L.push(_en?'See the console for the reason.':'理由はコンソールに出ています。');
+    }else if(remain){
+      L.push('');
+      L.push(_en?('Remaining: '+remain+'. Press the same button again to carry on.')
+                :('残り'+remain+'件です。同じボタンをもう一度押すと続きから進みます。'));
+    }
+    L.push('');
+    L.push(_en?'Already-made audio is never remade, so running it again is safe.'
+              :'作成済みのぶんは作り直しません。何度実行しても無駄になりません。');
+    /* i18n-ok:end */
+    alert(L.join('\n'));
+  }
+  return {ok:true,generated:generated,cached:cached,failed:failed,notrans:notrans,
+          total:total,done:done,remain:remain,stopped:stopped,stopAt:stopAt};
 }
 // 小さな選択ダイアログ。confirm を何度も出す代わりに、1回で選ばせる。
 // 文字列は呼び出し側で言語を決めて渡すので、ここでは訳さない。
