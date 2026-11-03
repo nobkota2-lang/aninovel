@@ -1489,6 +1489,14 @@ async function enMirror(context, conf) {
     .on('meta[property="og:description"]', meta('ogd', conf.ogDesc))
     .on('meta[property="og:url"]', meta('ogu', conf.url))
     .on('meta[property="og:site_name"]', meta('ogs', 'AniNovel'))
+    // guide.html と法務ページは <main data-lang="ja"> と <main data-lang="en">
+    // を両方持ち、legal/_legal-i18n.js が片方を隠す。隠れるのは JavaScript が
+    // 走ってからなので、それまでの一瞬だけ日本語が見える。日本語の書体が
+    // 入っていないPCでは豆腐が出る。英語のURLでは最初から隠しておく。
+    // 消さずに hidden にするのは、ページの言語切替ボタン(legal-lang-btn)で
+    // 日本語に戻せなくなるため。
+    .on('main[data-lang="ja"]', { element(el) { el.setAttribute('hidden', ''); } })
+    .on('main[data-lang="en"]', { element(el) { el.removeAttribute('hidden'); } })
     .on('meta[property="og:locale"]', meta('ogl', 'en_US'))
     .on('meta[property="og:locale:alternate"]', meta('ogla', 'ja_JP'))
     .on('meta[name="twitter:title"]', meta('twt', conf.ogTitle))
