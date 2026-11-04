@@ -2690,7 +2690,14 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
     if(opts.copyTo&&opts.copyTo!==srcWorkId){
       try{await _idbPut(opts.copyTo,rec.itemId,rec.blob,rec.meta||{});}catch(e){}
     }
-    if(_alr[kk.itemId]){skipped++;sent++;rec=null;continue;}
+    // 2026-11-04: ここで「サーバにあるか」だけを見て飛ばしていたため、
+    // 上のハッシュ比較で「違うので送る」と決めた判断が打ち消されていた。
+    // _alr[itemId] はハッシュ文字列なので常に真になる。
+    // そのため話者を変えても新しい声がサーバに届かなかった(同じ事故が3度目。
+    // 前回はコメントとハッシュ比較を足しただけで、この行を消し忘れていた)。
+    // copyTo(投稿時の my_→pub_ 複製)のときは上の比較を通らないので、
+    // そのときだけ従来どおり「あれば送らない」を残す。
+    if(opts.copyTo&&opts.copyTo!==srcWorkId&&_alr[kk.itemId]){skipped++;sent++;rec=null;continue;}
     var sz=rec.blob.size;
     if(n&&(acc+sz>MAXB||n>=MAXN))await flush();     // 入れる前に溢れるなら先に送る
     if(sz>MAXB){
