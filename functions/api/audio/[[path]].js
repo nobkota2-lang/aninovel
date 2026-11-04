@@ -248,3 +248,131 @@ export async function onRequestPut(context) {
 
   return json({ ok: true, saved: saved, savedEn: savedEn.length, errors: errors });
 }
+
+// DELETE /api/audio/{pubId} — 宛先の無くなった音声を消す
+// --------------------------------------------------
+// 作品を取り込み直すとブロックの itemId が変わる。前の itemId で保存された
+// 音声はどのブロックからも参照されないまま R2 に残り、容量だけを食う。
+// それを掃除するためだけの入口で、普段の読み書きでは使わない。
+//
+// 消せるのは「項目名を1件ずつ明示したものだけ」。
+// 前方一致・言語まるごと・作品まるごとの削除は受け付けない。
+// 消す操作に「ついでに全部」を作らないのは、取り違えたときに
+// 取り返しがつかないため。何を消すかは必ず呼ぶ側が列挙する。
+//
+// 送り方:
+//   DELETE /api/audio/{pubId}
+//   Content-Type: application/json
+//   {"items":[{"lang":"en","itemId":"b12"},{"lang":"ja","itemId":"b13"}]}
+//   言語が揃っているなら、まとめた形でもよい:
+//   {"lang":"en","itemIds":["b12","b13"]}
+//
+// 返り値は1件ずつの結果。呼ぶ側はこれを読み返して確認する。
+//   deleted  … 消した
+//   missing  … 元から無かった(すでに消えている)
+//   errors   … 消そうとして失敗した
+const MAX_DELETE = 500;
+
+/**
+ * 受け取った本文を {lang, itemId} の配列に正す。
+ * 不正な項目は捨てずに理由を返す。黙って減らすと、
+ * 呼ぶ側は「消えた」と「無視された」を区別できない。
+ */
+export function parseDeleteBody(body) {
+  const rejected = [];
+  const out = [];
+  const seen = Object.create(null);
+
+  function take(lang, itemId, label) {
+    const l = (lang == null || lang === '') ? 'ja' : String(lang);
+    const id = (itemId == null) ? '' : String(itemId);
+    if (!LANGS.includes(l)) { rejected.push(label + ': 不明な言語'); return; }
+    if (!ITEM_RE.test(id)) { rejected.push(label + ': 不正なID'); return; }
+    const k = l + '/' + id;
+    if (seen[k]) return;                 // 同じものを2度数えない
+    seen[k] = true;
+    out.push({ lang: l, itemId: id });
+  }
+
+  if (body && Array.isArray(body.items)) {
+    body.items.forEach(function (it, n) {
+      if (!it || typeof it !== 'object') { rejected.push('items[' + n + ']: 形式が違います'); return; }
+      take(it.lang, it.itemId, 'items[' + n + ']');
+    });
+  }
+  if (body && Array.isArray(body.itemIds)) {
+    body.itemIds.forEach(function (id, n) {
+      take(body.lang, id, 'itemIds[' + n + ']');
+    });
+  }
+  return { targets: out, rejected: rejected };
+}
+
+export async function onRequestDelete(context) {
+  const denied = await requireWrite(context);   // 作者・オーナーのみ
+  if (denied) return denied;
+
+  const parts = context.params.path || [];
+  const bucket = context.env.AUDIO_R2;
+  if (!bucket) return json({ error: 'R2 bucket "AUDIO_R2" が未バインドです' }, 500);
+
+  const pubId = parts[0];
+  if (!pubId || !ID_RE.test(pubId) || parts.length !== 1) {
+    return json({ error: 'DELETE は /api/audio/{pubId} 宛に JSON で送信してください' }, 400);
+  }
+
+  let body;
+  try {
+    body = await context.request.json();
+  } catch (e) {
+    return json({ error: 'JSON として読み取れませんでした' }, 400);
+  }
+
+  const parsed = parseDeleteBody(body);
+  if (!parsed.targets.length) {
+    return json({
+      error: '消す対象が1件も指定されていません',
+      message: 'items か itemIds で項目名を列挙してください。まとめて消す指定は受け付けません。',
+      rejected: parsed.rejected,
+    }, 400);
+  }
+  if (parsed.targets.length > MAX_DELETE) {
+    return json({
+      error: '1回に消せるのは ' + MAX_DELETE + ' 件までです',
+      given: parsed.targets.length,
+    }, 413);
+  }
+
+  // 消す前に、本当にそこにあるかを見る。
+  // 「無かった」と「消した」を分けて返すため。
+  const deleted = [];
+  const missing = [];
+  const errors = [];
+  for (const t of parsed.targets) {
+    const key = audioKey(pubId, t.lang, t.itemId);
+    try {
+      const head = await bucket.head(key);
+      if (!head) { missing.push(t.lang + ':' + t.itemId); continue; }
+      await bucket.delete(key);
+      // 消えたことを確かめる。消したつもりで残っているのが最も困る。
+      const again = await bucket.head(key);
+      if (again) { errors.push(t.lang + ':' + t.itemId + ': 消えていません'); continue; }
+      deleted.push(t.lang + ':' + t.itemId);
+    } catch (e) {
+      errors.push(t.lang + ':' + t.itemId + ': ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+
+  return json({
+    ok: errors.length === 0,
+    workId: pubId,
+    指定: parsed.targets.length,
+    消した: deleted.length,
+    元から無かった: missing.length,
+    失敗: errors.length,
+    deleted: deleted,
+    missing: missing,
+    errors: errors,
+    rejected: parsed.rejected,
+  });
+}
