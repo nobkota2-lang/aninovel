@@ -3281,6 +3281,7 @@ function _showVoicevoxCorsHelp(engineUrl){
   }
 }
 async function generateVoicesLocal(opts){
+  await _ensurePersistentStorage();
   try{ if(!_vvUseCache) await _vvScanExisting(); }catch(e){}
   opts=opts||{};
   var engineUrl=opts.engineUrl||'http://localhost:50021';
@@ -3376,8 +3377,31 @@ async function generateVoicesLocal(opts){
   return {ok:true,generated:generated,reused:reused,cached:cached,failed:failed,total:total};
 }
 // ===== 英語クラウド事前生成 (Deepgram Aura via /api/tts) — VOICEVOXと同じIDBへ保存 =====
+// 音声は数か月かけて少しずつ溜めることがある。ブラウザの保存領域は既定で
+// 「消してよいもの」扱いで、容量が逼迫すると黙って捨てられる。数か月分を
+// 失うと取り返しがつかないので、溜めはじめる前に永続化を頼んでおく。
+// Chrome は利用状況から自動で判断する(確認は出ない)。断られても生成は進む。
+async function _ensurePersistentStorage(){
+  try{
+    if(!navigator.storage||!navigator.storage.persist)return null;
+    if(await navigator.storage.persisted())return true;
+    var ok=await navigator.storage.persist();
+    console.info('[Storage] 保存領域の永続化: '+(ok?'許可されました'
+      :'断られました。容量が逼迫すると溜めた音声が消えることがあります。'
+      +'こまめに 📢 上書き公開 でサーバーへ送ってください。'));
+    return ok;
+  }catch(e){ return null; }
+}
+// いま何MB抱えているか
+async function _storageUsed(){
+  try{
+    var e=await navigator.storage.estimate();
+    return {mb:Math.round((e.usage||0)/1e6),quotaMb:Math.round((e.quota||0)/1e6)};
+  }catch(e){ return null; }
+}
 async function generateVoicesAura(opts){
   opts=opts||{};
+  await _ensurePersistentStorage();
   var wid=_currentWorkId();
   var items=(state.content||[]).filter(function(c){return c.type!=='pageBreak'&&(c.text||'').trim();});
   // 全アイテムを対象（voiceLangで絞り込まない）
@@ -3511,6 +3535,15 @@ async function generateVoicesAura(opts){
     L.push('');
     L.push(_en?'Already-made audio is never remade, so running it again is safe.'
               :'作成済みのぶんは作り直しません。何度実行しても無駄になりません。');
+    // 溜めっぱなしは危ない。いま何MB抱えているかを見せて、公開を促す。
+    var _su=await _storageUsed();
+    if(_su&&_su.mb>=1){
+      L.push('');
+      L.push(_en?('Kept in this browser: about '+_su.mb+'MB of '+_su.quotaMb+'MB.')
+                :('このブラウザに溜まっている量: 約'+_su.mb+'MB / '+_su.quotaMb+'MB'));
+      L.push(_en?'Press \uD83D\uDCE2 Publish to send it to the server. Until then it can be lost.'
+                :'\uD83D\uDCE2 上書き公開 を押すまでサーバーには届きません。押すまでは消える可能性があります。');
+    }
     /* i18n-ok:end */
     alert(L.join('\n'));
   }
