@@ -414,11 +414,30 @@ const STATIC_PAGES = [
 async function sitemapXml(env) {
   const out = [];
   out.push('<?xml version="1.0" encoding="UTF-8"?>');
-  out.push('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+  out.push('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+         + ' xmlns:xhtml="http://www.w3.org/1999/xhtml">');
+
+  // 日英の対応を sitemap 側でも伝える。ページの <head> にも入れてあるが、
+  // sitemap に置くと検索側の多言語の検出が確実になる。
+  // x-default は原文(日本語)を指す。
+  const jaToEn = {};
+  for (const k of Object.keys(EN_MIRROR)) {
+    const ja = EN_MIRROR[k].jaUrl;
+    if (ja) jaToEn[ja] = EN_MIRROR[k].path;
+  }
+  function altLinks(jaUrl, enUrl) {
+    return [
+      '    <xhtml:link rel="alternate" hreflang="ja" href="' + xmlEsc(jaUrl) + '"/>',
+      '    <xhtml:link rel="alternate" hreflang="en" href="' + xmlEsc(enUrl) + '"/>',
+      '    <xhtml:link rel="alternate" hreflang="x-default" href="' + xmlEsc(jaUrl) + '"/>',
+    ];
+  }
 
   for (const [path, freq, pri] of STATIC_PAGES) {
     out.push('  <url>');
     out.push('    <loc>' + SITE + path + '</loc>');
+    const en = jaToEn[path] || (path === '/' ? '/en/' : null);
+    if (en) out.push(...altLinks(SITE + path, SITE + en));
     out.push('    <changefreq>' + freq + '</changefreq>');
     out.push('    <priority>' + pri + '</priority>');
     out.push('  </url>');
@@ -431,6 +450,9 @@ async function sitemapXml(env) {
                              ['/en/authors', '0.7'], ['/en/apply', '0.5']]) {
     out.push('  <url>');
     out.push('    <loc>' + SITE + path + '</loc>');
+    const conf = EN_MIRROR[path === '/en/' ? '/en/' : path];
+    const ja = conf && conf.jaUrl;
+    if (ja) out.push(...altLinks(SITE + ja, SITE + path));
     out.push('    <changefreq>weekly</changefreq>');
     out.push('    <priority>' + pri + '</priority>');
     out.push('  </url>');
@@ -446,12 +468,15 @@ async function sitemapXml(env) {
       const base = SITE + (lang === 'en' ? '/en/works/' : '/works/');
       out.push('  <url>');
       out.push('    <loc>' + base + '</loc>');
+      out.push(...altLinks(SITE + '/works/', SITE + '/en/works/'));
       out.push('    <changefreq>weekly</changefreq>');
       out.push('    <priority>' + (lang === 'ja' ? '0.8' : '0.6') + '</priority>');
       out.push('  </url>');
       for (const { note } of entries) {
+        const slug = xmlEsc(note.slug);
         out.push('  <url>');
-        out.push('    <loc>' + base + xmlEsc(note.slug) + '</loc>');
+        out.push('    <loc>' + base + slug + '</loc>');
+        out.push(...altLinks(SITE + '/works/' + slug, SITE + '/en/works/' + slug));
         out.push('    <changefreq>monthly</changefreq>');
         out.push('    <priority>' + (lang === 'ja' ? '0.7' : '0.6') + '</priority>');
         out.push('  </url>');
@@ -475,6 +500,9 @@ async function sitemapXml(env) {
     for (const lang of langs) {
       out.push('  <url>');
       out.push('    <loc>' + xmlEsc(viewerUrl(w.id, lang, true)) + '</loc>');
+      if (langs.length === 2) {
+        out.push(...altLinks(viewerUrl(w.id, 'ja', true), viewerUrl(w.id, 'en', true)));
+      }
       if (dated) out.push('    <lastmod>' + d + '</lastmod>');
       out.push('    <changefreq>weekly</changefreq>');
       out.push('    <priority>' + (lang === 'ja' ? '0.8' : '0.7') + '</priority>');

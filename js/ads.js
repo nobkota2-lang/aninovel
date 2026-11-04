@@ -1,26 +1,12 @@
 /* 広告の表示  js/ads.js
  * ======================================================================
- * 2026-10-05 書き直し。
- * それまでこのファイルは minify された1行だった。開業日のゲートという
- * 事業上の判断がここに入る以上、読めない形で置いておくのは危うい。
- * 中身の挙動は変えていない。足したのは ADS_START のゲートだけ。
- *
- * ----------------------------------------------------------------------
- * 広告を出し始める日
- * ----------------------------------------------------------------------
  * ADS_START より前は、広告のスクリプトを読み込まず、広告枠も描画しない。
- * つまり収益が1円も発生しない。開業日より前に収益が立つことを避けるため。
  *
- * AdSense の審査は、この日より前に受けて構わない。審査中は広告が配信され
- * ないので収益は発生しない。ただし審査時には「サイトに AdSense のコードが
- * あること」が確かめられるので、そのときだけ index.html の <head> に
- * 審査用のタグを静的に置くこと。手順は index.html の該当箇所に書いた。
+ * 有効化の条件・時期・その判断の経緯は、**ここには書かない**。
+ * このファイルは aninovel.com から誰でも読める。控えは公開しない手元の
+ * メモに置くこと。
  *
- * 承認後は、AdSense の管理画面で「自動広告」を必ずオフにすること。
- * 自動広告が入っていると、このファイルのゲートとは無関係に Google が
- * 広告を差し込むので、開業日より前に収益が発生してしまう。
- *
- * 日付を動かすときは、ここ1か所だけ直せばよい。
+ * 日付を動かすときは ADS_START の1か所だけ直せばよい。
  */
 !function () {
   "use strict";
@@ -38,7 +24,6 @@
 
 
 
-  // 2027-01-01 00:00 (日本時間)。UTC では前日の15:00。
   var ADS_START = Date.UTC(2026, 11, 31, 15, 0, 0);
 
   /** 広告を出してよい日になったか */
@@ -122,7 +107,7 @@
   /** 広告ブロッカーの検知。枠はあるのに高さが出ないときだけ出す。 */
   function warnIfBlocked() {
     var ins = document.querySelectorAll(".aninovel-ad ins.adsbygoogle");
-    if (!ins.length) return;   // そもそも枠を出していない (開業日前など)
+    if (!ins.length) return;   // そもそも枠を出していない
     var allFlat = Array.prototype.every.call(ins, function (e) {
       return e.getBoundingClientRect().height < 10;
     });
@@ -182,10 +167,11 @@
     document.addEventListener("DOMContentLoaded", init);
   }
 
+  // startsAt は公開しない。誰でもコンソールから日付を読めてしまう。
+  // 状態だけ分かれば運用には足りる。
   window.AninovelAds = {
     isPaidUser: isPaidUser,
     renderAllSlots: renderAllSlots,
-    adsStarted: adsStarted,
-    startsAt: new Date(ADS_START).toISOString()
+    adsStarted: adsStarted
   };
 }();
