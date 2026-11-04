@@ -92,7 +92,7 @@ export const WORK_NOTES = [
     author: '太宰 治',
     kind: 'aozora',
     year: '1940年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「太宰治全集3」ちくま文庫、筑摩書房 1988年／入力 金川一之／校正 高橋美奈子）',
     lead: 'メロスは激怒した。必ず、かの邪智暴虐の王を除かなければならぬと決意した。',
     intro:
       '冒頭の一行だけで、もう物語が走り出しています。羊飼いのメロスが、' +
@@ -115,7 +115,7 @@ export const WORK_NOTES = [
     author: '宮沢 賢治',
     kind: 'aozora',
     year: '1924年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「注文の多い料理店」新潮文庫、新潮社 1990年／入力 土屋隆／校正 noriko saito）',
     lead: '二人の若い紳士が、すっかりイギリスの兵隊のかたちをして、' +
           'ぴかぴかする鉄砲をかついで、白熊のような犬を二疋つれて、' +
           'だいぶ山奥の、木の葉のかさかさしたとこを、こんなことを' +
@@ -141,7 +141,7 @@ export const WORK_NOTES = [
     author: '江戸川 乱歩',
     kind: 'aozora',
     year: '1929年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「江戸川乱歩全集 第5巻 押絵と旅する男」光文社文庫、光文社 2005年／入力 砂場清隆／校正 門田裕志）',
     lead: 'この話を、私が夢で見たのか、それとも私の一時的狂気の幻影であったのか、' +
           'いずれにしても、私は夢を見る性質ではないし、……',
     intro:
@@ -164,7 +164,7 @@ export const WORK_NOTES = [
     author: '芥川 龍之介',
     kind: 'aozora',
     year: '1915年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「芥川龍之介全集1」ちくま文庫、筑摩書房 1986年／入力 平山誠・野口英司／校正 もりみつじゅんじ）',
     lead: 'ある日の暮方の事である。一人の下人が、羅生門の下で雨やみを待っていた。',
     intro:
       '職を失った下人が、荒れ果てた羅生門の下で雨宿りをしています。' +
@@ -188,7 +188,7 @@ export const WORK_NOTES = [
     author: '小泉 八雲',
     kind: 'aozora',
     year: '1904年',
-    source: '青空文庫（日本語訳の訳者名と底本は【要確認】）',
+    source: '青空文庫（底本「小泉八雲全集第八卷 家庭版」第一書房 1937年／訳 田部隆次／入力 京都大学電子テクスト研究会入力班（大石尺）／校正 京都大学電子テクスト研究会校正班（大久保ゆう））',
     lead: '武蔵の国のある村に、茂作、巳之吉と云う二人の樵夫がいた。',
     intro:
       '吹雪の晩、渡し守の小屋に閉じ込められた二人の樵。' +
@@ -211,7 +211,7 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1934年（没後発表）',
     yearEn: '1934 (published posthumously)',
-    source: '青空文庫（底本・入力者・校正者は【要確認】',
+    source: '青空文庫（底本「新編 銀河鉄道の夜」新潮文庫、新潮社 1989年／入力 中村隆生・野口英司／校正 野口英司）',
     lead: '「ではみなさんは、そういうふうに川だと云われたり、' +
           '乳の流れたあとだと云われたりしていたこのぼんやりと白いものが' +
           'ほんとうは何かご承知ですか。」',
@@ -235,7 +235,7 @@ export const WORK_NOTES = [
     author: '夏目漱石',
     kind: 'aozora',
     year: '1905〜1906年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「夏目漱石全集1」ちくま文庫、筑摩書房 1987年／入力 柴田卓治／校正 渡部峰子（一）、おのしげひこ（二、五）、田尻幹二（三）、高橋真也（四、七、八、十、十一）、しず（六）、瀬戸さえ子（九））',
     lead: '吾輩は猫である。名前はまだ無い。',
     intro:
       '名前のない猫が、英語教師・珍野苦沙弥の家に住み着き、' +
@@ -257,24 +257,22 @@ export const WORK_NOTES = [
     authorEn: 'Sōseki Natsume',
     leadEn: 'Ever since I was a child, the recklessness I inherited from my parents has brought me nothing but trouble.',
     introEn: 'A headstrong Tokyoite takes a post teaching mathematics at a middle school in Shikoku. Redshirt, Clown, Porcupine, Hubbard Squash: he hands out nicknames, and then collides with every one of them, telling the whole thing himself at speed.\n\nBecause it is all in one voice from beginning to end, it suits narration unusually well. Lines that run away with you on the page turn comic when they are spoken. Watching that cast of nicknames line up in bubbles is its own pleasure.\n\n【Add how you chose the narrator\'s voice.】',
-    title: '坊ちゃん',
+    title: '坊っちゃん',
     author: '夏目漱石',
     kind: 'aozora',
     year: '1906年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「ちくま日本文学全集 夏目漱石」筑摩書房 1992年／入力 真先芳秋／校正 柳沢成雄）',
     lead: '親譲りの無鉄砲で小供の時から損ばかりしている。',
     intro:
       '無鉄砲な江戸っ子が、四国の中学校へ数学教師として赴任します。' +
       '赤シャツ、野だいこ、山嵐、うらなり。' +
       '勝手にあだ名をつけた同僚たちとの衝突が、一人称でまくし立てられていきます。\n\n' +
-      '最初から最後まで「坊ちゃん」の声で語られる作品なので、' +
+      '最初から最後まで「坊っちゃん」の声で語られる作品なので、' +
       '読み上げとの相性がとてもよいです。' +
       '書き言葉で読むと勢いに押される箇所が、声になるとかえって' +
       'おかしみに変わります。あだ名で呼ばれる面々が吹き出しで並ぶのも、' +
       'この作品らしい眺めだと思います。\n\n' +
-      '【要加筆】坊ちゃんの声の選び方について。' +
-      'なお、一般には「坊っちゃん」と小さい「っ」を入れる表記が定着しています。' +
-      '検索で見つけてもらうためにも、作品名の見直しをご検討ください。'
+      '【要加筆】坊っちゃんの声の選び方について。'
   },
   {
     slug: 'butai-no-kotoba',
@@ -286,7 +284,7 @@ export const WORK_NOTES = [
     author: '岸田國士',
     kind: 'aozora',
     year: '',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「日本の名随筆70 語」作品社 1988年／入力 大野晋／校正 多羅尾伴内）',
     lead: '',
     intro:
       '劇作家・岸田國士が、舞台の上で話される言葉について書いた一編です。' +
@@ -310,7 +308,7 @@ export const WORK_NOTES = [
     author: '岡本綺堂',
     kind: 'aozora',
     year: '',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「綺堂むかし語り」光文社時代小説文庫、光文社 1995年／入力 tatsuki・『鳩よ！』編集部／校正 松永正敏）',
     lead: '',
     intro:
       '『半七捕物帳』で知られる岡本綺堂が、' +
@@ -332,7 +330,7 @@ export const WORK_NOTES = [
     author: '太宰治',
     kind: 'aozora',
     year: '1939年',
-    source: '青空文庫（底本・入力者・校正者は【要確認】）',
+    source: '青空文庫（底本「新樹の言葉」新潮文庫、新潮社 1982年／入力 田中久太郎／校正 鈴木厚司）',
     lead: '',
     intro:
       '五人きょうだいが、ひとつの物語を順番に語り継いでいきます。' +
