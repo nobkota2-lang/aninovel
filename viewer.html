@@ -3467,7 +3467,10 @@ async function generateVoicesAura(opts){
       }catch(e){
         var _em=(e&&e.message)||String(e);
         if(stopped==='limit'){
-          console.warn('[Aura] 今日の無料枠を使い切りました。ここで止めます。'+(i+1)+'/'+total);
+          // サーバーの文面をそのまま残す。「枠切れ」と言い切る根拠がログに
+          // 無いと、本当に1日の枠なのか一時的な混雑なのかを後から確かめられない。
+          console.warn('[Aura] 今日の無料枠を使い切りました。ここで止めます。'+(i+1)+'/'+total
+            +'\n  サーバーの返事: '+_em.replace(/^__limit__ /,''));
           break;
         }
         console.warn('[Aura] 失敗 item='+it.id,_em);failed++;streak++;
