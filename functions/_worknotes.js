@@ -29,8 +29,19 @@
  *
  * 突き合わせの鍵
  * ----------------------------------------------------------------------
- * title がカタログの作品名と一致した行が使われます。id を書けばそちらが
- * 優先されます。作品名を変える予定があるなら、id を入れておくのが安全です。
+ * id がカタログの作品IDと一致した行が使われます。id が無いときだけ
+ * title で突き合わせます (_middleware.js の workIntroPage / introListPage、
+ * _worknotes.js の findNote)。
+ *
+ * 2026-11-05: 全12件に id を入れた。それまでは title だけで繋がっていて、
+ *   『坊ちゃん』を正式表記の『坊っちゃん』に直したとき、カタログ側が
+ *   まだ『坊ちゃん』だったため突き合わせが外れ、紹介ページが 404 になり、
+ *   作品一覧からも落ちた。題名を直すと紹介ページが消えるという作りだった。
+ *   この注意書きは事故の前からここに書いてあったのに、読まずに題名を
+ *   変えた。警告を書き足すだけでは同じことが起きるので、題名に依存しない
+ *   形にした。
+ *   以後、作品を追加するときは id も入れること。title での突き合わせは
+ *   古い行のための保険として残してあるだけで、新しい行では頼らない。
  */
 
 export const WORK_NOTES = [
@@ -40,6 +51,7 @@ export const WORK_NOTES = [
   // ====================================================================
   {
     slug: 'jukkai-kara-tobioriru-businesswoman',
+    id: 'pub_owner_bizwoman',
     titleEn: 'The Businesswoman Who Jumps from the Tenth Floor',
     authorEn: 'Nobby',
     leadEn: 'She stepped off the roof of a ten-storey building without the '
@@ -84,6 +96,7 @@ export const WORK_NOTES = [
   // ====================================================================
   {
     slug: 'hashire-merosu',
+    id: 'pub_dazai_hashiremerosu',
     titleEn: 'Run, Melos!',
     authorEn: 'Osamu Dazai',
     leadEn: 'Melos was furious. He resolved that he must remove this king, this man of wicked cunning and violence.',
@@ -107,6 +120,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'chumon-no-oi-ryoriten',
+    id: 'pub_miyazawa_chumon_jo',
     titleEn: 'The Restaurant of Many Orders',
     authorEn: 'Kenji Miyazawa',
     leadEn: 'Two young gentlemen, got up exactly like English soldiers, with glittering rifles on their shoulders and two dogs like white bears at their heels, were walking deep in the mountains.',
@@ -133,6 +147,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'oshie-to-tabisuru-otoko',
+    id: 'pub_ranpo_oshie',
     titleEn: 'The Traveler with the Pasted Rag Picture',
     authorEn: 'Edogawa Rampo',
     leadEn: '',
@@ -156,6 +171,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'rashomon',
+    id: 'pub_akutagawa_rashomon',
     titleEn: 'Rashōmon',
     authorEn: 'Ryūnosuke Akutagawa',
     leadEn: 'It was evening, and a servant was waiting under the Rashōmon gate for the rain to stop.',
@@ -180,6 +196,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'yuki-onna',
+    id: 'pub_hearn_yukionna',
     titleEn: 'Yuki-onna (The Snow Woman)',
     authorEn: 'Lafcadio Hearn',
     leadEn: '',
@@ -202,6 +219,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'ginga-tetsudo-no-yoru',
+    id: 'pub_1783235234183',
     titleEn: 'Night on the Galactic Railroad',
     authorEn: 'Kenji Miyazawa',
     leadEn: '',
@@ -227,6 +245,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'wagahai-wa-neko-de-aru',
+    id: 'pub_1783638840104',
     titleEn: 'I Am a Cat',
     authorEn: 'Sōseki Natsume',
     leadEn: 'I am a cat. As yet I have no name.',
@@ -253,6 +272,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'bocchan',
+    id: 'pub_1784799247248',
     titleEn: 'Botchan',
     authorEn: 'Sōseki Natsume',
     leadEn: 'Ever since I was a child, the recklessness I inherited from my parents has brought me nothing but trouble.',
@@ -276,6 +296,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'butai-no-kotoba',
+    id: 'pub_1784798976969',
     titleEn: 'Words of the Stage',
     authorEn: 'Kunio Kishida',
     leadEn: '',
@@ -300,6 +321,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'kido-mukashigatari',
+    id: 'pub_1784818723945',
     titleEn: 'Kidō\'s Tales of Times Past',
     authorEn: 'Kidō Okamoto',
     leadEn: '',
@@ -322,6 +344,7 @@ export const WORK_NOTES = [
   },
   {
     slug: 'ai-to-bi-ni-tsuite',
+    id: 'pub_1784820001168',
     titleEn: 'On Love and Beauty',
     authorEn: 'Osamu Dazai',
     leadEn: '',
