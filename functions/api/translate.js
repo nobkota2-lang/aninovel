@@ -173,6 +173,70 @@ export async function onRequestPost(context) {
           { id: id, title: lt, blocks: li.length };
       }
 
+      // ===== 迷子の鍵を消す =====
+      //
+      // 消すのは「鍵を1つずつ列挙したときだけ」。前方一致も「全部」も無い。
+      // 迷子だからといって不要とは限らない。その鍵にしか無い手訳なら、
+      // 消せば二度と戻らない。だからここでは次の3つを必ず守る。
+      //
+      //   ・いま生きている鍵は、指定されても消さない(拒否して返す)。
+      //     上で作った live と突き合わせる。迷子の判定を呼ぶ側に任せない。
+      //   ・消す前に中身を読み、件数と題名を返す。何を失ったかが
+      //     呼ぶ側のログに残る。
+      //   ・消したあと読み直し、本当に消えたかを確かめる。
+      //
+      // 「その訳が他の置き場にも在るか」の判定はここではしない。
+      // 作品ごとの分割キャッシュと1件ずつ突き合わせる必要があり、
+      // それは道具(tools/DEL_orphan_tr.js)の側でやってから、
+      // 安全と分かった鍵だけをここへ渡す。
+      if (body.orphans.delete) {
+        const want = Array.isArray(body.orphans.delete) ? body.orphans.delete : [];
+        if (!want.length) {
+          return json({ error: 'no_keys',
+            message: '消す鍵を1つずつ列挙してください。まとめて消す指定は受け付けません。' }, 400);
+        }
+        if (want.length > 100) {
+          return json({ error: 'too_many', message: '1回に消せるのは100件までです。',
+            given: want.length }, 413);
+        }
+        const deleted = [], refusedLive = [], badForm = [], notFound = [], failed = [];
+        const seenK = Object.create(null);
+        for (const raw of want) {
+          const k = String(raw || '');
+          if (!/^worktr7:[a-z]{2}:[0-9a-f]{40}$/.test(k)) { badForm.push(k.slice(0, 60)); continue; }
+          if (seenK[k]) continue;
+          seenK[k] = true;
+          // 生きている鍵は消さない。ここが最後の砦。
+          if (Object.prototype.hasOwnProperty.call(live, k)) {
+            refusedLive.push({ key: k, 作品: live[k].title || live[k].id });
+            continue;
+          }
+          let v = null;
+          try { const g = await KVo.get(k); v = g ? JSON.parse(g) : null; } catch (e) { v = null; }
+          if (v === null) { notFound.push(k); continue; }
+          try {
+            await KVo.delete(k);
+            const again = await KVo.get(k);
+            if (again !== null) { failed.push({ key: k, 理由: '消えていません' }); continue; }
+            deleted.push({ key: k, title: v.title || '',
+              件数: Array.isArray(v.items) ? v.items.length : 0 });
+          } catch (e) {
+            failed.push({ key: k, 理由: (e && e.message) ? e.message : String(e) });
+          }
+        }
+        return json({
+          ok: failed.length === 0 && badForm.length === 0,
+          指定: want.length,
+          消した: deleted.length,
+          生きているので拒否: refusedLive.length,
+          元から無かった: notFound.length,
+          形が不正: badForm.length,
+          失敗: failed.length,
+          deleted, refusedLive, notFound, badForm, failed,
+          生きている鍵: Object.keys(live).length,
+        });
+      }
+
       // 鍵を並べる。1回で見きれない場合は cursor で続ける。
       const lim = Math.min(30, Math.max(1, parseInt(body.orphans.limit, 10) || 10));
       const lst = await KVo.list({ prefix: `worktr7:${oTarget}:`,
