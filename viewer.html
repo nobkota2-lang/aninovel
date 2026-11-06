@@ -5613,36 +5613,71 @@ function parseText(text){
   state.currentPage=0;_resolveSpeakersV2();_rescueChapterSpeakers();_mergeAliasCharacters();_pruneWeakCharacters();render();_autoAssignIcons();/* AI補正は自動実行しない。取り込むたびに数百回APIを叩き、1日の無料枠(10,000ニューロン)を使い切るため。作者・オーナーが aiRefineSpeakers() を明示的に呼んだときだけ動かす。 */
 }
 
-async function uploadInlineVideo(file){
+// 挿絵と動画の送信。
+//
+// 2026-11-07: ここで「画像アップロード失敗: Failed to fetch」が出ていた。
+//   原因は3つ重なっていた。
+//   (1) サーバが本文を読まずに 401/415 を返すと接続が切られ、理由が届かない
+//       → functions/api/media/[[path]].js 側で本文を読み捨ててから返すようにした
+//   (2) ここで j.error(英語)だけを見て j.message(日本語の説明)を捨てていた
+//   (3) 画像の上限がサーバ10MB・ここ50MBと食い違い、送ってから落ちていた
+//   送る前に分かることは送る前に言う。落ちたら理由を残す。
+var MEDIA_IMAGE_TYPES = ['image/png','image/jpeg','image/jpg','image/webp','image/gif'];
+var MEDIA_VIDEO_TYPES = ['video/mp4','video/webm','video/ogg','video/quicktime'];
+var MEDIA_IMAGE_MAX = 10*1024*1024;   // functions/api/media の MAX_IMAGE_BYTES と合わせる
+var MEDIA_VIDEO_MAX = 50*1024*1024;   // 同 MAX_VIDEO_BYTES
+
+function _mediaMB(n){ return (n/1024/1024).toFixed(1); }
+
+async function _uploadMedia(file, kind){
+  var isImg = (kind === 'image');
+  var label = isImg ? '画像' : '動画';
+  var types = isImg ? MEDIA_IMAGE_TYPES : MEDIA_VIDEO_TYPES;
+  var max   = isImg ? MEDIA_IMAGE_MAX   : MEDIA_VIDEO_MAX;
+  var names = isImg ? 'PNG・JPEG・WebP・GIF' : 'MP4・WebM・Ogg・MOV';
   if(!file) return;
-  if(!/^video\//.test(file.type)){ alert('動画ファイルを選んでください'); return; }
-  if(file.size > 50*1024*1024){ alert('動画が大きすぎます（50MBまで）'); return; }
+  var ct = (file.type||'').split(';')[0].trim().toLowerCase();
+  // 送る前に形式を見る。サーバが受けない形式を送っても、接続が切れて
+  // 理由が読めないだけなので、ここで止めて名前を挙げて伝える。
+  if(types.indexOf(ct) < 0){
+    alert('この形式は使えません' + (ct ? '（' + ct + '）' : '') + '\n\n'
+        + label + 'は ' + names + ' が使えます。'
+        + (/hei[cf]/.test(ct) ? '\n\niPhone の HEIC は、書き出し設定を「互換性優先」にするか、JPEG に変換してからお試しください。' : ''));
+    return;
+  }
+  if(file.size > max){
+    alert(label + 'が大きすぎます。\n\nいまのファイル: ' + _mediaMB(file.size) + ' MB\n'
+        + '上限: ' + _mediaMB(max) + ' MB');
+    return;
+  }
   var wid=_workParam;
   if(!wid){ alert('先に作品を保存してください'); return; }
   var mid=(state.editingItem&&state.editingItem.data&&state.editingItem.data.id)||_uid('m');
   try{
-    var res=await fetch('/api/media/'+encodeURIComponent(wid)+'/'+encodeURIComponent(mid),{method:'PUT',headers:{'Content-Type':file.type},body:file});
-    var j=await res.json();
-    if(!res.ok||!j.ok){ throw new Error(j.error||('HTTP '+res.status)); }
+    var res=await fetch('/api/media/'+encodeURIComponent(wid)+'/'+encodeURIComponent(mid),{method:'PUT',headers:{'Content-Type':ct},body:file});
+    var j=null;
+    try{ j=await res.json(); }catch(e2){ j=null; }
+    if(!res.ok||!j||!j.ok){
+      // サーバの日本語の説明を優先する。無いときだけ英語の符丁を出す。
+      throw new Error((j&&(j.message||j.error))||('HTTP '+res.status));
+    }
     state.editingItem.data.url=j.url+'?t='+Date.now();
     render();
-  }catch(e){ alert('動画アップロード失敗: '+e.message); }
+  }catch(e){
+    var m=(e&&e.message)||String(e);
+    if(/Failed to fetch|NetworkError|Load failed/i.test(m)){
+      // 応答を受け取れなかった。理由はサーバ側にあって、ここには届いていない。
+      m='送信の途中で接続が切れました。\n\n'
+       + 'ログインが切れているか、通信が不安定な可能性があります。\n'
+       + 'ページを再読み込みして、ログインし直してからもう一度お試しください。\n\n'
+       + '（元の表示: ' + m + '）';
+    }
+    console.error('[media] '+label+'アップロード失敗', e);
+    alert(label+'アップロード失敗: '+m);
+  }
 }
-async function uploadInlineImage(file){
-  if(!file) return;
-  if(!/^image\//.test(file.type)){ alert('画像ファイルを選んでください'); return; }
-  if(file.size > 50*1024*1024){ alert('画像が大きすぎます（50MBまで）'); return; }
-  var wid=_workParam;
-  if(!wid){ alert('先に作品を保存してください'); return; }
-  var mid=(state.editingItem&&state.editingItem.data&&state.editingItem.data.id)||_uid('m');
-  try{
-    var res=await fetch('/api/media/'+encodeURIComponent(wid)+'/'+encodeURIComponent(mid),{method:'PUT',headers:{'Content-Type':file.type},body:file});
-    var j=await res.json();
-    if(!res.ok||!j.ok){ throw new Error(j.error||('HTTP '+res.status)); }
-    state.editingItem.data.url=j.url+'?t='+Date.now();
-    render();
-  }catch(e){ alert('画像アップロード失敗: '+e.message); }
-}
+async function uploadInlineVideo(file){ return _uploadMedia(file, 'video'); }
+async function uploadInlineImage(file){ return _uploadMedia(file, 'image'); }
 function _guardEdit(){
   if(!_isTranslatedView()) return true;
   var src=_srcLang(), en=(state.lang==='en');

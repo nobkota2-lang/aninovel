@@ -64,19 +64,34 @@ function transformable(ct){
 }
 
 export async function onRequestPut(context){
+  // 断る前に、送られてきた本文を読み捨てる。
+  //
+  // 2026-11-07: ここは本文を読まずに 401/403/415 を返していた。
+  //   アップロードの途中でサーバが応答を返すと接続が切られ、ブラウザは
+  //   HTTP の応答を受け取れない。編集画面には
+  //   「画像アップロード失敗: Failed to fetch」としか出ず、
+  //   せっかく用意した「ログインが必要です」「対応していない形式です」という
+  //   理由が利用者に一度も届いていなかった。理由を返すつもりなら、
+  //   相手が送り終わるまで受け取ってから返さなければならない。
+  //   本文は最大50MBで頭打ちなので、読み捨てても害はない。
+  const bail = async (body, status) => {
+    try { await context.request.arrayBuffer(); } catch(e) { /* 途中で切れていてもよい */ }
+    return json(body, status);
+  };
+
   const bucket = context.env.AUDIO_R2;
-  if(!bucket) return json({ error: 'R2 bucket "AUDIO_R2" 未バインド' }, 500);
+  if(!bucket) return bail({ error: 'R2 bucket "AUDIO_R2" 未バインド' }, 500);
   const parts = context.params.path || [];
   const workId = parts[0], mediaId = parts[1];
-  if(!ID_RE.test(workId||''))  return json({ error: 'invalid work id' }, 400);
-  if(!MID_RE.test(mediaId||'')) return json({ error: 'invalid media id' }, 400);
+  if(!ID_RE.test(workId||''))  return bail({ error: 'invalid work id' }, 400);
+  if(!MID_RE.test(mediaId||'')) return bail({ error: 'invalid media id' }, 400);
 
   // 誰でも差し替えられてはいけない。
   let who = null;
   try { who = await whoAmI(context.request, context.env); } catch(e) { who = null; }
-  if(!who) return json({ error:'unauthorized', message:'挿絵の登録にはログインが必要です。' }, 401);
+  if(!who) return bail({ error:'unauthorized', message:'挿絵の登録にはログインが必要です。' }, 401);
   if(!hasRole(who, 'author') && !hasRole(who, 'owner')){
-    return json({ error:'forbidden', message:'作者かオーナーのアカウントが必要です。' }, 403);
+    return bail({ error:'forbidden', message:'作者かオーナーのアカウントが必要です。' }, 403);
   }
   // 自分の作品か、オーナーか。作品の持ち主は本体の ownerEmail で判断する。
   if(!hasRole(who, 'owner')){
@@ -87,15 +102,19 @@ export async function onRequestPut(context){
       owner = raw ? (JSON.parse(raw) || {}).ownerEmail : null;
     } catch(e){
       // 誰の作品か調べられなかった。分からないまま書かせない。
-      return json({ error:'unavailable', message:'いま権限を確認できません。時間をおいてお試しください。' }, 503);
+      return bail({ error:'unavailable', message:'いま権限を確認できません。時間をおいてお試しください。' }, 503);
     }
     if(owner && String(owner).toLowerCase() !== String(who.email).toLowerCase()){
-      return json({ error:'forbidden', message:'この作品の挿絵を変える権限がありません。' }, 403);
+      return bail({ error:'forbidden', message:'この作品の挿絵を変える権限がありません。' }, 403);
     }
   }
 
   const ct = (context.request.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
-  if(OK_TYPES.indexOf(ct) < 0) return json({ error: 'unsupported content-type: ' + ct }, 415);
+  if(OK_TYPES.indexOf(ct) < 0){
+    return bail({ error: 'unsupported content-type: ' + ct,
+      message: '対応していない形式です (' + (ct || '種類不明')
+             + ')。画像は PNG・JPEG・WebP・GIF、動画は MP4・WebM・Ogg・MOV です。' }, 415);
+  }
 
   const buf = await context.request.arrayBuffer();
   if(!buf || buf.byteLength === 0) return json({ error: 'empty body' }, 400);
