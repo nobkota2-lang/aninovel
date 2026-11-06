@@ -113,6 +113,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1940年',
     source: '青空文庫（底本「太宰治全集3」ちくま文庫、筑摩書房 1988年／入力 金川一之／校正 高橋美奈子）',
+    sourceEn:
+      'Aozora Bunko; base text published by Chikuma Shobō, 1988. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: 'メロスは激怒した。必ず、かの邪智暴虐の王を除かなければならぬと決意した。',
     intro:
       '冒頭の一行だけで、もう物語が走り出しています。羊飼いのメロスが、' +
@@ -135,6 +138,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1924年',
     source: '青空文庫（底本「注文の多い料理店」新潮文庫、新潮社 1990年／入力 土屋隆／校正 noriko saito）',
+    sourceEn:
+      'Aozora Bunko; base text published by Shinchōsha, 1990. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '二人の若い紳士が、すっかりイギリスの兵隊のかたちをして、' +
           'ぴかぴかする鉄砲をかついで、白熊のような犬を二疋つれて、' +
           'だいぶ山奥の、木の葉のかさかさしたとこを、こんなことを' +
@@ -161,6 +167,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1929年',
     source: '青空文庫（底本「江戸川乱歩全集 第5巻 押絵と旅する男」光文社文庫、光文社 2005年／入力 砂場清隆／校正 門田裕志）',
+    sourceEn:
+      'Aozora Bunko; base text published by Kōbunsha, 2005. The volunteers who transcribed ' +
+      'and proofread it are credited on the Japanese page',
     lead: 'この話を、私が夢で見たのか、それとも私の一時的狂気の幻影であったのか、' +
           'いずれにしても、私は夢を見る性質ではないし、……',
     intro:
@@ -184,6 +193,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1915年',
     source: '青空文庫（底本「芥川龍之介全集1」ちくま文庫、筑摩書房 1986年／入力 平山誠・野口英司／校正 もりみつじゅんじ）',
+    sourceEn:
+      'Aozora Bunko; base text published by Chikuma Shobō, 1986. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: 'ある日の暮方の事である。一人の下人が、羅生門の下で雨やみを待っていた。',
     intro:
       '職を失った下人が、荒れ果てた羅生門の下で雨宿りをしています。' +
@@ -216,6 +228,11 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1904年',
     source: '青空文庫（底本「小泉八雲全集第八卷 家庭版」第一書房 1937年／訳 田部隆次／入力 京都大学電子テクスト研究会入力班（大石尺）／校正 京都大学電子テクスト研究会校正班（大久保ゆう））',
+    sourceEn:
+      'The English text here is Hearn\'s own, from Kwaidan: Stories and Studies of Strange ' +
+      'Things (1904) — not a translation back from the Japanese. The Japanese text on this ' +
+      'site is Ryūji Tabe\'s 1937 translation, from Aozora Bunko, whose colophon is on the ' +
+      'Japanese page',
     lead: '武蔵の国のある村に、茂作、巳之吉と云う二人の樵夫がいた。',
     intro:
       '吹雪の晩、渡し守の小屋に閉じ込められた二人の樵。' +
@@ -239,6 +256,9 @@ export const WORK_NOTES = [
     year: '1934年（没後発表）',
     yearEn: '1934 (published posthumously)',
     source: '青空文庫（底本「新編 銀河鉄道の夜」新潮文庫、新潮社 1989年／入力 中村隆生・野口英司／校正 野口英司）',
+    sourceEn:
+      'Aozora Bunko; base text published by Shinchōsha, 1989. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '「ではみなさんは、そういうふうに川だと云われたり、' +
           '乳の流れたあとだと云われたりしていたこのぼんやりと白いものが' +
           'ほんとうは何かご承知ですか。」',
@@ -263,6 +283,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1905〜1906年',
     source: '青空文庫（底本「夏目漱石全集1」ちくま文庫、筑摩書房 1987年／入力 柴田卓治／校正 渡部峰子（一）、おのしげひこ（二、五）、田尻幹二（三）、高橋真也（四、七、八、十、十一）、しず（六）、瀬戸さえ子（九））',
+    sourceEn:
+      'Aozora Bunko; base text published by Chikuma Shobō, 1987. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '吾輩は猫である。名前はまだ無い。',
     intro:
       '名前のない猫が、英語教師・珍野苦沙弥の家に住み着き、' +
@@ -288,6 +311,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1906年',
     source: '青空文庫（底本「ちくま日本文学全集 夏目漱石」筑摩書房 1992年／入力 真先芳秋／校正 柳沢成雄）',
+    sourceEn:
+      'Aozora Bunko; base text published by Chikuma Shobō, 1992. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '親譲りの無鉄砲で小供の時から損ばかりしている。',
     intro:
       '無鉄砲な江戸っ子が、四国の中学校へ数学教師として赴任します。' +
@@ -311,6 +337,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '',
     source: '青空文庫（底本「日本の名随筆70 語」作品社 1988年／入力 大野晋／校正 多羅尾伴内）',
+    sourceEn:
+      'Aozora Bunko; base text published by Sakuhinsha, 1988. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '',
     intro:
       '劇作家・岸田國士が、舞台の上で話される言葉について書いた一編です。' +
@@ -337,6 +366,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '',
     source: '青空文庫（底本「綺堂むかし語り」光文社時代小説文庫、光文社 1995年／入力 tatsuki・『鳩よ！』編集部／校正 松永正敏）',
+    sourceEn:
+      'Aozora Bunko; base text published by Kōbunsha, 1995. The volunteers who transcribed ' +
+      'and proofread it are credited on the Japanese page',
     lead: '',
     intro:
       '『半七捕物帳』で知られる岡本綺堂が、' +
@@ -359,6 +391,9 @@ export const WORK_NOTES = [
     kind: 'aozora',
     year: '1939年',
     source: '青空文庫（底本「新樹の言葉」新潮文庫、新潮社 1982年／入力 田中久太郎／校正 鈴木厚司）',
+    sourceEn:
+      'Aozora Bunko; base text published by Shinchōsha, 1982. The volunteers who ' +
+      'transcribed and proofread it are credited on the Japanese page',
     lead: '',
     intro:
       '五人きょうだいが、ひとつの物語を順番に語り継いでいきます。' +

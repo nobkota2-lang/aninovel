@@ -1028,10 +1028,21 @@ async function workIntroPage(env, slug, lang) {
   // 英語の導線がここで切れていた。
   body += '<p class="cta"><a class="btn" href="' + viewerUrl(work.id, lang) + '">'
         + t.read + '</a></p>\n';
-  if (src && lang === 'ja') {
-    body += '<p class="src">' + t.source + htmlEsc(src) + t.pd + '</p>\n';
-  } else if (lang === 'en') {
-    body += '<p class="src">' + t.source + 'Aozora Bunko' + t.pd + '</p>\n';
+  // 出典は言語ごとに別の欄を持つ。英語ページに日本語を出さない決まりがあるので、
+  // 入力者・校正者の氏名は日本語ページ側だけに置き、英語側はそこへ案内する。
+  // 勝手にローマ字読みを当てるのは推測になるため、氏名は訳さない。
+  //
+  // 2026-11-07: ここは英語ページで必ず 'Aozora Bunko' と
+  //   「著作権の保護期間が満了した」を出していた。そのため、オーナー自身の
+  //   オリジナル作品の英語ページにまで「出典は青空文庫」「著作権は切れている」と
+  //   書いていた。どちらも事実と違う。日本語ページには出典行が無いので、
+  //   英語だけで起きていた。出典欄を持たない作品では、行ごと出さない。
+  //   公開する文に、確かめていない出典や権利の断りを混ぜてはいけない。
+  if (lang === 'ja') {
+    if (src) body += '<p class="src">' + t.source + htmlEsc(src) + t.pd + '</p>\n';
+  } else {
+    const srcEn = publicSource(note.sourceEn);
+    if (srcEn) body += '<p class="src">' + t.source + htmlEsc(srcEn) + t.pd + '</p>\n';
   }
   // 読み上げを売りにしているページなので、合成音声である断りもここに置く。
   body += '<p class="src">' + t.synth + '</p>\n';
