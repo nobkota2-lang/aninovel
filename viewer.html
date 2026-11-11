@@ -2617,8 +2617,8 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
   var MAXB=opts.maxBytes||8*1024*1024;   // 1回の送信の目安
   var MAXN=opts.chunk||25;               // 1回の件数上限
   var keys=await _idbKeysByWork(srcWorkId);
-  var total=keys.length,sent=0,fail=0,bytes=0,skipped=0,oversize=0;
-  if(!total)return {total:0,fail:0,bytes:0,skipped:0,oversize:0};
+  var total=keys.length,sent=0,fail=0,bytes=0,skipped=0,oversize=0,rehash=0;
+  if(!total)return {total:0,fail:0,bytes:0,skipped:0,oversize:0,rehash:0};
   // 「既にサーバにあるか」は言語ごとに持つ。
   // 1つにまとめていたため、英語を送るときに日本語の記録と突き合わせてしまい、
   // 同じ itemId の日本語音声を英語で上書きする状態だった。
@@ -2683,7 +2683,23 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
       if(_lh&&_lh===_srvH){skipped++;sent++;_lr=null;continue;}
       _lr=null;   // 違うので送る
     } else if(_srvH===1&&!(opts.copyTo&&opts.copyTo!==srcWorkId)){
-      skipped++;sent++;continue;
+      // サーバにハッシュの無い古い記録がある場合。
+      //
+      // 2026-11-12: ここは「あるから送らない」で無条件に飛ばしていた。
+      //   ハッシュが無い記録は中身を照合できないので、本文や話者を変えて
+      //   音声を作り直しても、新しい音声が永久にサーバへ届かない。読者は
+      //   古い音声を聴き続け、しかも黙って起きる。
+      //   『吾輩は猫である』は4,726件中786件がこの状態だった
+      //   (サイト全体で8,626件中867件)。
+      //   手元にハッシュ付きの音声があるなら、一度だけ送り直す。送れば
+      //   サーバ側にハッシュが載り、次からは上の比較に乗って普通に動く。
+      //   手元にハッシュが無いときは送っても状態が変わらず、公開のたびに
+      //   送り直すことになるので、従来どおり飛ばす。
+      var _or=null; try{_or=await _idbGet(srcWorkId,kk.itemId,kk.lang);}catch(e){}
+      var _oh=_or&&_or.meta&&_or.meta.hash;
+      _or=null;
+      if(!_oh){skipped++;sent++;continue;}
+      rehash++;
     }
     try{rec=await _idbGet(srcWorkId,kk.itemId,kk.lang);}catch(e){}
     if(!rec||!rec.blob)continue;
@@ -2713,7 +2729,8 @@ async function _audioUploadStreamed(srcWorkId,destWorkId,opts){
     if(acc>=MAXB||n>=MAXN)await flush();
   }
   await flush();
-  return {total:total,fail:fail,bytes:bytes,skipped:skipped,oversize:oversize};
+  if(rehash)console.info('[Upload] ハッシュの無かった古い記録を送り直しました: '+rehash+'件');
+  return {total:total,fail:fail,bytes:bytes,skipped:skipped,oversize:oversize,rehash:rehash};
 }
 function _idbListByWork(workId){
   return _idbOpen().then(function(db){
@@ -8560,7 +8577,7 @@ async function publishMyWork(){
               onProgress:function(a,b){_updateProgress(_pg,a,b);}});
           }finally{_hideProgress(_pg);}
           if(_ar.total){
-            console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' (送信'+Math.round(_ar.bytes/1e6)+'MB / 既存スキップ'+_ar.skipped+'件)');
+            console.info('[Publish] 音声アップロード: 成功'+(_ar.total-_ar.fail)+'/'+_ar.total+' (送信'+Math.round(_ar.bytes/1e6)+'MB / 既存スキップ'+_ar.skipped+'件'+(_ar.rehash?' / ハッシュ補充'+_ar.rehash+'件':'')+')');
             if(_ar.fail>0)alert(_L('音声'+_ar.fail+'件のサーバー保存に失敗しました。\nその分は一部の端末で標準音声(低品質)になります。再投稿で再試行できます。',
               _ar.fail+' audio files could not be saved on the server.\nOn some devices those lines use the standard voice, at lower quality. Post again to retry.'));
           }
@@ -8605,7 +8622,7 @@ async function publishMyWork(){
         _ar2=await _audioUploadStreamed(_workParam,_workParam,{onProgress:function(a,b){_updateProgress(_pg2,a,b);}});
       }finally{_hideProgress(_pg2);}
       if(_ar2.total){
-        console.info('[Publish-Owner] 音声アップロード: 成功'+(_ar2.total-_ar2.fail)+'/'+_ar2.total+' (送信'+Math.round(_ar2.bytes/1e6)+'MB / 既存スキップ'+_ar2.skipped+'件)');
+        console.info('[Publish-Owner] 音声アップロード: 成功'+(_ar2.total-_ar2.fail)+'/'+_ar2.total+' (送信'+Math.round(_ar2.bytes/1e6)+'MB / 既存スキップ'+_ar2.skipped+'件'+(_ar2.rehash?' / ハッシュ補充'+_ar2.rehash+'件':'')+')');
         if(_ar2.fail>0)console.warn('音声'+_ar2.fail+'件のサーバー保存に失敗');
       }
       var _wp2={novel:state.novel,chapters:state.chapters,characters:state.characters,content:state.content,displaySettings:state.displaySettings,version:'2.2'};
