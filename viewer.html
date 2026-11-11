@@ -8628,13 +8628,42 @@ async function publishMyWork(){
           if(!_need[f])_meta[f+_sfx]=_pv[f+_sfx];
         });
         if(_pv&&_pv['tags'+_sfx]&&!_meta['tags'+_sfx])_meta['tags'+_sfx]=_pv['tags'+_sfx];
+        // 機械翻訳の結果をそのまま採用しない。
+        //
+        // 2026-11-11: 『坊ちゃん』の題を正式表記の『坊っちゃん』に直したとき、
+        //   ここが「原文が変わった」と判定して題を訳し直した。機械翻訳は
+        //   固有名詞をそのまま返したので、titleEn に日本語の「坊っちゃん」が
+        //   入り、手で付けた "Botchan" が消えた。英語モードのポータルと
+        //   ビューアに日本語が出た。英語モードは日本語の書体が入っていない
+        //   パソコンを前提にしているので、ここに日本語が入ってはいけない。
+        //   訳せなかったときは前の手書きを残す。残すものが無ければ欄ごと
+        //   送らない(サーバは送られなかった欄を前の値のまま残す)。
+        var _trBad=[];
+        // 訳として使えるか。原文(src)と見比べて判定する。
+        var _trUsable=function(v,src){
+          var t=String(v==null?'':v).trim();
+          var o=String(src==null?'':src).trim();
+          if(!t) return false;
+          if(t===o) return false;                       // 訳されずに戻ってきた
+          // 英語の欄に日本語が入るのを防ぐ(かな・カナ・漢字・半角カナ)
+          if(_tgt==='en' && /[\u3040-\u30FF\u3400-\u9FFF\uFF66-\uFF9D]/.test(t)) return false;
+          return true;
+        };
+        var _trSet=function(f,v){
+          if(_trUsable(v,_meta[f])){ _meta[f+_sfx]=v; return true; }
+          if(_pv&&_pv[f+_sfx]) _meta[f+_sfx]=_pv[f+_sfx];   // 前の手書きを守る
+          else delete _meta[f+_sfx];                        // 送らない＝サーバ側の前の値が残る
+          _trBad.push(f+_sfx+'='+JSON.stringify(String(v==null?'':v).slice(0,40)));
+          return false;
+        };
         if(_need.title||_need.author||_need.description){
           var _tr=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:_tgt,source:_src,title:_meta.title||'',author:_meta.author||'',items:[{id:'d',text:_meta.description||''}],characters:[]})});
           if(_tr.ok){var _tj=await _tr.json();if(_tj){
-            if(_need.title&&_tj.title)_meta['title'+_sfx]=_tj.title;
-            if(_need.author&&_tj.author)_meta['author'+_sfx]=_tj.author;
-            if(_need.description&&_tj.items&&_tj.items[0]&&_tj.items[0].text)_meta['description'+_sfx]=_tj.items[0].text;
+            if(_need.title)_trSet('title',_tj.title);
+            if(_need.author)_trSet('author',_tj.author);
+            if(_need.description)_trSet('description',_tj.items&&_tj.items[0]&&_tj.items[0].text);
           }}
+          if(_trBad.length)console.warn('[Publish-Owner] 機械翻訳を採用しませんでした(前の訳を維持):',_trBad.join(' / '));
           console.info('[Publish-Owner] 原文が変わったので訳を更新:',Object.keys(_need).filter(function(k){return _need[k];}).join(', '));
         }else{
           console.info('[Publish-Owner] 原文に変更なし → 手書きの訳を維持しました');
