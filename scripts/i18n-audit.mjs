@@ -28,6 +28,13 @@
 //   1. alert / confirm / prompt / showToast に渡る文字列
 //   2. HTML の title= / aria-label= / placeholder= / alt= に入る文字列
 //   3. .textContent = / .innerText = に入る文字列
+//   4. 変数に組み立ててから alert などに渡す文字列
+//
+// 除外の印
+//   if(英語){…}else{日本語} のように言語で分岐した日本語側の枝は、
+//   日本語で正しい。検査ツールはその形を読めないので、
+//   /* i18n-ok:start 理由 */ 〜 /* i18n-ok:end */ で囲んで意図を明示する。
+//   印の無い日本語は従来どおり報告するので、抜け道にはならない。
 //
 // 判定
 //   日本語を含むリテラルが
@@ -118,6 +125,18 @@ const wrapped = {
   has(i) { return wrappedRanges.some(r => i >= r[0] && i <= r[1]); }
 };
 
+// 言語で分岐した日本語側の枝を除く(上の「除外の印」を参照)
+const okRegions = [];
+{
+  const re = /\/\*\s*i18n-ok:start[\s\S]*?\*\//g;
+  let m;
+  while ((m = re.exec(html))) {
+    const e = html.indexOf('i18n-ok:end', m.index);
+    okRegions.push([m.index, e < 0 ? m.index + m[0].length : e + 'i18n-ok:end'.length]);
+  }
+}
+const inOk = (i) => okRegions.some((r) => i >= r[0] && i <= r[1]);
+
 const lits = literals(html);
 const byIdx = new Map(lits.map(l => [l.idx, l]));
 
@@ -140,7 +159,7 @@ for (const fn of CALLS) {
     for (const l of lits) {
       if (l.idx < start || l.idx > end) continue;
       if (!JA.test(l.text)) continue;
-      if (wrapped.has(l.idx)) continue;
+      if (wrapped.has(l.idx) || inOk(l.idx)) continue;
       if (covered(l.text)) continue;
       problems.push({ kind: fn, line: lineOf(l.idx), text: l.text.slice(0, 70) });
     }
@@ -153,7 +172,7 @@ let am;
 while ((am = attrRe.exec(html))) {
   const v = am[2];
   if (!JA.test(v)) continue;
-  if (covered(v)) continue;
+  if (inOk(am.index) || covered(v)) continue;
   problems.push({ kind: am[1], line: lineOf(am.index), text: v.slice(0, 70) });
 }
 
@@ -161,8 +180,33 @@ while ((am = attrRe.exec(html))) {
 for (const m of html.matchAll(/\.(?:textContent|innerText)\s*=\s*(['"])((?:[^'"\\\n]|\\.)*)\1/g)) {
   const v = m[2];
   if (!JA.test(v)) continue;
-  if (covered(v)) continue;
+  if (inOk(m.index) || covered(v)) continue;
   problems.push({ kind: 'textContent', line: lineOf(m.index), text: v.slice(0, 70) });
+}
+
+// ---- 4. 変数に組み立ててから渡している文 --------------------------------
+// これまでの穴。alert(msg) のように渡す側が変数だと、呼び出しの括弧の中に
+// 日本語リテラルが無いので見逃していた。変数名をたどって代入元を調べる。
+const VIA = /(?<![\w.$])(alert|confirm|prompt|showToast|_showProgress)\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+let vm2;
+while ((vm2 = VIA.exec(html))) {
+  const fn = vm2[1], name = vm2[2];
+  const from = Math.max(0, vm2.index - 6000);
+  const scope = html.slice(from, vm2.index);
+  const asg = new RegExp('(?:var\\s+|let\\s+|const\\s+)?' + name.replace(/\$/g, '\\$')
+                         + '\\s*(?:\\+)?=\\s*([^;\\n]{0,400})', 'g');
+  let am2;
+  while ((am2 = asg.exec(scope))) {
+    const rhs = am2[1];
+    const base = from + am2.index + am2[0].length - rhs.length;
+    for (const l of literals(rhs)) {
+      if (!JA.test(l.text)) continue;
+      const abs = base + l.idx;
+      if (wrapped.has(abs) || inOk(abs)) continue;
+      if (covered(l.text)) continue;
+      problems.push({ kind: fn + '\u2190変数', line: lineOf(abs), text: l.text.slice(0, 70) });
+    }
+  }
 }
 
 // ---- まとめ -----------------------------------------------------------
