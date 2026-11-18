@@ -26,7 +26,7 @@
 //   CACHE_VERSION を上げ忘れても自力で直る。
 // ------------------------------------------------------------
 
-const CACHE_VERSION = 'v34-2026-11-18b';
+const CACHE_VERSION = 'v35-2026-11-18c';
 const CACHE_NAME = 'aninovel-' + CACHE_VERSION;
 
 // オフライン用の最小限のプリキャッシュ（失敗しても install は止めない）
