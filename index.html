@@ -9,7 +9,7 @@
   <meta name="description" content="夏目漱石『吾輩は猫である』、宮沢賢治『銀河鉄道の夜』、芥川龍之介『羅生門』など、青空文庫の名作を、アニメ風の吹き出しと登場人物ごとの読み上げで読めます。登録なしで1日5作品まで無料。">
   <meta name="keywords" content="小説,アニメ,吹き出し,読書,投稿,音声読み上げ,Web小説,オリジナル小説">
   <meta name="author" content="アニノベル">
-  <meta name="theme-color" content="#3D3A36">
+  <meta name="theme-color" content="#1B257B">
   <link rel="canonical" href="https://aninovel.com/">
   <link rel="alternate" hreflang="ja" href="https://aninovel.com/">
   <link rel="alternate" hreflang="en" href="https://aninovel.com/en/">
@@ -319,17 +319,19 @@ body.dark .campaign-ribbon {
 
 <!-- ヘッダー -->
 <header class="portal-header">
+  <!-- 2026-11-18 ブランド刷新: 文字ロゴを画像ロゴに。プランはキャンペーン帯に一本化、
+       テーマ切替はフッターへ移した(#theme-toggle の id は portal.js が使うので変えない)。 -->
   <a href="index.html" class="logo">
-    <span class="logo-text">アニノベル</span>
-    <span class="logo-sub">作品ポータル</span>
+    <img class="logo-img" src="images/brand/aninovel-logo-white.png" alt="aninovel.com" width="185" height="38">
   </a>
+  <nav class="header-nav">
+    <a href="#main">作品</a>
+    <a href="#ranking-title">ランキング</a>
+    <a href="#about-section">アニノベルとは</a>
+  </nav>
   <div class="header-actions">
-    <span id="aninovel-lang-slot" style="display:inline-flex;align-items:center;margin-right:6px"></span>
-    <a href="#" class="header-plan-link" data-i18n="nav.plan"
-       title="料金とプランを見る（いまはキャンペーン期間中につき無料）"
-       onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">&#x1F48E; プラン</a>
+    <span id="aninovel-lang-slot" style="display:inline-flex;align-items:center"></span>
     <div id="auth-area"></div>
-    <button class="btn-icon" id="theme-toggle" title="テーマ切替">&#x1F313;</button>
   </div>
 </header>
 
@@ -342,35 +344,43 @@ body.dark .campaign-ribbon {
 
 <!-- ヒーロー -->
 <section class="portal-hero">
-  <h1 class="font-serif">物語の世界へようこそ</h1>
-  <p class="hero-lead">アニメ風の吹き出しとキャラクターで小説が動き出す、新しい読書体験。</p>
-  <p>オリジナル小説を読んで、投票して、お気に入りを見つけよう</p>
-  <div class="hero-cta">
-    <a href="#main" class="btn btn-primary btn-lg">📖 作品を見る</a>
-    <a href="#about-section" class="btn btn-ghost btn-lg">アニノベルとは？</a>
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <p class="hero-badge">アニノベル</p>
+      <h1 class="hero-title"><span>アニメのように</span><span>楽しむ小説</span></h1>
+      <p class="hero-lead"><span>日本が世界に誇るアニメ。</span><span>でも、すべての小説をアニメにすることはできない。</span><span>登場人物がキャラクターになり、吹き出しでせりふを語れば、</span><span>物語はぐっとアニメに近づく。</span></p>
+      <p class="hero-punch">それが、アニノベル。</p>
+      <div class="hero-cta">
+        <a href="#main" class="btn btn-primary btn-lg">作品を読む</a>
+        <span class="hero-note">登録なしで1日5作品まで無料</span>
+      </div>
+      <div class="hero-stats" id="hero-stats"></div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <img class="hero-cover" src="images/brand/hero-cover-ginga.jpg" alt="" width="256" height="384">
+      <div class="hero-reader">
+        <div class="hero-reader-head"><span class="hero-reader-title">銀河鉄道の夜</span><span class="hero-reader-author">宮沢賢治</span></div>
+        <div class="hero-line"><span class="hero-avatar">ジ</span><span class="hero-say"><span class="hero-name">ジョバンニ</span><span class="hero-bubble">カムパネルラ、また僕たち二人きりになったねえ、どこまでもどこまでも一緒に行こう。</span></span></div>
+        <div class="hero-line hero-line-r"><span class="hero-avatar">カ</span><span class="hero-say"><span class="hero-name">カムパネルラ</span><span class="hero-bubble">うん。僕だってそうだ。</span></span></div>
+      </div>
+    </div>
   </div>
-  <p class="hero-note">
-    登録なしで1日5作品まで読めます &middot;
-    <a href="#" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">無料の会員登録でもっと読む</a>
-  </p>
-  <div class="hero-stats" id="hero-stats"></div>
 </section>
 
 <!-- サイト説明 -->
 <main id="main" class="portal-container">
 
   <!-- 作品一覧 -->
-  <h2 class="section-title"><span class="icon">&#x1F4DA;</span> 作品一覧</h2>
+  <h2 class="section-title" id="works-title">作品一覧</h2>
   <div class="works-grid" id="works-grid"></div>
 
   <!-- ランキング -->
-  <h2 class="section-title"><span class="icon">&#x1F3C6;</span>ランキング</h2>
+  <h2 class="section-title" id="ranking-title">ランキング</h2>
   <div class="ranking-section">
+    <!-- 2026-11-18: 並び替えは「人気順/新着順」の2つに。文字数は上の長さ絞り込みで足りる。 -->
     <div class="ranking-controls">
-      <button class="ranking-sort-btn active" data-sort="votes">&#x2764; 投票数</button>
-      <button class="ranking-sort-btn" data-sort="newest">&#x1F195; 新着順</button>
-      <button class="ranking-sort-btn" data-sort="chars">&#x1F4DD; 文字数</button>
-      <button class="ranking-sort-btn" data-sort="pages">&#x1F4D6; ページ数</button>
+      <button class="ranking-sort-btn active" data-sort="votes">人気順</button>
+      <button class="ranking-sort-btn" data-sort="newest">新着順</button>
     </div>
     <div class="ranking-list" id="ranking-list"></div>
   </div>
@@ -378,14 +388,28 @@ body.dark .campaign-ribbon {
 </main>
 
 <section class="portal-container" id="about-section">
-  <h2 class="section-title"><span class="icon">&#x2728;</span>アニノベルとは</h2>
-  <p class="about-lead font-serif">アニノベルは、アニメ風の吹き出し表示で小説を読める新しい読書プラットフォームです。<br>「読者」と「作者」、2つのモードで物語の世界をお楽しみいただけます。</p>
+  <!-- 見出しの文言「アニノベルとは」は portal.js の _findAboutSection が探すので変えない -->
+  <h2 class="section-title">アニノベルとは</h2>
+  <p class="about-catch">小説とアニメの、いいところどり</p>
+  <div class="about-features">
+    <div class="about-feature">
+      <span class="about-feature-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
+      <div><h3>キャラクターと吹き出しで</h3><p>文字だけの小説より目が疲れにくく、物語にすっと入れます。</p></div>
+    </div>
+    <div class="about-feature">
+      <span class="about-feature-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M4 17a2 2 0 0 1 2-2h12"/></svg></span>
+      <div><h3>アニメより深く</h3><p>情景や心の動きは、小説ならではの文章で味わえます。</p></div>
+    </div>
+    <div class="about-feature">
+      <span class="about-feature-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg></span>
+      <div><h3>耳でも楽しめる</h3><p>AIの読み聞かせで「聴く読書」も。日本語と英語に対応。</p></div>
+    </div>
+  </div>
 
   <div class="mode-cards">
     <!-- 読者モード -->
     <div class="mode-card reader-mode-card">
-      <div class="mode-icon">&#x1F4D6;</div>
-      <h3 class="mode-title font-serif">読者モード</h3>
+      <h3 class="mode-title">読者として楽しむ</h3>
       <div class="mode-desc">
         <p class="mode-highlight">立ち読みはログイン不要！</p>
         <p>作品を自由に閲覧できます。気に入った作品に投票もできます。</p>
@@ -399,16 +423,15 @@ body.dark .campaign-ribbon {
         <p class="mode-reg">登録に必要なもの: <strong>メールアドレス</strong>のみ</p>
       </div>
       <div class="mode-cta">
-        <button class="btn btn-primary mode-register-btn" data-role="reader">&#x1F4E8; 読者として新規登録</button>
-        <button class="btn btn-ghost mode-login-btn">ログイン</button>
+        <button class="btn btn-primary mode-register-btn" data-role="reader">無料で読者登録</button>
       </div>
     </div>
 
     <!-- 作者モード -->
     <div class="mode-card author-mode-card">
-      <div class="mode-icon">&#x270F;</div>
-      <h3 class="mode-title font-serif">作者モード</h3>
+      <h3 class="mode-title">作家としてデビュー</h3>
       <div class="mode-desc">
+        <p class="mode-highlight">あなたの小説を、キャラクターが生きる作品に。</p>
         <p>自分のオリジナル作品を投稿・編集できます。ドラッグ＆ドロップで簡単に構成を変更。</p>
         <h4>主な機能</h4>
         <ul>
@@ -420,18 +443,17 @@ body.dark .campaign-ribbon {
         <p class="mode-reg">登録に必要なもの: <strong>メールアドレス + 個人情報</strong>（氏名・住所・電話番号）</p>
         <p class="mode-note">※メールアドレスに仮登録情報を送信し、記載URLにアクセスすると本登録完了です。</p>
       </div>
+      <!-- 2026-11-18: ボタンは登録の1つに。ログインはヘッダー、マイ作品はログイン後のメニューにある。 -->
       <div class="mode-cta">
-        <button class="btn btn-primary mode-register-btn" data-role="author">&#x270F; 作者として新規登録</button>
-        <button class="btn btn-ghost mode-login-btn">ログイン</button>
-        <button class="btn btn-ghost mode-mywork-btn">&#x1F4DA; マイ作品</button>
-        <button class="btn btn-ghost" onclick="window.location.href='authors.html'">✍️ 作品を書く方へ</button>
+        <button class="btn btn-primary mode-register-btn" data-role="author">作者として登録</button>
+        <a class="mode-guide-link" href="authors.html">作品を書く方へのガイド</a>
       </div>
     </div>
   </div>
 
   <!-- 認証フロー説明 -->
   <div class="auth-flow-info">
-    <h3 class="font-serif">&#x1F512; アカウント登録の流れ</h3>
+    <h3>登録の流れ</h3>
     <div class="flow-steps">
       <div class="flow-step"><span class="step-num">1</span><span class="step-text">メールアドレスと必要事項を入力して仮登録</span></div>
       <div class="flow-arrow">&#x25B6;</div>
@@ -450,22 +472,38 @@ body.dark .campaign-ribbon {
 
 <!-- フッター -->
 <footer class="portal-footer">
-  <div class="footer-links">
-    <a href="/works/">作品紹介</a>
-    <a href="manual.html">マニュアル</a>
-    <a href="authors.html">✍️ 作品を書く方へ</a>
-    <a href="#" id="footer-login-link">ログイン / 新規登録</a>
-    <a href="legal/terms.html">利用規約</a>
-    <a href="legal/revenue.html">収益分配</a>
-    <a href="legal/privacy.html">プライバシーポリシー</a>
-    <a href="legal/tokushoho.html">特商法表記</a>
-    <a href="legal/dmca.html" data-i18n="nav.dmca">著作権窓口</a>
-    <a href="legal/accessibility.html">アクセシビリティ</a>
-    <a href="#" data-i18n="nav.plan" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">💎 プラン</a>
-    <a href="#" data-i18n="nav.share" data-aninovel-share="auto" data-share-title="アニノベル - アニメ風吹き出しで読むオリジナル小説" data-share-title-en="AniNovel — Original fiction read in anime-style speech bubbles">📤 シェア</a>
-    <a href="#" data-i18n="nav.newsletter" onclick="if(window.AninovelNewsletter)AninovelNewsletter.openSubscribeModal();return false;">📬 メルマガ購読</a>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="images/brand/aninovel-logo-stacked-white.png" alt="aninovel" width="97" height="110">
+      <p>アニメのように楽しむ小説</p>
+    </div>
+    <div class="footer-cols">
+      <div class="footer-links">
+        <p class="footer-head">サービス</p>
+        <a href="/works/">作品紹介</a>
+        <a href="manual.html">マニュアル</a>
+        <a href="authors.html">作品を書く方へ</a>
+        <a href="#" onclick="if(window.AninovelBilling)AninovelBilling.openPricingModal();return false;">料金プラン</a>
+        <a href="#" onclick="if(window.AninovelNewsletter)AninovelNewsletter.openSubscribeModal();return false;">メルマガ購読</a>
+      </div>
+      <div class="footer-links">
+        <p class="footer-head">規約とポリシー</p>
+        <a href="legal/terms.html">利用規約</a>
+        <a href="legal/revenue.html">収益分配</a>
+        <a href="legal/privacy.html">プライバシーポリシー</a>
+        <a href="legal/tokushoho.html">特商法表記</a>
+        <a href="legal/dmca.html">著作権窓口</a>
+        <a href="legal/accessibility.html">アクセシビリティ</a>
+      </div>
+    </div>
   </div>
-  <p class="note">アニノベル &copy; 2026</p>
+  <div class="footer-bottom">
+    <p class="note">運営：アニノベル &copy; 2026</p>
+    <div class="footer-tools">
+      <a href="#" class="footer-tool" data-aninovel-share="auto" data-share-title="アニノベル - アニメのように楽しむ小説" data-share-title-en="AniNovel — Novels you enjoy like anime">シェア</a>
+      <button type="button" class="footer-tool" id="theme-toggle" title="テーマ切替">ダークモード切替</button>
+    </div>
+  </div>
 </footer>
 
 <script src="js/auth-token.js"></script>
@@ -625,9 +663,9 @@ body.dark .campaign-ribbon {
     
     // 「作品一覧」のセクションタイトルを探す
     var allTitles = document.querySelectorAll('.section-title');
-    var worksTitle = null;
+    var worksTitle = document.getElementById('works-title');
     allTitles.forEach(function(t) {
-      if (t.textContent.indexOf('作品一覧') !== -1) {
+      if (!worksTitle && t.textContent.indexOf('作品一覧') !== -1) {
         worksTitle = t;
       }
     });
@@ -645,7 +683,7 @@ body.dark .campaign-ribbon {
       '<div class="phase1-filter-container">' +
         '<h3 class="phase1-filter-title">🔍 作品を探す</h3>' +
         '<div class="phase1-filter-controls">' +
-          '<input type="text" class="phase1-search-input" id="phase1-search-input" placeholder="作品名・著者・本文で検索...">' +
+          '<input type="search" class="phase1-search-input" id="phase1-search-input" placeholder="作品名・著者・本文で検索...">' +
           '<select class="phase1-filter-select" id="phase1-length-filter">' +
             '<option value="">すべての長さ</option>' +
             '<option value="short">短編（〜5000字）</option>' +

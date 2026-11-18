@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v6_points_btn_size';
+  window.__ANINOVEL_PORTAL_VER__ = 'v7_brand_2026_11';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -219,7 +219,7 @@
 
       var title = document.createElement('div');
       title.className = 'section-title';
-      title.textContent = '📚 青空文庫シリーズ';
+      title.textContent = '青空文庫シリーズ';
       sec.appendChild(title);
 
       var lead = document.createElement('p');
