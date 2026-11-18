@@ -58,7 +58,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v193_gallery_drilldown';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v194_mobile_tts_critique';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -6254,6 +6254,15 @@ function _karaEnsureLoop(){
     // 下げすぎると読み上げに置いていかれるので、
     // 読み上げ位置が画面の下へ寄っていくようなら戻すこと。
     var SCROLL_PPS=40;
+    // 2026-11-18 (v194): **読み遅れたら追いつく**。
+    // スマホは1行に入る字数が少ないので、同じ速さで読んでも本文が下へ伸びる
+    // 速さ(px/秒)が PC の2〜3倍になる。毎秒40pxの一定速度では追いつけず、
+    // 読んでいる文が画面の下へ外れていた(Nobby の実機で確認)。
+    // 普段は一定速度のまま、目標から離れたときだけ速める。
+    //   d は「読んでいる文を上から20%に置くために、あと何px下げるか」。
+    //   画面の15%以上遅れたら 1.2 秒で、6割以上遅れたら 0.5 秒で詰める。
+    if(d>_len*0.15)SCROLL_PPS=Math.max(SCROLL_PPS,d/1.2);
+    if(d>_len*0.6)SCROLL_PPS=Math.max(SCROLL_PPS,d/0.5);
     var now=(window.performance&&performance.now)?performance.now():Date.now();
     var dtRaw=(_kara.lastT!=null)?(now-_kara.lastT):16.7;
     var dt=dtRaw;
@@ -8743,11 +8752,11 @@ function _critiqueShell(){
   w.setAttribute('aria-modal','true');
   w.setAttribute('aria-label','AI講評');
   w.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);'
-    + 'display:flex;align-items:center;justify-content:center;padding:16px';
+    + 'display:flex;align-items:center;justify-content:center;padding:clamp(6px,3vw,16px)';
   var p = document.createElement('div');
   p.style.cssText = 'background:var(--bg-primary,#fff);color:var(--text-primary,#222);'
-    + 'max-width:680px;width:100%;max-height:86vh;overflow:auto;border-radius:12px;'
-    + 'padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);'
+    + 'max-width:680px;width:100%;max-height:92vh;overflow:auto;border-radius:12px;'
+    + 'padding:clamp(14px,4vw,22px);box-shadow:0 18px 50px rgba(0,0,0,.35);'
     + 'font-size:14px;line-height:1.75';
   w.appendChild(p);
   w.addEventListener('click', function(e){ if(e.target === w) _critiqueClose(); });
@@ -8763,6 +8772,29 @@ function _critiqueBar(score){
   return '<span style="display:inline-block;vertical-align:middle;width:120px;height:8px;'
     + 'background:rgba(127,127,127,.22);border-radius:4px;overflow:hidden;margin:0 8px">'
     + '<span style="display:block;width:' + s + '%;height:100%;background:' + col + '"></span></span>';
+}
+
+/* 2026-11-18 (v194): 観点ごとの点数と寸評。
+ * 以前は <table> の3列(観点名 5.5em・棒グラフ 170px・寸評)で、どちらも nowrap だった。
+ * スマホでは左の2列だけで幅の8割を取り、寸評が右端の細い列に縦長に並んでいた。
+ * 観点名・棒・点数を1行に、寸評はその下に全幅で置く。PCでも読みやすさは変わらない。 */
+function _critiqueAxesHTML(axes){
+  var h = '<div style="margin:14px 0;display:flex;flex-direction:column;gap:14px">';
+  for (var i = 0; i < axes.length; i++) {
+    var a = axes[i];
+    var s = Math.max(0, Math.min(100, Number(a.score) || 0));
+    var col = s >= 70 ? '#059669' : (s >= 40 ? '#F59E0B' : '#DC2626');
+    h += '<div>'
+       + '<div style="display:flex;align-items:center;gap:10px">'
+       + '<span style="font-weight:700;flex:0 0 auto;min-width:5.5em">' + esc(a.name) + '</span>'
+       + '<span style="flex:1 1 auto;max-width:240px;height:8px;background:rgba(127,127,127,.22);'
+       + 'border-radius:4px;overflow:hidden"><span style="display:block;width:' + s + '%;height:100%;background:' + col + '"></span></span>'
+       + '<span style="flex:0 0 auto;font-variant-numeric:tabular-nums;font-weight:700">' + (Number(a.score) || 0) + '</span>'
+       + '</div>'
+       + (a.comment ? '<p style="margin:4px 0 0">' + esc(a.comment) + '</p>' : '')
+       + '</div>';
+  }
+  return h + '</div>';
 }
 
 function _critiqueHTML(rec){
@@ -8784,17 +8816,7 @@ function _critiqueHTML(rec){
        + '長い作品のため、冒頭・中ほど・終わりを抜き出して読んでいます。</p>';
   }
 
-  h += '<table style="width:100%;border-collapse:collapse;margin:14px 0">';
-  for (var i = 0; i < axes.length; i++) {
-    var a = axes[i];
-    h += '<tr><td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:5.5em">'
-       + esc(a.name) + '</td>'
-       + '<td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:170px">'
-       + _critiqueBar(a.score)
-       + '<span style="font-variant-numeric:tabular-nums">' + (Number(a.score) || 0) + '</span></td>'
-       + '<td style="padding:6px 0 6px 10px">' + esc(a.comment || '') + '</td></tr>';
-  }
-  h += '</table>';
+  h += _critiqueAxesHTML(axes);
 
   function block(title, items){
     if (!items || !items.length) return '';
@@ -9059,17 +9081,7 @@ function openReaderCritique(){
      + '<span style="font-size:14px;font-weight:400;color:var(--text-muted,#777)"> / 100</span></div>';
 
   var axes = c.axes || [];
-  h += '<table style="width:100%;border-collapse:collapse;margin:14px 0">';
-  for (var i = 0; i < axes.length; i++) {
-    var a = axes[i];
-    h += '<tr><td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:5.5em">'
-       + esc(a.name) + '</td>'
-       + '<td style="padding:6px 0;white-space:nowrap;vertical-align:top;width:170px">'
-       + _critiqueBar(a.score)
-       + '<span style="font-variant-numeric:tabular-nums">' + (Number(a.score) || 0) + '</span></td>'
-       + '<td style="padding:6px 0 6px 10px">' + esc(a.comment || '') + '</td></tr>';
-  }
-  h += '</table>';
+  h += _critiqueAxesHTML(axes);
 
   if (c.strengths && c.strengths.length) {
     h += '<h3 style="margin:16px 0 6px;font-size:15px">良かったところ</h3><ul style="margin:0;padding-left:1.2em">';
