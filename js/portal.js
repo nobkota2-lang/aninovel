@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v10_palette_v3';
+  window.__ANINOVEL_PORTAL_VER__ = 'v11_palette_v4a';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===

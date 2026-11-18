@@ -834,3 +834,59 @@ body .phase1-filter-container{background:var(--bg-secondary);border:1px solid va
 
 /* --- 同意バナーも紺で揃える --- */
 #aninovel-consent-allow{background:#fff !important;color:#1B257B !important}
+
+/* ============================================================
+   配色 v4 (2026-11-19): 目立つ方向へ。土台は v3(読みやすさの決まり)のまま、
+   色の量と鮮やかさを上げる。
+   ============================================================ */
+:root{--vivid-blue:#2F5FD0;--vivid-blue-2:#2347B5;--vivid-orange:#FF6B00;--vivid-orange-2:#E85A00;--vivid-purple:#7A4FE0;--vivid-pink:#F2437A}
+/* 主ボタン: 鮮やかなオレンジに白の太字(大きい文字なので 3:1 を満たす) */
+.hero-cta .btn-primary{background:var(--vivid-orange-2);color:#fff;font-size:19px;font-weight:900;box-shadow:0 8px 20px rgba(232,90,0,.35)}
+.hero-cta .btn-primary:hover{background:#D24F00;color:#fff;transform:translateY(-1px)}
+[data-theme="dark"] .hero-cta .btn-primary{background:var(--vivid-orange);color:#1A0E05}
+/* キャンペーン帯: オレンジ→ピンクの帯に濃紺の文字 */
+body .campaign-ribbon{background:linear-gradient(90deg,#FF8A1F,#FF5E62);color:#14183A;font-weight:600}
+body .campaign-ribbon:hover{background:linear-gradient(90deg,#FF7A00,#FF4A55);color:#14183A}
+body .campaign-ribbon::before{background:#14183A}
+html[data-theme="dark"] body .campaign-ribbon{background:linear-gradient(90deg,#FF8A1F,#FF5E62);color:#14183A;border:none}
+/* 見出しの下にオレンジの短い線 */
+.section-title{position:relative;padding-bottom:12px}
+.section-title::after{content:"";position:absolute;left:0;bottom:0;width:48px;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--vivid-orange),var(--vivid-pink))}
+/* 特長のアイコン: 3色 */
+.about-feature:nth-child(1) .about-feature-icon{background:#E8EEFF;color:var(--vivid-blue)}
+.about-feature:nth-child(2) .about-feature-icon{background:#FFEFE3;color:var(--vivid-orange-2)}
+.about-feature:nth-child(3) .about-feature-icon{background:#F0EAFF;color:var(--vivid-purple)}
+/* ランキング: 1〜3位をオレンジ・青・紫の丸に */
+.ranking-item:nth-child(1) .ranking-number{background:var(--vivid-orange-2);color:#fff}
+.ranking-item:nth-child(2) .ranking-number{background:var(--vivid-blue);color:#fff}
+.ranking-item:nth-child(3) .ranking-number{background:var(--vivid-purple);color:#fff}
+.ranking-item:hover{border-color:#FFB37A;box-shadow:0 8px 20px rgba(255,107,0,.12)}
+/* 作品カード: カーソルを合わせるとオレンジの縁 */
+.work-card:hover .card-cover{box-shadow:0 0 0 3px var(--vivid-orange),0 14px 28px rgba(20,24,51,.22)}
+.work-card .vote-btn{color:var(--vivid-pink)}
+/* 読者/作者カード: 上を太い色帯に、ボタンも色で */
+.reader-mode-card{border-top:6px solid var(--vivid-blue)}
+.author-mode-card{border-top:6px solid var(--vivid-orange)}
+.reader-mode-card .mode-register-btn{background:var(--vivid-blue);color:#fff}
+.reader-mode-card .mode-register-btn:hover{background:var(--vivid-blue-2)}
+.author-mode-card .mode-register-btn{background:var(--vivid-orange-2);color:#fff}
+.author-mode-card .mode-register-btn:hover{background:#D24F00}
+.reader-mode-card .mode-title{color:var(--vivid-blue)}
+.author-mode-card .mode-title{color:var(--vivid-orange-2)}
+[data-theme="dark"] .reader-mode-card .mode-title{color:#8FB0FF}
+[data-theme="dark"] .author-mode-card .mode-title{color:#FF9A57}
+.step-num{background:linear-gradient(135deg,var(--vivid-orange),var(--vivid-pink));color:#fff}
+/* A案: 明るい地に、色の帯と円をはっきり */
+.portal-hero{background:#FFF7F0}
+.portal-hero::before{background:linear-gradient(135deg,#5B7CFF,#8A5CFF);opacity:.9}
+.portal-hero::after{background:linear-gradient(135deg,#FFB35C,#FF6B6B);opacity:.85}
+.portal-hero h1.hero-title{color:#14183A}
+.portal-hero h1.hero-title span:first-child{background:linear-gradient(transparent 62%,#FFD36B 62%);display:inline-block}
+.portal-hero .hero-badge{background:var(--vivid-blue);color:#fff;border:none}
+.hero-stat .num{color:var(--vivid-blue)}
+[data-theme="dark"] .portal-hero{background:#141838}
+
+/* A案: スマホではヒーローの円を小さく(本文に重ならないように) */
+@media(max-width:768px){.portal-hero::before{width:300px;height:300px;right:-120px;top:-120px;opacity:.55}.portal-hero::after{width:220px;height:220px;opacity:.6}}
+/* ダークでは白い見出しの下のマーカーを半透明のオレンジに(黄色のままだと白文字が読みにくい) */
+[data-theme="dark"] .portal-hero h1.hero-title span:first-child{background:linear-gradient(transparent 62%,rgba(255,138,31,.45) 62%)}

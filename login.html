@@ -11,7 +11,7 @@
 <style>
 :root{
   --bg:#F6F7FA; --card:#fff; --ink:#1B1F33; --muted:#5A6080;
-  --line:#E4E7EF; --accent:#1B257B; --accent2:#283593; --err:#b23a3a; --ok:#3a7d44;
+  --line:#E4E7EF; --accent:#2F5FD0; --accent2:#2347B5; --err:#b23a3a; --ok:#3a7d44;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
@@ -79,6 +79,9 @@ dl.kv dd{margin:0;word-break:break-word}
 /* 2026-11-18 配色v3: ダークの主ボタンは明るい青なので文字を濃紺に(白だと読みにくい) */
 :root[data-theme="dark"] .btn:not(.ghost){color:#0D1027}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn:not(.ghost){color:#0D1027}}
+
+/* 2026-11-19 配色v4(A案): 主ボタンは鮮やかな青、ページ上端にオレンジ→ピンクの帯 */
+body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height:4px;z-index:9999;background:linear-gradient(90deg,#FF8A1F,#FF5E62)}
 </style>
 </head>
 <body>
