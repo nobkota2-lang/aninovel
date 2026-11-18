@@ -661,3 +661,82 @@ body #aozora-section > p,body #aozora-section > div:not(#aozora-grid):not(.secti
 #aninovel-consent-banner{background:#10175A !important;border-radius:16px !important}
 #aninovel-consent-allow{background:#FF6B00 !important;color:#10175A !important;border-radius:999px !important;font-weight:700 !important;min-height:40px}
 #aninovel-consent-deny{border-radius:999px !important;min-height:40px}
+
+/* ============================================================
+   ブランド刷新 v2 (2026-11-18): 明るい表示は明るく、シックはダークモードで。
+   ・ヘッダー: 白地+カラーロゴ(ダークは濃紺+白抜きロゴ)
+   ・ヒーローと読者カード: 淡い青(ダークは濃紺)
+   ・ようこそバナー: 読者=青/作者=オレンジ/オーナー=紫
+   ============================================================ */
+:root{--bg-toolbar:#FFFFFF;--sky:#EEF4FF;--sky-2:#DCE8FF;--sky-line:rgba(27,37,123,.14)}
+[data-theme="dark"]{--bg-toolbar:#0B0F2E;--sky:#141A52;--sky-2:#1B2263;--sky-line:rgba(255,255,255,.18)}
+
+/* --- ヘッダー --- */
+.portal-header{color:var(--text-primary);border-bottom:1px solid var(--border)}
+.logo-img-dark{display:none !important}
+[data-theme="dark"] .logo-img-light{display:none !important}
+[data-theme="dark"] .logo-img-dark{display:block !important}
+.header-nav a{color:var(--text-primary);opacity:1}
+.header-nav a:hover{color:var(--brand-navy)}
+.portal-header .btn-ghost,.lang-toggle{color:var(--brand-navy);border-color:#D5D9EA}
+.portal-header .btn-ghost:hover,.lang-toggle:hover{background:var(--bg-secondary)}
+.portal-header .btn-icon:hover{background:var(--bg-secondary)}
+[data-theme="dark"] .portal-header{border-bottom-color:rgba(255,255,255,.08)}
+[data-theme="dark"] .header-nav a,[data-theme="dark"] .portal-header .btn-ghost,[data-theme="dark"] .lang-toggle{color:#fff;border-color:rgba(255,255,255,.35)}
+[data-theme="dark"] .portal-header .btn-ghost:hover,[data-theme="dark"] .lang-toggle:hover{background:rgba(255,255,255,.12)}
+
+/* --- ヒーロー: 淡い青 --- */
+.portal-hero{background:var(--sky);color:var(--text-primary)}
+.portal-hero::before{background:var(--sky-2)}
+.portal-hero::after{background:#FFE7D4}
+[data-theme="dark"] .portal-hero{background:#141A52;color:#fff}
+[data-theme="dark"] .portal-hero::before{background:#1B2263}
+[data-theme="dark"] .portal-hero::after{background:#171E5A}
+.portal-hero h1.hero-title,.portal-hero .hero-punch{color:var(--brand-navy)}
+.portal-hero .hero-lead{color:#3B4472}
+.portal-hero .hero-note,.hero-stat .label{color:var(--text-secondary)}
+.hero-stat .num{color:var(--brand-navy)}
+.hero-stats{border-top-color:var(--sky-line)}
+[data-theme="dark"] .portal-hero h1.hero-title,[data-theme="dark"] .portal-hero .hero-punch,[data-theme="dark"] .hero-stat .num{color:#fff}
+[data-theme="dark"] .portal-hero .hero-lead{color:#D9DDF5}
+[data-theme="dark"] .portal-hero .hero-note,[data-theme="dark"] .hero-stat .label{color:#B9BFE8}
+.hero-cover{box-shadow:0 20px 40px rgba(27,37,123,.25)}
+.hero-reader{box-shadow:0 20px 40px rgba(27,37,123,.18)}
+[data-theme="dark"] .hero-cover,[data-theme="dark"] .hero-reader{box-shadow:0 24px 48px rgba(6,10,40,.45)}
+/* キャラクターのアイコン(ギャラリーの画像) */
+img.hero-avatar{flex:0 0 40px;width:40px;height:40px;border-radius:50%;object-fit:cover;background:#E6E9F5;border:2px solid var(--brand-navy);padding:0}
+.hero-line-r img.hero-avatar{border-color:var(--brand-orange)}
+
+/* --- 読者カード: 淡い青 --- */
+.reader-mode-card{background:var(--sky);color:var(--text-primary)}
+.reader-mode-card .mode-title{color:var(--brand-navy)}
+.reader-mode-card .mode-desc,.reader-mode-card .mode-desc h4,.reader-mode-card .mode-desc li{color:var(--text-primary)}
+.reader-mode-card .mode-desc h4{border-bottom-color:var(--sky-line)}
+.reader-mode-card .mode-highlight{color:var(--brand-orange-text)}
+.reader-mode-card .mode-note{color:var(--text-secondary)}
+.reader-mode-card .mode-reg{background:#fff;border-color:var(--sky-line);color:var(--text-primary)}
+[data-theme="dark"] .reader-mode-card .mode-title,[data-theme="dark"] .reader-mode-card .mode-desc,[data-theme="dark"] .reader-mode-card .mode-desc h4,[data-theme="dark"] .reader-mode-card .mode-desc li{color:#fff}
+[data-theme="dark"] .reader-mode-card .mode-reg{background:rgba(255,255,255,.08);color:#fff}
+[data-theme="dark"] .reader-mode-card .mode-note{color:#C9CEEE}
+
+/* --- ようこそバナー: 役割ごとの色 --- */
+.welcome-banner{box-shadow:none;border:1px solid transparent;color:var(--text-primary)}
+.welcome-banner .welcome-role,.welcome-banner .welcome-tips{opacity:1;color:var(--text-secondary)}
+.welcome-reader{background:#EAF2FF;border-color:#C9DBFF}
+.welcome-reader .welcome-title{color:#1E4FBF}
+.welcome-author{background:#FFF1E6;border-color:#FFD2B0}
+.welcome-author .welcome-title{color:#A84400}
+.welcome-owner{background:#F1ECFF;border-color:#D9CCFF}
+.welcome-owner .welcome-title{color:#5133B8}
+.welcome-banner .welcome-points-link{background:#fff !important;border:1px solid rgba(20,24,51,.14) !important;color:var(--text-primary) !important}
+.welcome-banner .welcome-dismiss{background:rgba(20,24,51,.08);color:var(--text-primary)}
+.welcome-banner .welcome-cta .btn{background:#fff;color:var(--text-primary);border-color:rgba(20,24,51,.14)}
+[data-theme="dark"] .welcome-banner .welcome-role,[data-theme="dark"] .welcome-banner .welcome-tips{color:#C9CEEE}
+[data-theme="dark"] .welcome-reader{background:#16245E;border-color:#24398A}
+[data-theme="dark"] .welcome-reader .welcome-title{color:#A9C4FF}
+[data-theme="dark"] .welcome-author{background:#3A1E0C;border-color:#6A3412}
+[data-theme="dark"] .welcome-author .welcome-title{color:#FFB27A}
+[data-theme="dark"] .welcome-owner{background:#2A1F5E;border-color:#433393}
+[data-theme="dark"] .welcome-owner .welcome-title{color:#C9B8FF}
+[data-theme="dark"] .welcome-banner .welcome-points-link,[data-theme="dark"] .welcome-banner .welcome-cta .btn{background:rgba(255,255,255,.08) !important;color:#fff !important;border-color:rgba(255,255,255,.2) !important}
+[data-theme="dark"] .welcome-banner .welcome-dismiss{background:rgba(255,255,255,.12);color:#fff}

@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v7_brand_2026_11';
+  window.__ANINOVEL_PORTAL_VER__ = 'v8_role_colors';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -478,9 +478,10 @@
 
   // === ロール表示ヘルパー ===
   var ROLE_META = {
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#F59E0B' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#8B5CF6' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#3B82F6' }
+    // 2026-11-18: 役割ごとの色。読者=青、作者=オレンジ、オーナー=紫(白文字でも読める濃さ)。
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#6D4AE0' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#C24E00' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#2F6FEB' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
   // 表示言語(_pEn と同じ判定。ROLE_META 周辺から呼べるようここにも置く)
@@ -917,8 +918,8 @@ function updateWelcomeBanner() {
         ? (_en?'Open ✏️ My Works (top-right) to create and edit, and check \uD83D\uDCCA Dashboard.':'ヘッダー右上の ✏️ から「マイ作品」を開いて新規作成・編集、📊 からダッシュボードを確認できます。')
         : (_en?'Bookmarks, voting and character customization are available. Check \uD83D\uDCCA Dashboard.':'しおり・投票・キャラカスタマイズが使えます。📊 からダッシュボードを確認できます。');
       if (existing) existing.remove();
-      var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner' });
-      banner.style.background = ar === 'owner' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '';
+      // 色は役割ごとのクラスで css/portal.css が決める(以前はオーナーだけ直書きの色だった)
+      var banner = h('div', { id: 'welcome-banner', className: 'welcome-banner welcome-' + (ROLE_META[ar] ? ar : 'reader') });
       banner.appendChild(h('div', { className: 'welcome-title' }, rm.icon + (_en?(' Welcome back, ' + _displayName(state.user)):(' おかえりなさい、' + state.user.displayName + ' さん'))));
       banner.appendChild(h('div', { className: 'welcome-role' }, (_en?('Current mode: ' + _roleLabel(rm) + ' (roles: ' + rolesLabel + ')'):('現在のモード: ' + rm.label + '（登録ロール: ' + rolesLabel + '）'))));
       banner.appendChild(h('div', { className: 'welcome-tips' }, tips));
