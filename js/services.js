@@ -234,7 +234,14 @@
             break;
           case 'votes':
           default:
-            works.sort(function(a, b) { return b.totalVotes - a.totalVotes || new Date(b.createdAt) - new Date(a.createdAt); });
+            // 2026-11-18: 投票数が同じなら閲覧数(views)の多い順、それも同じなら新しい順。
+            // 以前は同点を新しい順にしていたため、投票がほぼ0の今は
+            // 後から登録した青空文庫が上位10枠を占め、オリジナル作品が一つも入らなかった。
+            works.sort(function(a, b) {
+              return (b.totalVotes - a.totalVotes)
+                  || ((Number(b.views) || 0) - (Number(a.views) || 0))
+                  || (new Date(b.createdAt) - new Date(a.createdAt));
+            });
             break;
         }
 

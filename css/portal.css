@@ -740,3 +740,97 @@ img.hero-avatar{flex:0 0 40px;width:40px;height:40px;border-radius:50%;object-fi
 [data-theme="dark"] .welcome-owner .welcome-title{color:#C9B8FF}
 [data-theme="dark"] .welcome-banner .welcome-points-link,[data-theme="dark"] .welcome-banner .welcome-cta .btn{background:rgba(255,255,255,.08) !important;color:#fff !important;border-color:rgba(255,255,255,.2) !important}
 [data-theme="dark"] .welcome-banner .welcome-dismiss{background:rgba(255,255,255,.12);color:#fff}
+
+/* 2026-11-18: ランキングの2つ目のバッジは閲覧数になった(以前のページ数は隠していた) */
+.ranking-stats .stats-badge.stats-views{display:inline-flex}
+
+/* ============================================================
+   配色 v3 (2026-11-18): プロのWebデザインの定石に寄せた整理
+   ・60-30-10: 無彩色寄りの面が6割、紺(ロゴの色)が3割、オレンジは1割未満
+   ・オレンジは「目印」だけに使う(帯・数字・小さなラベル)。大きな面や
+     主ボタンには使わない。主ボタンは紺に白文字(コントラスト13:1)
+   ・淡い面は彩度を落とした青みのグレーで統一(水色・クリームを混ぜない)
+   ・文字色は3段(本文/補足/控えめ)。控えめでも白地・淡い面の両方で4.5:1以上
+   ============================================================ */
+:root{
+  --ink:#1B1F33;--text-primary:#1B1F33;--text-secondary:#4F5672;--text-muted:#656B89;
+  --bg-primary:#FFFFFF;--bg-secondary:#F6F7FA;--bg-paper:#FFFFFF;--panel-bg:#FFFFFF;--card-bg:#FFFFFF;
+  --border:#E4E7EF;--border-light:#EEF0F5;
+  --sky:#F1F3F9;--sky-2:#E7EAF5;--sky-line:rgba(27,37,123,.10);
+  --brand-navy-hover:#283593;
+  --brand-orange-text:#B4490A;--brand-orange-tint:#FDF3EA;
+  --accent:#1B257B;--accent-soft:#283593;
+  --shadow:rgba(27,31,51,.06);--shadow-strong:rgba(27,31,51,.12)
+}
+[data-theme="dark"]{
+  --ink:#ECEEF8;--text-primary:#ECEEF8;--text-secondary:#B5BAD9;--text-muted:#9097BF;
+  --bg-primary:#0D1027;--bg-secondary:#151938;--bg-paper:#151938;--panel-bg:#1A1F45;--card-bg:#1A1F45;--bg-toolbar:#0B0E22;
+  --border:#2A3060;--border-light:#222852;
+  --sky:#151938;--sky-2:#1C2148;--sky-line:rgba(255,255,255,.12);
+  --brand-navy-hover:#A3AFFF;
+  --brand-orange-text:#FF9A57;--brand-orange-tint:rgba(255,107,0,.12);
+  --accent:#8C9BFF;--accent-soft:#A3AFFF;
+  --shadow:rgba(0,0,0,.35);--shadow-strong:rgba(0,0,0,.55)
+}
+
+/* --- 主ボタンは紺に白(オレンジは使わない) --- */
+.btn-primary,.hero-cta .btn-primary{background:var(--brand-navy);color:#fff}
+.btn-primary:hover,.hero-cta .btn-primary:hover{background:var(--brand-navy-hover);color:#fff}
+[data-theme="dark"] .btn-primary,[data-theme="dark"] .hero-cta .btn-primary{background:#8C9BFF;color:#0D1027}
+[data-theme="dark"] .btn-primary:hover,[data-theme="dark"] .hero-cta .btn-primary:hover{background:#A3AFFF;color:#0D1027}
+
+/* --- キャンペーン帯: 細い紺の帯。オレンジは小さな点だけ --- */
+body .campaign-ribbon{background:var(--brand-navy);color:#fff;border-bottom:none}
+body .campaign-ribbon:hover{background:var(--brand-navy-hover);color:#fff}
+body .campaign-ribbon::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand-orange);margin-right:10px;vertical-align:middle}
+html[data-theme="dark"] body .campaign-ribbon{background:#151938;color:#ECEEF8;border-bottom:1px solid #2A3060}
+
+/* --- ヒーロー: 青みのごく淡いグレー。飾りの円は控えめに --- */
+.portal-hero{background:var(--sky)}
+.portal-hero::before{background:var(--sky-2)}
+.portal-hero::after{background:#FBEADB;opacity:.7}
+[data-theme="dark"] .portal-hero{background:#121636}
+[data-theme="dark"] .portal-hero::before{background:#181D47}
+[data-theme="dark"] .portal-hero::after{background:#1E1B3E;opacity:1}
+.portal-hero .hero-lead{color:var(--text-secondary)}
+.portal-hero .hero-badge{background:var(--brand-orange-tint);color:var(--brand-orange-text);border:1px solid #F5D2B3;font-weight:700}
+[data-theme="dark"] .portal-hero .hero-badge{border-color:rgba(255,154,87,.35)}
+.hero-cover{box-shadow:0 18px 36px rgba(27,31,51,.18)}
+.hero-reader{box-shadow:0 18px 36px rgba(27,31,51,.12);border:1px solid var(--border)}
+[data-theme="dark"] .hero-reader{border-color:#E4E7EF}
+
+/* --- 見出し・絞り込み・カード --- */
+body .phase1-filter-container{background:var(--bg-secondary);border:1px solid var(--border-light)}
+.about-feature-icon{background:var(--brand-orange-tint);color:#E2600A}
+[data-theme="dark"] .about-feature-icon{color:#FF9A57}
+
+/* --- ランキング: 順位は紺。上位3つだけ紺の丸に白数字 --- */
+.ranking-item{background:var(--bg-secondary);border:1px solid var(--border-light)}
+.ranking-number,.ranking-item:nth-child(1) .ranking-number,.ranking-item:nth-child(2) .ranking-number,.ranking-item:nth-child(3) .ranking-number{color:var(--brand-navy)}
+.ranking-item:nth-child(-n+3) .ranking-number{background:var(--brand-navy);color:#fff}
+[data-theme="dark"] .ranking-number,[data-theme="dark"] .ranking-item .ranking-number{color:#A3AFFF}
+[data-theme="dark"] .ranking-item:nth-child(-n+3) .ranking-number{background:#8C9BFF;color:#0D1027}
+
+/* --- 読者/作者のカード: 同じ骨格、強調は細い上罫だけ --- */
+.reader-mode-card,.author-mode-card{background:var(--card-bg);border:1px solid var(--border);border-top:3px solid var(--brand-navy);box-shadow:0 1px 2px var(--shadow)}
+.author-mode-card{border-top-color:var(--brand-orange)}
+.reader-mode-card .mode-title,.author-mode-card .mode-title{color:var(--text-primary)}
+.reader-mode-card .mode-desc,.reader-mode-card .mode-desc h4,.reader-mode-card .mode-desc li{color:var(--text-primary)}
+.reader-mode-card .mode-reg,.author-mode-card .mode-reg{background:var(--bg-secondary);border-color:var(--border-light);color:var(--text-primary)}
+.reader-mode-card .mode-note{color:var(--text-secondary)}
+.author-mode-card .mode-register-btn,.reader-mode-card .mode-register-btn{background:var(--brand-navy);color:#fff}
+[data-theme="dark"] .reader-mode-card .mode-title,[data-theme="dark"] .reader-mode-card .mode-desc,[data-theme="dark"] .reader-mode-card .mode-desc h4,[data-theme="dark"] .reader-mode-card .mode-desc li{color:var(--text-primary)}
+[data-theme="dark"] .reader-mode-card .mode-reg{background:var(--bg-secondary);color:var(--text-primary)}
+[data-theme="dark"] .author-mode-card .mode-register-btn,[data-theme="dark"] .reader-mode-card .mode-register-btn{background:#8C9BFF;color:#0D1027}
+.step-num{background:var(--brand-navy);color:#fff}
+[data-theme="dark"] .step-num{background:#8C9BFF;color:#0D1027}
+
+/* --- ようこそバナー: 面は無彩色、役割の色は左の罫と見出しだけ --- */
+.welcome-banner,.welcome-reader,.welcome-author,.welcome-owner{background:var(--bg-secondary);border:1px solid var(--border);border-left:4px solid var(--role,#2F5FD0)}
+.welcome-reader{--role:#2F5FD0}.welcome-author{--role:#B4490A}.welcome-owner{--role:#6B4FA3}
+.welcome-reader .welcome-title,.welcome-author .welcome-title,.welcome-owner .welcome-title{color:var(--role)}
+[data-theme="dark"] .welcome-banner,[data-theme="dark"] .welcome-reader,[data-theme="dark"] .welcome-author,[data-theme="dark"] .welcome-owner{background:var(--bg-secondary);border-color:var(--border);border-left-color:var(--role)}
+[data-theme="dark"] .welcome-reader{--role:#8FB0FF}[data-theme="dark"] .welcome-author{--role:#FF9A57}[data-theme="dark"] .welcome-owner{--role:#B9A3EC}
+
+/* --- 同意バナーも紺で揃える --- */
+#aninovel-consent-allow{background:#fff !important;color:#1B257B !important}

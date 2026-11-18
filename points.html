@@ -7,21 +7,21 @@
 <meta name="robots" content="noindex">
 <style>
 :root{
-  --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
-  --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52; --err:#b23a3a; --ok:#3a7d44;
+  --bg:#F6F7FA; --card:#fff; --ink:#1B1F33; --muted:#5A6080;
+  --line:#E4E7EF; --accent:#1B257B; --accent2:#283593; --err:#b23a3a; --ok:#3a7d44;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 *,*::before,*::after{box-sizing:inherit}
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
-    --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+    --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+    --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
-  --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+  --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+  --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
 }
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
@@ -37,7 +37,7 @@ h1{font-size:1.6rem;margin:0 0 6px;letter-spacing:.02em}
   font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
 .btn:hover{background:var(--accent2)}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);white-space:nowrap}
-.btn.ghost:hover{background:rgba(139,94,52,.08)}
+.btn.ghost:hover{background:rgba(27,37,123,.08)}
 .msg{margin-top:18px;padding:13px 15px;border-radius:9px;font-size:.92rem}
 .msg.err{background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);color:var(--err)}
 .foot{margin-top:26px;font-size:.88rem;color:var(--muted);text-align:center}
@@ -84,6 +84,10 @@ details .inner table{margin-top:0}
 .note{color:var(--muted);font-size:.85rem;margin:0}
 .note+.note{margin-top:8px}
 .skel{color:var(--muted);font-size:.92rem}
+
+/* 2026-11-18 配色v3: ダークの主ボタンは明るい青なので文字を濃紺に(白だと読みにくい) */
+:root[data-theme="dark"] .btn:not(.ghost){color:#0D1027}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn:not(.ghost){color:#0D1027}}
 </style>
 </head>
 <body>

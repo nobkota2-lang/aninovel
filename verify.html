@@ -5,26 +5,26 @@
 
 <meta charset="UTF-8">
   <script>(function(){try{var l=localStorage.getItem('aninovel_lang_v1')||localStorage.getItem('aninovel_lang')||'ja';if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');window.__i18nReveal=function(){try{d.classList.remove('i18n-pending');}catch(e){}};setTimeout(window.__i18nReveal,6000);}}catch(e){}})();</script>
-  <style>html.i18n-pending body{opacity:0!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
+  <style>html.i18n-pending body{opacity:0!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(27,37,123,.2);border-top-color:#1B257B;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>メールアドレスの確認 — AniNovel</title>
 <style>
 :root{
-  --bg:#faf8f5; --card:#fff; --ink:#2d2a26; --muted:#6b645c;
-  --line:#e5ded4; --accent:#8b5e34; --accent2:#a67c52; --err:#b23a3a; --ok:#3a7d44;
+  --bg:#F6F7FA; --card:#fff; --ink:#1B1F33; --muted:#5A6080;
+  --line:#E4E7EF; --accent:#1B257B; --accent2:#283593; --err:#b23a3a; --ok:#3a7d44;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 *,*::before,*::after{box-sizing:inherit}
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
-    --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+    --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+    --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#1c1a18; --card:#262320; --ink:#ece7e0; --muted:#a49a8e;
-  --line:#3a352f; --accent:#c9a227; --accent2:#d4b24c;
+  --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+  --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
 }
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
@@ -49,7 +49,7 @@ textarea{min-height:110px;resize:vertical}
 .btn:disabled{opacity:.55;cursor:default}
 .btn.sm{width:auto;margin:0;padding:8px 16px;font-size:.88rem}
 .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
-.btn.ghost:hover{background:rgba(139,94,52,.08)}
+.btn.ghost:hover{background:rgba(27,37,123,.08)}
 .msg{margin-top:18px;padding:13px 15px;border-radius:9px;font-size:.92rem;display:none}
 .msg.err{display:block;background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);color:var(--err)}
 .msg.ok{display:block;background:rgba(58,125,68,.1);border:1px solid rgba(58,125,68,.3)}
@@ -75,6 +75,10 @@ dl.kv dd{margin:0;word-break:break-word}
 .pw-eye:hover{color:var(--ink);background:rgba(127,127,127,.12)}
 .pw-eye:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
+
+/* 2026-11-18 配色v3: ダークの主ボタンは明るい青なので文字を濃紺に(白だと読みにくい) */
+:root[data-theme="dark"] .btn:not(.ghost){color:#0D1027}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn:not(.ghost){color:#0D1027}}
 </style>
 </head>
 <body>

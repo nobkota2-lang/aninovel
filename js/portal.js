@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v8_role_colors';
+  window.__ANINOVEL_PORTAL_VER__ = 'v10_palette_v3';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -375,7 +375,8 @@
 
     var stats = h('div', { className: 'ranking-stats' });
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
-    stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_pEn()?'p':'頁') }));
+    // 2026-11-18: ページ数の代わりに閲覧数。ランキングの同点はこの順で並ぶ。
+    stats.appendChild(h('span', { className: 'stats-badge stats-views', html: (_pEn() ? 'Views ' : '閲覧 ') + (Number(work.views) || 0) }));
 
     var voteBtn = createVoteBtn(work.id, { total: work.totalVotes || v.total, userVoted: work.userVoted || v.userVoted });
 
@@ -479,9 +480,9 @@
   // === ロール表示ヘルパー ===
   var ROLE_META = {
     // 2026-11-18: 役割ごとの色。読者=青、作者=オレンジ、オーナー=紫(白文字でも読める濃さ)。
-    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#6D4AE0' },
-    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#C24E00' },
-    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#2F6FEB' }
+    owner:  { icon: '\uD83D\uDC51', label: 'オーナー', labelEn: 'Owner',  color: '#6B4FA3' },
+    author: { icon: '\u270F\uFE0F', label: '作者',     labelEn: 'Author', color: '#B4490A' },
+    reader: { icon: '\uD83D\uDCD6', label: '読者',     labelEn: 'Reader', color: '#2F5FD0' }
   };
   function roleOf(u) { return (u && (u.activeRole || u.role)) || 'reader'; }
   // 表示言語(_pEn と同じ判定。ROLE_META 周辺から呼べるようここにも置く)

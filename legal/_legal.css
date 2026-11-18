@@ -1,6 +1,6 @@
 /* 法務ページ共通スタイル */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap');
-:root{--bg:#FAF6F0;--bg2:#F5EFE6;--text:#2D2A26;--text2:#6B635A;--muted:#A39E96;--accent:#C0392B;--border:#E2DCD4;--panel:#FFFFFF;--toolbar:#3D3A36}
+:root{--bg:#F6F7FA;--bg2:#EEF0F5;--text:#1B1F33;--text2:#4F5672;--muted:#656B89;--accent:#1B257B;--border:#E4E7EF;--panel:#FFFFFF;--toolbar:#1B257B}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg);color:var(--text);line-height:1.85;font-size:15px}
 .legal-header{background:var(--toolbar);color:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:30;box-shadow:0 2px 12px rgba(0,0,0,.15)}
@@ -8,7 +8,7 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 .legal-header .nav{display:flex;gap:16px;font-size:13px}
 .legal-header .nav a{color:#fff;opacity:.75;text-decoration:none}
 .legal-header .nav a:hover{opacity:1;text-decoration:underline}
-.legal-doc{max-width:880px;margin:48px auto;padding:48px 32px;background:var(--panel);border-radius:12px;box-shadow:0 4px 20px rgba(45,42,38,.06)}
+.legal-doc{max-width:880px;margin:48px auto;padding:48px 32px;background:var(--panel);border-radius:12px;box-shadow:0 4px 20px rgba(27,31,51,.06)}
 .legal-doc h1{font-family:'Noto Serif JP',serif;font-size:28px;font-weight:700;margin-bottom:8px;border-bottom:2px solid var(--accent);padding-bottom:14px}
 .legal-doc .meta{color:var(--muted);font-size:13px;margin-bottom:32px}
 .legal-doc h2{font-family:'Noto Serif JP',serif;font-size:18px;font-weight:700;margin:32px 0 12px;padding-left:10px;border-left:4px solid var(--accent)}
@@ -23,8 +23,8 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
    (span は他から参照されている可能性があるため残す) */
 .legal-doc .placeholder{color:inherit;font-weight:inherit;background:none;padding:0;border-radius:0;font-family:inherit;font-size:inherit}
 /* 記入例として枠を見せたいところだけ .sample を付ける */
-.legal-doc .placeholder.sample{color:var(--accent);font-weight:600;background:#FFF4F1;padding:1px 6px;border-radius:3px;font-family:monospace;font-size:13px}
-.legal-doc .notice{background:#FFF4F1;border-left:4px solid var(--accent);padding:14px 18px;margin:24px 0;border-radius:4px;font-size:14px;color:var(--text2)}
+.legal-doc .placeholder.sample{color:var(--accent);font-weight:600;background:#F1F3F9;padding:1px 6px;border-radius:3px;font-family:monospace;font-size:13px}
+.legal-doc .notice{background:#F1F3F9;border-left:4px solid var(--accent);padding:14px 18px;margin:24px 0;border-radius:4px;font-size:14px;color:var(--text2)}
 .legal-doc .notice strong{color:var(--accent)}
 .legal-footer{text-align:center;padding:32px 16px 48px;color:var(--muted);font-size:12px}
 .legal-footer a{color:var(--text2);text-decoration:none;margin:0 8px}
@@ -37,8 +37,8 @@ body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg
 /* ---- 言語切り替え（_legal-i18n.js が使う） ---- */
 /* 英語は参考訳である旨の断り。目立たせすぎず、しかし読み飛ばされない程度に */
 .legal-trans-note{
-  margin:0 0 24px;padding:10px 14px;border-left:3px solid #C9A227;
-  background:#FFFBF0;color:#6B5A2A;font-size:13px;line-height:1.7;border-radius:0 6px 6px 0;
+  margin:0 0 24px;padding:10px 14px;border-left:3px solid #FF6B00;
+  background:#FDF3EA;color:#7A3A0C;font-size:13px;line-height:1.7;border-radius:0 6px 6px 0;
 }
 .legal-lang-btn{
   margin-left:auto;padding:5px 12px;border:1px solid rgba(0,0,0,.18);border-radius:16px;

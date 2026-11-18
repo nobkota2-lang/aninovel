@@ -25,7 +25,7 @@
       window.__aninovelLang=l;
       try{ if(l==='en'){var d=document.documentElement;d.classList.add('i18n-pending');setTimeout(function(){d.classList.remove('i18n-pending');},6000);} }catch(e){}
     })();</script>
-    <style>html.i18n-pending #app{opacity:0!important;pointer-events:none!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(142,68,173,.25);border-top-color:#8E44AD;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
+    <style>html.i18n-pending #app{opacity:0!important;pointer-events:none!important}html.i18n-pending::after{content:"";position:fixed;top:50%;left:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid rgba(27,37,123,.2);border-top-color:#1B257B;border-radius:50%;animation:i18nspin .8s linear infinite;z-index:99999}@keyframes i18nspin{to{transform:rotate(360deg)}}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -58,7 +58,7 @@
     <script src="js/auth-token.js"></script>
     <script>
       // ビルド識別: DevToolsコンソールに出るこのメッセージで最新版かチェック可能
-      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v194_mobile_tts_critique';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
+      window.__ANINOVEL_BUILD__='2026-06-06_fonts_tts_i18n_v25';window.__ANINOVEL_VER__='v195_palette_v3';console.info('[AniNovel] VER=v29_names_narrator_gendertts');
       console.info('%c[Aninovel] build='+window.__ANINOVEL_BUILD__,'color:#6366F1;font-weight:bold');
       // PWA Service Worker 登録 (キャッシュ戦略はsw.jsで定義)
       if('serviceWorker' in navigator){
@@ -127,7 +127,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Source+Serif+4:wght@400;600&family=EB+Garamond:wght@400;500&family=Libre+Baskerville&family=Bitter:wght@400;600&family=PT+Serif&family=Noto+Serif:wght@400;700&family=Newsreader:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Spectral:wght@400;600&family=Crimson+Pro:wght@400;600&family=Vollkorn:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg-primary:#FAF6F0;--bg-secondary:#F5EFE6;--bg-paper:#FDF9F3;--bg-toolbar:#3D3A36;--bg-toolbar-author:#5A3555;--text-primary:#2D2A26;--text-secondary:#6B635A;--text-muted:#A39E96;--accent:#C0392B;--accent-soft:#E74C3C;--accent-author:#8E44AD;--accent-author-soft:#9B59B6;--border:#E2DCD4;--border-light:#EDE8E0;--shadow:rgba(45,42,38,0.08);--shadow-strong:rgba(45,42,38,0.15);--progress-bg:rgba(192,57,43,0.15);--progress-fill:#C0392B;--overlay:rgba(45,42,38,0.6);--panel-bg:#FFFFFF}
+:root{--bg-primary:#FAF6F0;--bg-secondary:#F5EFE6;--bg-paper:#FDF9F3;--bg-toolbar:#3D3A36;--bg-toolbar-author:#5A3555;--text-primary:#2D2A26;--text-secondary:#6B635A;--text-muted:#A39E96;--accent:#C0392B;--accent-soft:#E74C3C;--accent-author:#1B257B;--accent-author-soft:#9B59B6;--border:#E2DCD4;--border-light:#EDE8E0;--shadow:rgba(45,42,38,0.08);--shadow-strong:rgba(45,42,38,0.15);--progress-bg:rgba(192,57,43,0.15);--progress-fill:#C0392B;--overlay:rgba(45,42,38,0.6);--panel-bg:#FFFFFF}
 [data-theme="dark"]{--bg-primary:#1A1A1A;--bg-secondary:#222;--bg-paper:#252525;--bg-toolbar:#222;--bg-toolbar-author:#2A1428;--text-primary:#E8E0D8;--text-secondary:#A09890;--text-muted:#706860;--accent:#E74C3C;--accent-soft:#FF6B5A;--accent-author:#9B59B6;--accent-author-soft:#BB7CD4;--border:#3A3530;--border-light:#302C28;--shadow:rgba(0,0,0,0.3);--shadow-strong:rgba(0,0,0,0.5);--progress-bg:rgba(231,76,60,0.2);--progress-fill:#E74C3C;--overlay:rgba(0,0,0,0.7);--panel-bg:#2A2A2A}
 *{box-sizing:border-box;margin:0;padding:0}html,html{height:100%;overflow:hidden}body{height:100%;overflow:hidden}
 body{font-family:'Zen Kaku Gothic New','Noto Serif JP',serif;background:var(--bg-primary);color:var(--text-primary);transition:background .4s,color .4s}
@@ -274,6 +274,21 @@ html[lang="en"] .home-hero::after{content:'STORY';font-family:Georgia,'Times New
 @media(max-width:768px){.gallery-cat-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:768px){.panel-slide{width:100%;right:-100%}.bubble{max-width:280px}.toolbar{padding:6px 10px;min-height:48px}.gallery-grid{grid-template-columns:repeat(4,1fr)}.tb-fold{display:none}.tb-pc{display:none}.tb-mobi{display:inline-flex;align-items:center;justify-content:center}button.author-more-btn{display:inline-flex;align-items:center}}
 </style>
+<style id="palette-v3">
+/* 2026-11-18 配色v3: トップページと同じ色の決まり。元の色の定義は残し、ここで上書きする。 */
+:root{--bg-primary:#F6F7FA;--bg-secondary:#EEF0F5;--bg-paper:#FFFFFF;--bg-toolbar:#1B257B;--bg-toolbar-author:#2E2466;--text-primary:#1B1F33;--text-secondary:#4F5672;--text-muted:#656B89;--accent:#1B257B;--accent-soft:#283593;--accent-author:#6B4FA3;--accent-author-soft:#8468BD;--border:#E4E7EF;--border-light:#EEF0F5;--shadow:rgba(27,31,51,0.08);--shadow-strong:rgba(27,31,51,0.15);--progress-bg:rgba(27,37,123,0.12);--progress-fill:#1B257B;--overlay:rgba(13,16,39,0.55);--panel-bg:#FFFFFF}
+[data-theme="dark"]{--bg-primary:#0D1027;--bg-secondary:#151938;--bg-paper:#151938;--bg-toolbar:#0B0E22;--bg-toolbar-author:#1E1840;--text-primary:#ECEEF8;--text-secondary:#B5BAD9;--text-muted:#9097BF;--accent:#8C9BFF;--accent-soft:#A3AFFF;--accent-author:#B9A3EC;--accent-author-soft:#CDBBF5;--border:#2A3060;--border-light:#222852;--shadow:rgba(0,0,0,0.3);--shadow-strong:rgba(0,0,0,0.5);--progress-bg:rgba(140,155,255,0.2);--progress-fill:#8C9BFF;--overlay:rgba(0,0,0,0.7);--panel-bg:#1A1F45}
+/* ダークの主ボタンは明るい青なので文字を濃紺に */
+[data-theme="dark"] .btn-primary,[data-theme="dark"] .gallery-tab.active,[data-theme="dark"] .gal-chip.on{color:#0D1027}
+/* 読み上げ中の文は、本文(濃紺)と見分けやすいオレンジの文字で示す */
+.tts-reading .ts-on{color:#B4490A}
+[data-theme="dark"] .tts-reading .ts-on{color:#FF9A57}
+/* 同意バナー(js/analytics.js)もトップページと同じ色に */
+#aninovel-consent-banner{background:#10175A !important;border-radius:16px !important}
+#aninovel-consent-allow{background:#fff !important;color:#1B257B !important;border-radius:999px !important;font-weight:700 !important}
+#aninovel-consent-deny{border-radius:999px !important}
+</style>
+
 </head>
 <body>
     <div id="app"></div>
@@ -8267,7 +8282,7 @@ function setupDnD(){
             if(ch){
                 var ghost=document.createElement('div');
                 ghost.textContent='💬 '+ch.name;
-                ghost.style.cssText='position:fixed;top:-100px;left:-100px;background:#8E44AD;color:#fff;padding:8px 16px;border-radius:12px;font-size:13px;z-index:9999';
+                ghost.style.cssText='position:fixed;top:-100px;left:-100px;background:#1B257B;color:#fff;padding:8px 16px;border-radius:12px;font-size:13px;z-index:9999';
                 document.body.appendChild(ghost);
                 e.dataTransfer.setDragImage(ghost,40,20);
                 setTimeout(function(){ghost.remove()},0);
@@ -8377,7 +8392,7 @@ function setupDnD(){
 function mkClone(touch,el,label){
     _tClone=document.createElement('div');
     _tClone.textContent=label||el.textContent.substring(0,15);
-    _tClone.style.cssText='position:fixed;z-index:9999;background:#8E44AD;color:#fff;padding:8px 16px;border-radius:12px;font-size:13px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.9';
+    _tClone.style.cssText='position:fixed;z-index:9999;background:#1B257B;color:#fff;padding:8px 16px;border-radius:12px;font-size:13px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.9';
     _tClone.style.left=(touch.clientX-40)+'px';_tClone.style.top=(touch.clientY-20)+'px';
     document.body.appendChild(_tClone);
 }
