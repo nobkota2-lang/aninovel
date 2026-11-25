@@ -40,7 +40,7 @@ const VER = 'tts-google v4';
 // IPA で「あ・い・み」と読ませる(SSML の <phoneme>)。
 // 本文の英訳は変えず、合成するときだけ差し替える。
 const PRON = [
-  { re: /\bAimi(i*)\b/g, ipa: (m, ext) => 'ɑˈiːmiː' + (ext ? 'ː'.repeat(Math.min(ext.length, 3)) : '') },
+  { re: /\bAimi(i*)\b/g, ipa: () => 'ɑˈiːmiː' },
 ];
 
 function esc(t) {
