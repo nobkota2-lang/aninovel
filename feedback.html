@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>読者からの指摘・感想 — AniNovel</title>
+<meta name="robots" content="noindex">
+<style>
+:root{
+  --bg:#F6F7FA; --card:#fff; --ink:#1B1F33; --muted:#5A6080;
+  --line:#E4E7EF; --accent:#2F5FD0; --accent2:#2347B5; --err:#b23a3a; --ok:#3a7d44;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+    --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1027; --card:#1A1F45; --ink:#ECEEF8; --muted:#9097BF;
+  --line:#2A3060; --accent:#8C9BFF; --accent2:#A3AFFF;
+}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.7;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:32px 20px 64px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{font-size:1.6rem;margin:0 0 6px;letter-spacing:.02em}
+.lead{color:var(--muted);font-size:.95rem;margin:0 0 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
+.card+.card{margin-top:16px}
+.card h2{font-size:1rem;margin:0 0 4px;letter-spacing:.02em}
+.btn{padding:8px 16px;border:0;border-radius:9px;background:var(--accent);color:#fff;
+  font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
+.btn:hover{background:var(--accent2)}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);white-space:nowrap}
+.btn.ghost:hover{background:rgba(27,37,123,.08)}
+.msg{margin-top:18px;padding:13px 15px;border-radius:9px;font-size:.92rem}
+.msg.err{background:rgba(178,58,58,.1);border:1px solid rgba(178,58,58,.35);color:var(--err)}
+.foot{margin-top:26px;font-size:.88rem;color:var(--muted);text-align:center}
+.foot a{color:var(--accent);text-decoration:none}
+.foot a:hover{text-decoration:underline}
+.tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.74rem;font-weight:700;
+  vertical-align:middle}
+.tag.prov{background:rgba(201,162,39,.2);color:#8a6d0b}
+.tag.fixed{background:rgba(58,125,68,.15);color:#2f6637}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .tag.prov{color:#e2c761}
+  :root:not([data-theme="light"]) .tag.fixed{color:#8fc79a}
+}
+:root[data-theme="dark"] .tag.prov{color:#e2c761}
+:root[data-theme="dark"] .tag.fixed{color:#8fc79a}
+
+.big{font-size:2.6rem;font-weight:800;line-height:1.15;letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;margin:10px 0 0}
+.big .unit{font-size:1rem;font-weight:600;color:var(--muted);margin-left:8px}
+.sub{color:var(--muted);font-size:.88rem;margin:2px 0 0}
+
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.92rem}
+th,td{text-align:left;padding:9px 0;border-bottom:1px solid var(--line);vertical-align:baseline}
+th{font-size:.78rem;font-weight:600;color:var(--muted);letter-spacing:.03em}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.title{word-break:break-word;padding-right:12px}
+
+details{border-bottom:1px solid var(--line)}
+details:last-of-type{border-bottom:0}
+summary{cursor:pointer;padding:12px 0;display:flex;align-items:baseline;gap:10px;
+  list-style:none;font-size:.95rem}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"\25B8";color:var(--muted);font-size:.8rem;transition:transform .15s}
+details[open] summary::before{transform:rotate(90deg)}
+summary .period{font-weight:700;font-variant-numeric:tabular-nums}
+summary .spacer{flex:1}
+summary .pts{font-weight:700;font-variant-numeric:tabular-nums}
+summary .cnt{color:var(--muted);font-size:.84rem;font-variant-numeric:tabular-nums}
+details .inner{padding:0 0 10px 18px}
+details .inner table{margin-top:0}
+
+.empty{color:var(--muted);font-size:.92rem;margin:14px 0 0}
+.note{color:var(--muted);font-size:.85rem;margin:0}
+.note+.note{margin-top:8px}
+.skel{color:var(--muted);font-size:.92rem}
+
+/* 2026-11-18 配色v3: ダークの主ボタンは明るい青なので文字を濃紺に(白だと読みにくい) */
+:root[data-theme="dark"] .btn:not(.ghost){color:#0D1027}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn:not(.ghost){color:#0D1027}}
+
+/* 2026-11-19 配色v4(A案): 主ボタンは鮮やかな青、ページ上端にオレンジ→ピンクの帯 */
+body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height:4px;z-index:9999;background:linear-gradient(90deg,#FF8A1F,#FF5E62)}
+
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.filters select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;font-size:.88rem}
+.fb{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.fb.done{opacity:.6}
+.fb .meta{font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fb .kind{font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(47,95,208,.12);color:var(--accent)}
+.fb .kind.typo,.fb .kind.conflict,.fb .kind.fact{background:rgba(178,58,58,.12);color:var(--err)}
+.fb blockquote{margin:8px 0;padding:6px 10px;border-left:3px solid var(--line);color:var(--muted);font-size:.9rem;white-space:pre-wrap}
+.fb .body{white-space:pre-wrap;margin-top:6px}
+.fb .acts{margin-top:8px;display:flex;gap:6px}
+.fb .acts button{font-size:.8rem;padding:4px 10px}
+.empty{color:var(--muted);text-align:center;padding:30px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1 id="t-title">読者からの指摘・感想</h1>
+      <p class="lead" id="t-lead">あなたの作品に読者から届いた、誤字脱字・矛盾の指摘や感想です。ここに届くものは公開されず、作者(とオーナー)だけが読めます。返信の機能はありません。直したら「対応済み」にしておくと整理できます。</p>
+    </div>
+    <button class="btn ghost" id="lang" type="button">English</button>
+  </div>
+  <div class="filters">
+    <select id="f-work"></select>
+    <select id="f-kind"></select>
+    <select id="f-status"></select>
+  </div>
+  <div id="body"><p class="skel" id="t-loading">読み込んでいます…</p></div>
+  <p class="foot"><a href="/index.html" id="t-back">トップに戻る</a></p>
+</div>
+<script>
+/* 作者が、読者から届いた指摘・感想を読む画面  feedback.html
+ * ============================================================
+ * データは /api/feedback。作者は自分の作品の分だけ、オーナーは全作品の分が見える。
+ * 送り主は伏せてある(同じ人の投稿かどうかが分かる短い印だけ)。
+ * 返信はしない。「対応済み」「非表示」の印だけを付けられる。
+ * 言語はサイト全体と同じ鍵(aninovel_lang_v1)を読む。
+ */
+(function () {
+  'use strict';
+  var KEY = 'aninovel_lang_v1', ALT = 'aninovel_lang';
+  function lang() { try { var v = localStorage.getItem(KEY) || localStorage.getItem(ALT) || 'ja'; return v === 'en' ? 'en' : 'ja'; } catch (e) { return 'ja'; } }
+  function t(ja, en) { return lang() === 'en' ? en : ja; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+  var KINDS = {
+    typo: ['誤字・脱字', 'Typo / missing word'], conflict: ['矛盾・設定のずれ', 'Inconsistency'],
+    fact: ['事実・用語の誤り', 'Factual error'], impression: ['感想', 'Impression'],
+    request: ['要望・提案', 'Suggestion'], other: ['その他', 'Other']
+  };
+  var items = [], titles = {}, isOwner = false;
+
+  function applyLang() {
+    document.documentElement.lang = lang();
+    document.title = t('読者からの指摘・感想', 'Reader feedback') + ' — AniNovel';
+    document.getElementById('t-title').textContent = t('読者からの指摘・感想', 'Reader feedback');
+    document.getElementById('t-lead').textContent = t(
+      'あなたの作品に読者から届いた、誤字脱字・矛盾の指摘や感想です。ここに届くものは公開されず、作者(とオーナー)だけが読めます。返信の機能はありません。直したら「対応済み」にしておくと整理できます。',
+      'Typos, inconsistencies and impressions that readers sent about your works. Nothing here is published; only you (and the site owner) can read it. There is no reply function. Mark items as "Done" once you have fixed them.');
+    document.getElementById('t-back').textContent = t('トップに戻る', 'Back to top');
+    document.getElementById('lang').textContent = t('English', 'Japanese');
+  }
+
+  function fillFilters() {
+    var w = document.getElementById('f-work'), k = document.getElementById('f-kind'), s = document.getElementById('f-status');
+    var wv = w.value, kv = k.value, sv = s.value || 'open';
+    var ids = {}; items.forEach(function (i) { ids[i.workId] = 1; });
+    w.innerHTML = '<option value="">' + esc(t('すべての作品', 'All works')) + '</option>' +
+      Object.keys(ids).map(function (id) { return '<option value="' + esc(id) + '">' + esc(titles[id] || id) + '</option>'; }).join('');
+    k.innerHTML = '<option value="">' + esc(t('すべての種類', 'All types')) + '</option>' +
+      Object.keys(KINDS).map(function (id) { return '<option value="' + id + '">' + esc(t(KINDS[id][0], KINDS[id][1])) + '</option>'; }).join('');
+    s.innerHTML = '<option value="open">' + esc(t('未対応', 'Open')) + '</option><option value="done">' + esc(t('対応済み', 'Done')) + '</option>' +
+      '<option value="all">' + esc(t('すべて', 'All')) + '</option><option value="hidden">' + esc(t('非表示', 'Hidden')) + '</option>';
+    w.value = wv; k.value = kv; s.value = sv;
+  }
+
+  function draw() {
+    var w = document.getElementById('f-work').value, k = document.getElementById('f-kind').value, s = document.getElementById('f-status').value || 'open';
+    var list = items.filter(function (i) {
+      if (w && i.workId !== w) return false;
+      if (k && i.kind !== k) return false;
+      if (s === 'open') return i.status === 'new';
+      if (s === 'done') return i.status === 'done';
+      if (s === 'hidden') return i.status === 'hidden';
+      return i.status !== 'hidden';
+    });
+    var el = document.getElementById('body');
+    if (!list.length) { el.innerHTML = '<p class="empty">' + esc(t('まだ届いていません。', 'Nothing here yet.')) + '</p>'; return; }
+    el.innerHTML = list.map(function (i) {
+      var kn = KINDS[i.kind] ? t(KINDS[i.kind][0], KINDS[i.kind][1]) : i.kind;
+      return '<div class="fb' + (i.status === 'done' ? ' done' : '') + '">' +
+        '<div class="meta"><span class="kind ' + esc(i.kind) + '">' + esc(kn) + '</span>' +
+        '<span>' + esc(titles[i.workId] || i.workId) + (i.page ? ' · p' + esc(i.page) : '') + '</span>' +
+        '<span>' + esc(String(i.at).replace('T', ' ').slice(0, 16)) + '</span>' +
+        '<span>' + esc(i.from === 'member' ? t('会員', 'member') : t('立ち読み', 'guest')) + ' #' + esc(i.sender || '') + '</span>' +
+        (i.lang === 'en' ? '<span>EN</span>' : '') + '</div>' +
+        (i.quote ? '<blockquote>' + esc(i.quote) + '</blockquote>' : '') +
+        '<div class="body">' + esc(i.text) + '</div>' +
+        '<div class="acts">' +
+          (i.status !== 'done' ? '<button class="btn" data-act="done" data-w="' + esc(i.workId) + '" data-id="' + esc(i.id) + '">' + esc(t('対応済みにする', 'Mark done')) + '</button>'
+                               : '<button class="btn ghost" data-act="new" data-w="' + esc(i.workId) + '" data-id="' + esc(i.id) + '">' + esc(t('未対応に戻す', 'Reopen')) + '</button>') +
+          (i.status !== 'hidden' ? '<button class="btn ghost" data-act="hidden" data-w="' + esc(i.workId) + '" data-id="' + esc(i.id) + '">' + esc(t('非表示', 'Hide')) + '</button>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  function load() {
+    Promise.all([
+      fetch('/api/feedback?hidden=1', { credentials: 'include', cache: 'no-store' }).then(function (r) { return r.json().then(function (j) { return { st: r.status, j: j }; }); }),
+      fetch('/api/catalog', { cache: 'no-store' }).then(function (r) { return r.json(); }).catch(function () { return []; })
+    ]).then(function (res) {
+      var x = res[0], cat = res[1];
+      var list = Array.isArray(cat) ? cat : (cat.works || cat.items || []);
+      list.forEach(function (w) { titles[w.id] = (lang() === 'en' && w.titleEn) ? w.titleEn : (w.title || w.id); });
+      if (x.st === 401) {
+        document.getElementById('body').innerHTML = '<p class="msg err">' + esc(t('ログインが必要です。', 'Please sign in.')) + ' <a href="/login.html?next=/feedback.html">' + esc(t('ログイン', 'Sign in')) + '</a></p>';
+        return;
+      }
+      if (!x.j || !x.j.ok) {
+        document.getElementById('body').innerHTML = '<p class="msg err">' + esc(t('読み込めませんでした。', 'Could not load.')) + '</p>';
+        return;
+      }
+      items = x.j.items || []; isOwner = !!x.j.isOwner;
+      fillFilters(); draw();
+    }).catch(function () {
+      document.getElementById('body').innerHTML = '<p class="msg err">' + esc(t('読み込めませんでした。', 'Could not load.')) + '</p>';
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-act]'); if (!b) return;
+    var st = b.getAttribute('data-act');
+    b.disabled = true;
+    fetch('/api/feedback', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workId: b.getAttribute('data-w'), id: b.getAttribute('data-id'), status: st }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) { items.forEach(function (i) { if (i.id === j.item.id && i.workId === j.item.workId) i.status = j.item.status; }); draw(); }
+        else b.disabled = false;
+      }).catch(function () { b.disabled = false; });
+  });
+  ['f-work', 'f-kind', 'f-status'].forEach(function (id) { document.getElementById(id).addEventListener('change', draw); });
+  document.getElementById('lang').addEventListener('click', function () {
+    try { localStorage.setItem(KEY, lang() === 'en' ? 'ja' : 'en'); } catch (e) {}
+    applyLang(); fillFilters(); draw();
+  });
+  applyLang(); load();
+})();
+</script>
+</body>
+</html>

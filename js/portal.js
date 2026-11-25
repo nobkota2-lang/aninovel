@@ -573,6 +573,11 @@
           title: _roleEn() ? 'Points' : 'ポイント' }, '\u{1F3C5}');
         ptsBtn.onclick = function() { window.location.href = '/points.html'; };
         badge.appendChild(ptsBtn);
+        // 読者から届いた指摘・感想(作者だけが読む受信箱)
+        var fbBtn = h('button', { className: 'btn btn-ghost btn-sm',
+          title: _roleEn() ? 'Reader feedback' : '\u8aad\u8005\u304b\u3089\u306e\u6307\u6458\u30fb\u611f\u60f3' }, '\u2709\uFE0F');
+        fbBtn.onclick = function() { window.location.href = '/feedback.html'; };
+        badge.appendChild(fbBtn);
       }
       if (roles.indexOf('author') >= 0 || roles.indexOf('owner') >= 0) {
         var myBtn = h('button', { className: 'btn btn-ghost btn-sm', title: 'マイ作品' }, '\u270F\uFE0F');
@@ -935,6 +940,12 @@ function updateWelcomeBanner() {
                + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
         }, _en ? 'Your points \u2192' : '\u30dd\u30a4\u30f3\u30c8\u3092\u898b\u308b \u2192');
         banner.appendChild(ptsLink);
+        var fbLink = h('a', { href: '/feedback.html', className: 'welcome-points-link',
+          style: 'display:inline-block;margin:10px 0 0 8px;padding:7px 14px;border-radius:999px;'
+               + 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);'
+               + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
+        }, _en ? 'Reader feedback \u2192' : '\u8aad\u8005\u304b\u3089\u306e\u6307\u6458\u30fb\u611f\u60f3 \u2192');
+        banner.appendChild(fbLink);
       }
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
