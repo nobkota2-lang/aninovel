@@ -61,17 +61,17 @@ export async function onRequestPost(context) {
       }),
     });
   } catch (e) {
-    return json({ error: 'google fetch failed: ' + String((e && e.message) || e) }, 502);
+    return json({ error: 'google fetch failed: ' + String((e && e.message) || e) }, 500);
   }
   if (!r.ok) {
     let msg = 'google http ' + r.status;
     try { const j = await r.json(); if (j && j.error && j.error.message) msg += ' ' + j.error.message; } catch {}
     // 枠・課金の問題は、呼ぶ側が「止める」と判断できる形で返す。
     const limit = r.status === 429 || /quota|billing|exceeded/i.test(msg);
-    return json({ error: msg.slice(0, 400), limit, voice: name }, limit ? 429 : 502);
+    return json({ error: msg.slice(0, 400), limit, voice: name }, limit ? 429 : 500);
   }
   const j = await r.json();
-  if (!j || !j.audioContent) return json({ error: 'no audioContent' }, 502);
+  if (!j || !j.audioContent) return json({ error: 'no audioContent' }, 500);
   const bin = atob(j.audioContent);
   const u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
