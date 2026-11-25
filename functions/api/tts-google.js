@@ -34,7 +34,46 @@ function voiceName(v) {
   return hit ? 'en-US-Chirp3-HD-' + hit : DEFAULT_VOICE;
 }
 
+const VER = 'tts-google v4';
+
+// 固有名詞の読み。英語の声は "Aimi" を「エイミー」と読みがちなので、
+// IPA で「あ・い・み」と読ませる(SSML の <phoneme>)。
+// 本文の英訳は変えず、合成するときだけ差し替える。
+const PRON = [
+  { re: /\bAimi(i*)\b/g, ipa: (m, ext) => 'ɑˈiːmiː' + (ext ? 'ː'.repeat(Math.min(ext.length, 3)) : '') },
+];
+
+function esc(t) {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 読みの差し替えが要る文だけ SSML にする。要らない文は今までどおり text で送る。
+function toInput(text, ipaOverride) {
+  let hit = false;
+  let out = esc(text);
+  for (const p of PRON) {
+    out = out.replace(p.re, (m, ext) => {
+      hit = true;
+      const ph = ipaOverride || p.ipa(m, ext || '');
+      return '<phoneme alphabet="ipa" ph="' + ph + '">' + m + '</phoneme>';
+    });
+  }
+  return hit ? { ssml: '<speak>' + out + '</speak>' } : { text };
+}
+
+export async function onRequestGet(context) {
+  return json({ ver: VER, hasKey: !!context.env.GOOGLE_TTS_KEY }, 200);
+}
+
 export async function onRequestPost(context) {
+  try { return await handle(context); }
+  catch (e) {
+    // 例外は 200 + ok:false で返す。5xx だと Cloudflare が自前のエラー画面に差し替え、原因が見えなくなる。
+    return json({ ok: false, error: 'exception: ' + String((e && e.stack) || e).slice(0, 600), ver: VER }, 200);
+  }
+}
+
+async function handle(context) {
   const { request, env } = context;
   const o = await requireOwner(context);
   if (o.deny) return o.deny;
@@ -55,23 +94,23 @@ export async function onRequestPost(context) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input: { text },
+        input: toInput(text, typeof body.ph === 'string' ? body.ph.slice(0, 60) : ''),
         voice: { languageCode, name },
         audioConfig: { audioEncoding: 'MP3' },
       }),
     });
   } catch (e) {
-    return json({ error: 'google fetch failed: ' + String((e && e.message) || e) }, 500);
+    return json({ ok: false, error: 'google fetch failed: ' + String((e && e.message) || e), ver: VER }, 200);
   }
   if (!r.ok) {
     let msg = 'google http ' + r.status;
     try { const j = await r.json(); if (j && j.error && j.error.message) msg += ' ' + j.error.message; } catch {}
     // 枠・課金の問題は、呼ぶ側が「止める」と判断できる形で返す。
     const limit = r.status === 429 || /quota|billing|exceeded/i.test(msg);
-    return json({ error: msg.slice(0, 400), limit, voice: name }, limit ? 429 : 500);
+    return json({ ok: false, error: msg.slice(0, 400), limit, voice: name, ver: VER }, limit ? 429 : 200);
   }
   const j = await r.json();
-  if (!j || !j.audioContent) return json({ error: 'no audioContent' }, 500);
+  if (!j || !j.audioContent) return json({ ok: false, error: 'no audioContent', ver: VER }, 200);
   const bin = atob(j.audioContent);
   const u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
