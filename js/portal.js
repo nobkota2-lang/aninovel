@@ -303,6 +303,9 @@
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4D6; ' + work.pageCount + (_pEn()?'p':'頁') }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F4DD; ' + work.charCount + (_pEn()?' chars':'字') }));
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x1F464; ' + work.characterCount + (_pEn()?' cast':'人') }));
+    // 平均の★(口コミがある作品だけ。数字は後から /api/reviews でまとめて埋める)
+    var _rate = h('span', { className: 'stats-badge stats-rating', style: 'display:none' });
+    _rate.dataset.rateId = String(work.id || ''); stats.appendChild(_rate);
     head.appendChild(stats);
     var tags = h('div', { className: 'card-tags' });
     (work.tags || []).forEach(function(t, ti) { tags.appendChild(h('span', { className: 'tag' }, _tagLabel(t, work, ti))); });
@@ -377,6 +380,8 @@
     stats.appendChild(h('span', { className: 'stats-badge', html: '&#x2764; ' + (work.totalVotes || v.total) }));
     // 2026-11-18: ページ数の代わりに閲覧数。ランキングの同点はこの順で並ぶ。
     stats.appendChild(h('span', { className: 'stats-badge stats-views', html: (_pEn() ? 'Views ' : '閲覧 ') + (Number(work.views) || 0) }));
+    var _rate2 = h('span', { className: 'stats-badge stats-rating', style: 'display:none' });
+    _rate2.dataset.rateId = String(work.id || ''); stats.appendChild(_rate2);
 
     var voteBtn = createVoteBtn(work.id, { total: work.totalVotes || v.total, userVoted: work.userVoted || v.userVoted });
 
@@ -1174,4 +1179,45 @@ function updateWelcomeBanner() {
     repaintWorks: _paintWorks
   });
 
+})();
+
+/* 作品カード・ランキングに平均の★を出す
+ * カードを描いたあと、まだ埋めていない [data-rate-id] を集めて
+ * /api/reviews?summary=id,id,... でまとめて1回だけ問い合わせる。
+ * 口コミが1件も無い作品は何も出さない(★0と見せると印象が悪い)。 */
+(function () {
+  'use strict';
+  var cache = {}, pending = false;
+  function fill() {
+    pending = false;
+    var els = Array.prototype.slice.call(document.querySelectorAll('.stats-rating[data-rate-id]:not([data-rate-done])'));
+    if (!els.length) return;
+    var need = {};
+    els.forEach(function (el) { var id = el.dataset.rateId; if (id && !(id in cache)) need[id] = 1; });
+    var ids = Object.keys(need);
+    var paint = function () {
+      els.forEach(function (el) {
+        var s = cache[el.dataset.rateId];
+        el.setAttribute('data-rate-done', '1');
+        if (s && s.n) {
+          el.textContent = '\u2605 ' + Number(s.avg).toFixed(1) + ' (' + s.n + ')';
+          el.title = (s.n + ' review' + (s.n === 1 ? '' : 's'));
+          el.style.display = '';
+          el.style.color = '#d48a00';
+        }
+      });
+    };
+    if (!ids.length) { paint(); return; }
+    var chunks = [];
+    for (var i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+    Promise.all(chunks.map(function (c) {
+      return fetch('/api/reviews?summary=' + encodeURIComponent(c.join(',')))
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .then(function (j) { c.forEach(function (id) { cache[id] = (j && j.summary && j.summary[id]) || null; }); })
+        .catch(function () { c.forEach(function (id) { cache[id] = null; }); });
+    })).then(paint);
+  }
+  function schedule() { if (!pending) { pending = true; setTimeout(fill, 300); } }
+  try { new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true }); } catch (e) {}
+  if (document.readyState !== 'loading') schedule(); else document.addEventListener('DOMContentLoaded', schedule);
 })();
