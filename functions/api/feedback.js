@@ -48,11 +48,11 @@ function json(obj, status = 200) {
 }
 
 async function senderMark(request, env, user) {
-  if (user && user.email) return 'u:' + normEmail(user.email);
-  const ip = request.headers.get('CF-Connecting-IP') || '';
+  // メールも IP もそのままは残さない。どちらも塩付きハッシュにする。
   const salt = (env && env.OBJECTION_SALT) || 'aninovel-feedback';
-  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + '|fb|' + ip));
-  return 'a:' + Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  const src = (user && user.email) ? 'u|' + normEmail(user.email) : 'a|' + (request.headers.get('CF-Connecting-IP') || '');
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + '|fb|' + src));
+  return ((user && user.email) ? 'u:' : 'a:') + Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 }
 
 function clean(s, n) {
@@ -130,6 +130,8 @@ export async function onRequestPost(context) {
   const rec = {
     id, workId, kind, text, quote, itemId, page, lang,
     from: user ? 'member' : 'guest',
+    // 会員はニックネーム(サイト上で公開している名前)を作者に見せる。メールは見せない。
+    nick: user ? (clean(user.nickname, 40) || '') : '',
     // 作者には送り主を見せない。同じ人の投稿をまとめて見分けるための短い印だけ持つ。
     sender: mark.slice(0, 2) + mark.slice(-6),
     at: new Date(now).toISOString(),

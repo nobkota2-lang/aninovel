@@ -186,7 +186,7 @@ body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height
         '<div class="meta"><span class="kind ' + esc(i.kind) + '">' + esc(kn) + '</span>' +
         '<span>' + esc(titles[i.workId] || i.workId) + (i.page ? ' · p' + esc(i.page) : '') + '</span>' +
         '<span>' + esc(String(i.at).replace('T', ' ').slice(0, 16)) + '</span>' +
-        '<span>' + esc(i.from === 'member' ? t('会員', 'member') : t('立ち読み', 'guest')) + ' #' + esc(i.sender || '') + '</span>' +
+        '<span>' + (i.from === 'member' ? esc(t('会員', 'Member')) + ': ' + esc(i.nick || ('#' + (i.sender || ''))) : esc(t('立ち読みの読者', 'Guest reader')) + ' #' + esc(i.sender || '')) + '</span>' +
         (i.lang === 'en' ? '<span>EN</span>' : '') + '</div>' +
         (i.quote ? '<blockquote>' + esc(i.quote) + '</blockquote>' : '') +
         '<div class="body">' + esc(i.text) + '</div>' +

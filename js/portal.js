@@ -399,6 +399,13 @@
       var list = $('#ranking-list');
       if (!list) return;
       list.innerHTML = '';
+      // 評価順は、★の付いた作品が集まるまでは人気順で代用している。そのことを一行で伝える。
+      if (state.rankSort === 'rating' && works.ratingLocked) {
+        var _rl = works.ratingLocked;
+        list.appendChild(h('div', { className: 'ranking-note', style: 'font-size:12px;color:var(--text-muted,#888);padding:6px 4px 10px' },
+          _pEn() ? ('Top-rated ranking starts once ' + _rl.need + ' works have ratings (now ' + _rl.rated + '). Showing popular works for now.')
+                 : ('\u8a55\u4fa1\u9806\u306f\u3001\u2605\u306e\u4ed8\u3044\u305f\u4f5c\u54c1\u304c' + _rl.need + '\u4f5c\u54c1\u306b\u306a\u3063\u305f\u3089\u59cb\u307e\u308a\u307e\u3059\uff08\u73fe\u5728' + _rl.rated + '\u4f5c\u54c1\uff09\u3002\u305d\u308c\u307e\u3067\u306f\u4eba\u6c17\u9806\u3067\u8868\u793a\u3057\u3066\u3044\u307e\u3059\u3002')));
+      }
       // 上位10作品まで。全作品を縦に並べると、ランキングとしての意味が薄れる。
       works.slice(0, RANKING_MAX).forEach(function(w, i) {
         list.appendChild(createRankingItem(w, i, {}));
@@ -1201,7 +1208,6 @@ function updateWelcomeBanner() {
         el.setAttribute('data-rate-done', '1');
         if (s && s.n) {
           el.textContent = '\u2605 ' + Number(s.avg).toFixed(1) + ' (' + s.n + ')';
-          el.title = (s.n + ' review' + (s.n === 1 ? '' : 's'));
           el.style.display = '';
           el.style.color = '#d48a00';
         }

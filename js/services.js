@@ -222,6 +222,7 @@
           });
         });
 
+        if (sortBy === 'rating') return self._rankByRating(works);
         switch (sortBy) {
           case 'newest':
             works.sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
@@ -245,6 +246,52 @@
             break;
         }
 
+        return works;
+      });
+    },
+
+    /**
+     * 評価順(★)のランキング。
+     * ★の数が少ないうちは順位が偶然に左右されるので、評価の付いた作品が
+     * 「全作品の半数」か「20作品」のどちらかに届くまでは採用しない
+     * (2026-11-26 Nobby決定)。届くまでは人気順を返し、ratingLocked を付ける。
+     * 並びは件数の少ない作品の平均を全体の平均に寄せる「ベイズ平均」:
+     *   (C*全体平均 + ★の合計) / (C + 件数)   C=5
+     * ★5が1件だけの作品が、たくさん評価された作品を追い越さないようにするため。
+     */
+    _rankByRating: function(works) {
+      var ids = works.map(function(w) { return w.id; });
+      var chunks = [];
+      for (var i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+      return Promise.all(chunks.map(function(c) {
+        return fetch('/api/reviews?summary=' + encodeURIComponent(c.join(',')))
+          .then(function(r) { return r.ok ? r.json() : {}; })
+          .then(function(j) { return (j && j.summary) || {}; })
+          .catch(function() { return {}; });
+      })).then(function(parts) {
+        var sm = {};
+        parts.forEach(function(p) { for (var k in p) sm[k] = p[k]; });
+        var rated = works.filter(function(w) { return sm[w.id] && sm[w.id].n > 0; });
+        var need = Math.min(20, Math.ceil(works.length / 2));
+        var byVotes = function(a, b) {
+          return (b.totalVotes - a.totalVotes)
+              || ((Number(b.views) || 0) - (Number(a.views) || 0))
+              || (new Date(b.createdAt) - new Date(a.createdAt));
+        };
+        if (rated.length < need) {
+          works.sort(byVotes);
+          works.ratingLocked = { rated: rated.length, need: need };
+          return works;
+        }
+        var n = 0, sum = 0;
+        rated.forEach(function(w) { n += sm[w.id].n; sum += sm[w.id].avg * sm[w.id].n; });
+        var m = n ? sum / n : 0, C = 5;
+        var score = function(w) {
+          var s = sm[w.id]; if (!s || !s.n) return -1;
+          return (C * m + s.avg * s.n) / (C + s.n);
+        };
+        works.forEach(function(w) { w.ratingScore = score(w); });
+        works.sort(function(a, b) { return (b.ratingScore - a.ratingScore) || byVotes(a, b); });
         return works;
       });
     },
