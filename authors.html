@@ -76,6 +76,15 @@ a{color:var(--accent)}
 .steps li b{display:block;font-weight:700}
 .steps li span{color:var(--muted);font-size:.92rem}
 .note{color:var(--muted);font-size:.9rem}
+.perks{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:0}
+.perk{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:16px}
+.perk .ic{font-size:1.6rem;line-height:1}
+.perk b{display:block;margin:8px 0 4px;font-size:1rem}
+.perk span{color:var(--muted);font-size:.9rem;line-height:1.7;display:block}
+.hero-cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.btn.sec{background:transparent;color:var(--accent);border:1px solid var(--accent);padding:13px 24px}
+.btn.sec:hover{background:rgba(47,95,208,.08)}
+.shot{display:block;width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0 16px}
 .foot{margin-top:34px;font-size:.88rem;color:var(--muted);text-align:center}
 .foot a{text-decoration:none}
 .foot a:hover{text-decoration:underline}
@@ -141,6 +150,33 @@ body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height
 
     var h = '';
 
+    // ---- 作者になるとうれしいこと(2026-11-27) ----
+    // 根拠: 利用規約 第5条(料金)・第9条(収益の分配)、legal/revenue.html、実装済みの機能。
+    // 金額の見込みは書かない。
+    function perk(ic, ja, jad, en, end) {
+      return '<div class="perk"><div class="ic">' + ic + '</div><b>' + t(ja, en) + '</b><span>'
+        + t(jad, end) + '</span></div>';
+    }
+    h += '<div class="card"><h2>' + t('作者になるとうれしいこと', 'Why write on AniNovel') + '</h2>'
+      + '<div class="perks">'
+      + perk('\u{1F4B0}', '読まれた分だけ分配', '収益から運営者の取り分（現在50％）を引いた残りを、読まれた量に応じて作者に分配します。',
+             'Paid for being read', 'What remains of the revenue after the operator\u2019s share (currently 50%) is shared among writers by how much they are read.')
+      + perk('\u{1F381}', '書き続ける限り無料', '登録も道具も無料。作品の登録や編集を続けている間は、キャンペーン終了後も月額料金はかかりません。',
+             'Free while you write', 'Sign-up and tools are free. As long as you keep adding or editing works, there is no monthly fee even after the campaign.')
+      + perk('\u{1F30F}', '世界の読者へ', '読者が English を選ぶと、本文が英語で表示されます。翻訳の手間はかかりません。',
+             'Readers worldwide', 'When a reader chooses English, your text is shown in English. No translation work is needed from you.')
+      + perk('\u{1F399}\uFE0F', '顔と声で読まれる', '登場人物にアイコンと声を付けると、吹き出しと朗読で読まれます。',
+             'Faces and voices', 'Give your characters icons and voices, and your story is read with speech bubbles and narration.')
+      + perk('\u{1F9EA}', 'AIの講評はあなただけに', '良いところと「こうするともっと良くなる」を、AIが観点ごとに伝えます。読者には見えません。',
+             'Private AI feedback', 'An AI points out your strengths and how to improve, point by point. Readers do not see it.')
+      + perk('\u2709\uFE0F', '読者の声が届く', '誤字の指摘や感想が受信箱に届きます。返信の義務はなく、言い合いになる掲示板もありません。',
+             'Hear from readers', 'Typo reports and impressions arrive in your inbox. No obligation to reply, and no message board to argue on.')
+      + '</div>'
+      + '<div class="hero-cta">'
+      + '<a class="btn" href="/author-apply.html">' + t('作者登録を申請する', 'Apply to become a writer') + '</a>'
+      + '<a class="btn sec" href="/manual.html">' + t('\u{1F4D8} 作者マニュアルを見る', '\u{1F4D8} Writer\u2019s manual (Japanese)') + '</a>'
+      + '</div></div>';
+
     // ---- できること ----
     h += '<div class="card"><h2>' + t('できること', 'What you can do') + '</h2><ul>'
       + '<li>' + t('<strong>吹き出しで読ませる。</strong>台詞ごとに話し手を決めると、'
@@ -169,6 +205,10 @@ body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height
                 + '作品が読まれた量に応じてお渡しします。',
                   '<strong>You share in the revenue.</strong> Part of what the service earns '
                 + 'is passed on according to how much your work was read.') + '</li>'
+      + '<li>' + t('<strong>デジタルギフト券でお支払いします。</strong>1,000円に達するとお知らせし、'
+                + '月末締め・翌月末までにお送りします。銀行口座の情報はお預かりしません。',
+                  '<strong>Paid in digital gift cards.</strong> We let you know once you reach 1,000 yen, '
+                + 'and send it by the end of the following month. We never ask for bank details.') + '</li>'
       + '<li>' + t('<strong>作品の権利はあなたのものです。</strong>運営者が著作権を譲り受けることも、'
                 + '第三者へ売ることもありません。',
                   '<strong>Your work stays yours.</strong> The operator never takes over your '
@@ -218,6 +258,19 @@ body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height
           'Content that offends public decency cannot pass, whether on first publication or '
         + 'in a later edit. If we send something back, we tell you why.')
       + '</p></div>';
+
+    // ---- 使い方は作者マニュアルで(2026-11-27) ----
+    h += '<div class="card"><h2>' + t('使い方は作者マニュアルで', 'Learn the tools in the writer\u2019s manual') + '</h2>'
+      + '<img class="shot" src="/images/manual/03-editor.png" alt="" loading="lazy" width="1176" height="900">'
+      + '<p>' + t('編集画面のボタンの意味、登場人物とアイコンの付け方、ルビ、公開の依頼から審査まで、'
+                + 'そして公開後に直すときの注意を、画面の図つきで説明しています。',
+                  'The manual walks you through the editor\u2019s buttons, characters and icons, '
+                + 'furigana, requesting publication and review, and what to watch out for when you edit '
+                + 'a published work, with screenshots. It is currently in Japanese only.') + '</p>'
+      + '<div class="hero-cta" style="margin-top:8px">'
+      + '<a class="btn sec" href="/manual.html">' + t('Web で読む', 'Read online (Japanese)') + '</a>'
+      + '<a class="btn sec" href="/aninovel-author-manual.pdf" download>' + t('PDF をダウンロード', 'Download PDF (Japanese)') + '</a>'
+      + '</div></div>';
 
     // ---- 入口 ----
     h += '<div class="cta">'

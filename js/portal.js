@@ -6,7 +6,7 @@
   'use strict';
   var S = window.AninovelServices;
   // デプロイできているかをコンソールで確かめるための目印。
-  window.__ANINOVEL_PORTAL_VER__ = 'v11_palette_v4a';
+  window.__ANINOVEL_PORTAL_VER__ = 'v12_author_manual_links';
   var state = { user: null, rankSort: 'votes' };
 
   // === DOM ヘルパー ===
@@ -847,6 +847,10 @@
       });
     };
     content.appendChild(createBtn);
+    // 2026-11-27: 書き方・公開の流れ・注意事項は作者マニュアルへ
+    content.appendChild(h('p', { style: 'text-align:center;margin:10px 0 0;font-size:12px' },
+      [h('a', { href: '/manual.html', target: '_blank', rel: 'noopener', style: 'color:var(--accent,#2F5FD0)' },
+        '\u{1F4D8} 使い方と注意事項は作者マニュアルへ')]));
 
     overlay.appendChild(content);
     document.body.appendChild(overlay);
@@ -958,6 +962,12 @@ function updateWelcomeBanner() {
                + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
         }, _en ? 'Reader feedback \u2192' : '\u8aad\u8005\u304b\u3089\u306e\u6307\u6458\u30fb\u611f\u60f3 \u2192');
         banner.appendChild(fbLink);
+        var manLink = h('a', { href: '/manual.html', className: 'welcome-points-link',
+          style: 'display:inline-block;margin:10px 0 0 8px;padding:7px 14px;border-radius:999px;'
+               + 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);'
+               + 'color:inherit;text-decoration:none;font-size:13px;font-weight:600'
+        }, _en ? 'Writer\u2019s manual \u2192' : '\u{1F4D8} \u4f5c\u8005\u30de\u30cb\u30e5\u30a2\u30eb \u2192');
+        banner.appendChild(manLink);
       }
       hero.style.display = 'none';
       hero.parentNode.insertBefore(banner, hero);
