@@ -122,9 +122,9 @@
   (function(add){ for(var k in add) if(Object.prototype.hasOwnProperty.call(add,k)) JA2EN[k]=add[k]; })({
     "書いた小説が、アニメ風の吹き出しと声で読まれます。": "Your novel is read with anime-style speech bubbles and voices.",
     "作者になるとうれしいこと": "Why write on AniNovel",
-    "\u{1F4B0} 読まれた量に応じて収益を分配（ポイント制）": "\u{1F4B0} A share of revenue based on how much you are read (points)",
-    "\u{1F381} 登録も道具も無料。書き続けている間は、キャンペーン終了後も無料": "\u{1F381} Sign-up and tools are free — and stay free after the campaign while you keep writing",
-    "\u{1F30F} 自動の英訳で、世界の読者にも届く": "\u{1F30F} Automatic English translation reaches readers worldwide",
+    "\u{1F30F} 日本の読者はもちろん、自動の英訳で世界の読者にも届く": "\u{1F30F} Readers in Japan, and worldwide through automatic English translation",
+    "\u{1F4B0} 作家としての収入も期待（キャンペーン終了後、読者会員のサービス収入をポイントに応じて分配）": "\u{1F4B0} Earn as a writer (after the campaign, reader-membership revenue is shared by points)",
+    "\u{1F381} 作家会員は無料（投稿や編集の活動がなくなって1年が経過するまで）": "\u{1F381} Writer membership is free (until a full year passes with no posting or editing)",
     "\u{1F399}\uFE0F 登場人物にアイコンと声。朗読つきで読まれる": "\u{1F399}\uFE0F Icons and voices for your characters, with narration",
     "\u{1F9EA} AIが良いところと伸ばし方を講評（あなただけに表示）": "\u{1F9EA} AI feedback on strengths and how to improve (visible only to you)",
     "\u2709\uFE0F 読者から誤字の指摘や感想が届く": "\u2709\uFE0F Readers can send you typo reports and impressions",
@@ -392,5 +392,5 @@
     // 画面ごとの追加辞書を足す。i18n.js を読んだあとでも呼べる。
     extend:function(obj){ extend(obj); try{ applyToDOM(); }catch(e){} }
   };
-  window.__ANINOVEL_I18N_VER__='i18n_v15_author_recruit';console.info('[i18n] 言語=',currentLang);
+  window.__ANINOVEL_I18N_VER__='i18n_v16_author_perks';console.info('[i18n] 言語=',currentLang);
 })();

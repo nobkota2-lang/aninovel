@@ -159,12 +159,14 @@ body::before{content:"";display:block;position:fixed;left:0;right:0;top:0;height
     }
     h += '<div class="card"><h2>' + t('作者になるとうれしいこと', 'Why write on AniNovel') + '</h2>'
       + '<div class="perks">'
-      + perk('\u{1F4B0}', '読まれた分だけ分配', '収益から運営者の取り分（現在50％）を引いた残りを、読まれた量に応じて作者に分配します。',
-             'Paid for being read', 'What remains of the revenue after the operator\u2019s share (currently 50%) is shared among writers by how much they are read.')
-      + perk('\u{1F381}', '書き続ける限り無料', '登録も道具も無料。作品の登録や編集を続けている間は、キャンペーン終了後も月額料金はかかりません。',
-             'Free while you write', 'Sign-up and tools are free. As long as you keep adding or editing works, there is no monthly fee even after the campaign.')
-      + perk('\u{1F30F}', '世界の読者へ', '読者が English を選ぶと、本文が英語で表示されます。翻訳の手間はかかりません。',
-             'Readers worldwide', 'When a reader chooses English, your text is shown in English. No translation work is needed from you.')
+      + perk('\u{1F30F}', '世界の読者へ', '日本の読者はもちろん、読者が English を選ぶと本文が英語で表示され、世界の読者にも読まれます。翻訳の手間はかかりません。',
+             'Readers worldwide', 'Readers in Japan, of course \u2014 and when a reader chooses English, your text is shown in English, so readers around the world can enjoy it too. No translation work is needed from you.')
+      + perk('\u{1F4B0}', '作家としての収入も期待', 'キャンペーン期間終了後、読者会員のサービス収入は、作品が読まれて得たポイントに応じて作家に分配します。',
+             'Income as a writer', 'After the campaign ends, revenue from reader memberships is shared among writers according to the points their works earn from being read.')
+      + perk('\u{1F381}', '作家会員は無料', '作品の投稿や編集の活動がなくなって1年が経過するまで、作家会員の機能を無料で使えます。'
+             + '読者としては、立ち読みの読者と同じ機能が無料です。読者会員の機能を使うには、読者会員の登録が必要です。',
+             'Free writer membership', 'You can use all writer features free of charge until a full year passes with no posting or editing. '
+             + 'As a reader, you get the same features as a guest reader for free; reader-member features require signing up as a reader member.')
       + perk('\u{1F399}\uFE0F', '顔と声で読まれる', '登場人物にアイコンと声を付けると、吹き出しと朗読で読まれます。',
              'Faces and voices', 'Give your characters icons and voices, and your story is read with speech bubbles and narration.')
       + perk('\u{1F9EA}', 'AIの講評はあなただけに', '良いところと「こうするともっと良くなる」を、AIが観点ごとに伝えます。読者には見えません。',

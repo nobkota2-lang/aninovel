@@ -48,11 +48,13 @@
       confirmWithdraw: 'Withdraw your review?', edited: '(edited)', report: 'Report', hiddenTag: 'hidden', hide: 'Hide', unhide: 'Show'
     }
   };
-  function L() { return (window.state && state.lang === 'en') ? 'en' : 'ja'; }
+  // viewer.html の state は const 宣言なので、グローバルの window からは見えない。名前で直接参照する。
+  function S() { try { return (typeof state !== 'undefined') ? state : null; } catch (e) { return null; } }
+  function L() { var s = S(); return (s && s.lang === 'en') ? 'en' : 'ja'; }
   function t(k) { return T[L()][k]; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function workId() { return (typeof _workParam !== 'undefined' && _workParam) ? _workParam : null; }
-  function readerMode() { return !!workId() && !(window.state && state.isAuthorMode); }
+  function readerMode() { var s = S(); return !!workId() && !(s && s.isAuthorMode); }
   function serverMsg(j, fallback) {
     // サーバの文言は日本語。英語表示ではこちらの英語の定型文を使う。
     if (L() === 'en') return fallback;
@@ -109,7 +111,7 @@
       } catch (e) {}
     }
     cur.quote = q; cur.itemId = id;
-    cur.page = (window.state && typeof state.currentPage === 'number') ? state.currentPage + 1 : null;
+    var _s = S(); cur.page = (_s && typeof _s.currentPage === 'number') ? _s.currentPage + 1 : null;
   }
 
   function open(tab) {
@@ -289,7 +291,7 @@
     if (fab.textContent !== label) fab.textContent = label;
     // 最後のページに来たら、軽く知らせる(1回だけ)
     try {
-      if (!syncFab.pulsed && typeof getTP === 'function' && state.currentPage >= getTP() - 1) {
+      if (!syncFab.pulsed && typeof getTP === 'function' && S() && S().currentPage >= getTP() - 1) {
         syncFab.pulsed = true; fab.classList.add('pulse');
       }
     } catch (e) {}
